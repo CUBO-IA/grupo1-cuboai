@@ -104,6 +104,9 @@ class Order(models.Model):
     # Copia de producto, precio y medidas al momento de crear el pedido.
     snapshot = models.JSONField(default=dict)
 
+    # Evidencia aportada por el personal al marcar el pago (p. ej. referencia).
+    payment_reference = models.CharField(max_length=120, blank=True)
+
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.PENDING
     )
@@ -128,3 +131,20 @@ class Order(models.Model):
 
     def __str__(self):
         return self.number
+
+
+class OrderEvent(models.Model):
+    """Registro de cada cambio de estado hecho desde el panel."""
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="events")
+    field = models.CharField(max_length=30)
+    from_value = models.CharField(max_length=20)
+    to_value = models.CharField(max_length=20)
+    note = models.CharField(max_length=200, blank=True)
+    by = models.ForeignKey(
+        "auth.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]

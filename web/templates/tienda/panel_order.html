@@ -1,0 +1,80 @@
+{% extends "tienda/base.html" %}
+{% block title %}Weiner Kingdom | {{ order.number }}{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <p class="eyebrow">STAFF PANEL</p>
+    <h1>{{ order.number }}</h1>
+</section>
+
+<section class="fit-layout">
+    <div class="fit-form">
+        {% if error %}<p class="fit-alert" role="alert">{{ error }}</p>{% endif %}
+
+        <h2>States</h2>
+        <dl class="fit-summary">
+            <dt>Order</dt><dd>{{ order.get_status_display }}</dd>
+            <dt>Payment</dt><dd>{{ order.get_payment_status_display }}{% if order.payment_reference %} — ref: {{ order.payment_reference }}{% endif %}</dd>
+            <dt>Production</dt><dd>{{ order.get_production_status_display }}</dd>
+            <dt>Shipping</dt><dd>{{ order.get_shipping_status_display }}</dd>
+        </dl>
+
+        <h2>Change state</h2>
+        {% for field, values in allowed.items %}
+            {% for value in values %}
+            <form method="post" class="panel-action">
+                {% csrf_token %}
+                <input type="hidden" name="field" value="{{ field }}">
+                <input type="hidden" name="value" value="{{ value }}">
+                {% if field == "payment_status" %}
+                <input type="text" name="note" maxlength="120" placeholder="Payment reference (required)" required>
+                {% else %}
+                <input type="text" name="note" maxlength="200" placeholder="Note (optional)">
+                {% endif %}
+                <button class="button" type="submit">{{ field }} → {{ value }}</button>
+            </form>
+            {% endfor %}
+        {% endfor %}
+        <p class="fit-help">Marking an order as paid is a manual record; no payment provider is connected.</p>
+
+        <h2>Customer</h2>
+        <dl class="fit-summary">
+            <dt>Name</dt><dd>{{ order.customer_name }}</dd>
+            <dt>Email</dt><dd>{{ order.customer_email }}</dd>
+            <dt>Phone</dt><dd>{{ order.customer_phone }}</dd>
+            <dt>Address</dt><dd>{{ order.address }}, {{ order.city }}, {{ order.country }}</dd>
+        </dl>
+
+        <h2>Product and measurements (snapshot)</h2>
+        <dl class="fit-summary">
+            <dt>Product</dt><dd>{{ snap.product.name }}</dd>
+            <dt>Dog</dt><dd>{{ snap.dog.name }} ({{ snap.dog.breed }})</dd>
+            <dt>Weight</dt><dd>{{ snap.dog.weight_kg }} kg</dd>
+            <dt>Back length</dt><dd>{{ snap.dog.back_length_cm }} cm</dd>
+            <dt>Chest girth</dt><dd>{{ snap.dog.chest_girth_cm }} cm</dd>
+            <dt>Neck girth</dt><dd>{% if snap.dog.neck_girth_cm %}{{ snap.dog.neck_girth_cm }} cm{% else %}Not provided{% endif %}</dd>
+            <dt>Created</dt><dd>{{ order.created_at|date:"Y-m-d H:i" }}</dd>
+        </dl>
+
+        <h2>History</h2>
+        <ul class="panel-events">
+        {% for e in events %}
+            <li>{{ e.created_at|date:"Y-m-d H:i" }} — {{ e.field }}: {{ e.from_value }} → {{ e.to_value }}{% if e.by %} by {{ e.by.get_username }}{% endif %}{% if e.note %} ({{ e.note }}){% endif %}</li>
+        {% empty %}
+            <li>No changes yet.</li>
+        {% endfor %}
+        </ul>
+
+        <a class="button" href="{% url 'panel_orders' %}">Back to orders</a>
+    </div>
+
+    <aside class="fit-tips">
+        <h2>Internal cost estimate</h2>
+        <p class="fit-alert" role="status">ESTIMATE — not verified costs.</p>
+        <dl class="fit-summary">
+            <dt>Order total</dt><dd>${{ cost.total }}{% if cost.total_is_provisional %} (provisional){% endif %}</dd>
+            <dt>Target manufacturing cost</dt><dd>${{ cost.target_cost }} (target, not a proven cost)</dd>
+            <dt>Estimated margin</dt><dd>${{ cost.estimated_margin }}{% if cost.estimated_margin_pct is not None %} ({{ cost.estimated_margin_pct }}%){% endif %}</dd>
+        </dl>
+    </aside>
+</section>
+{% endblock %}

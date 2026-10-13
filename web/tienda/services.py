@@ -84,6 +84,99 @@ def build_breakdown(quote):
     }
 
 
+# --- Estados del pedido (panel) ---------------------------------------------
+# Supuestos técnicos pendientes de aprobación del negocio: transiciones
+# secuenciales, sin retrocesos, y no enviar antes de terminar la producción.
+
+TARGET_MANUFACTURING_COST = Decimal("175.00")  # objetivo, NO costo comprobado
+
+TRANSITIONS = {
+    "status": {"pending": ["confirmed", "cancelled"], "confirmed": ["cancelled"]},
+    "payment_status": {"unpaid": ["paid"]},
+    "production_status": {
+        "not_started": ["in_production"],
+        "in_production": ["completed"],
+    },
+    "shipping_status": {"not_shipped": ["shipped"], "shipped": ["delivered"]},
+}
+
+
+class TransitionError(Exception):
+    pass
+
+
+def _check_rules(order, field, new_value):
+    """Devuelve un mensaje de error o None si la transición es válida."""
+    if order.status == "cancelled" and field != "status":
+        return "Cancelled orders cannot change state."
+    if field == "shipping_status" and new_value == "shipped":
+        if order.production_status != "completed":
+            return "Production must be completed before shipping."
+    if field == "status" and new_value == "cancelled":
+        if order.shipping_status != "not_shipped":
+            return "A shipped order cannot be cancelled."
+    return None
+
+
+def allowed_transitions(order):
+    result = {}
+    for field, table in TRANSITIONS.items():
+        current = getattr(order, field)
+        result[field] = [
+            t for t in table.get(current, []) if _check_rules(order, field, t) is None
+        ]
+    return result
+
+
+def apply_transition(order, field, new_value, user=None, note=""):
+    from django.db import transaction
+
+    from .models import Order, OrderEvent
+
+    if field not in TRANSITIONS:
+        raise TransitionError("Unknown state field.")
+    note = (note or "").strip()
+    with transaction.atomic():
+        order = Order.objects.select_for_update().get(pk=order.pk)
+        current = getattr(order, field)
+        if new_value not in TRANSITIONS[field].get(current, []):
+            raise TransitionError(f"Cannot change {field} from {current} to {new_value}.")
+        error = _check_rules(order, field, new_value)
+        if error:
+            raise TransitionError(error)
+        if field == "payment_status":
+            # Pago manual: exige referencia como evidencia; no se simula ningún proveedor.
+            if not note:
+                raise TransitionError(
+                    "A payment reference is required to mark an order as paid."
+                )
+            order.payment_reference = note[:120]
+        setattr(order, field, new_value)
+        order.save()
+        OrderEvent.objects.create(
+            order=order,
+            field=field,
+            from_value=current,
+            to_value=new_value,
+            note=note[:200],
+            by=user if getattr(user, "pk", None) else None,
+        )
+    return order
+
+
+def cost_estimate(order):
+    """Estimación interna: el costo es un objetivo provisional, no real."""
+    margin = order.total - TARGET_MANUFACTURING_COST
+    pct = (margin / order.total * 100).quantize(Decimal("0.1")) if order.total else None
+    return {
+        "total": order.total,
+        "total_is_provisional": order.price_is_provisional,
+        "target_cost": TARGET_MANUFACTURING_COST,
+        "estimated_margin": margin,
+        "estimated_margin_pct": pct,
+    }
+
+
 class QuoteNotOrderable(Exception):
     pass
 

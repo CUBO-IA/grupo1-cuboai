@@ -1,0 +1,99 @@
+from functools import wraps
+
+from django.contrib.auth.views import redirect_to_login
+from django.db.models import Q
+from django.http import HttpResponseForbidden
+from django.shortcuts import get_object_or_404, redirect, render
+
+from . import services
+from .models import Order
+
+PAGE_SIZE = 25
+
+
+def staff_required(view):
+    @wraps(view)
+    def wrapper(request, *args, **kwargs):
+        user = request.user
+        if not user.is_authenticated:
+            return redirect_to_login(request.get_full_path())
+        if not (user.is_active and user.is_staff):
+            return HttpResponseForbidden("Staff access only.")
+        return view(request, *args, **kwargs)
+
+    return wrapper
+
+
+@staff_required
+def orders(request):
+    qs = Order.objects.order_by("-created_at", "-pk")
+    q = request.GET.get("q", "").strip()
+    if q:
+        cond = (
+            Q(customer_name__icontains=q)
+            | Q(customer_email__icontains=q)
+            | Q(snapshot__product__name__icontains=q)
+        )
+        digits = q.upper().removeprefix("WK-").lstrip("0")
+        if digits.isdigit():
+            cond |= Q(pk=int(digits))
+        qs = qs.filter(cond)
+    filters = {}
+    for field, choices in (
+        ("status", Order.Status),
+        ("payment_status", Order.PaymentStatus),
+        ("production_status", Order.ProductionStatus),
+        ("shipping_status", Order.ShippingStatus),
+    ):
+        value = request.GET.get(field, "")
+        if value in choices.values:
+            qs = qs.filter(**{field: value})
+            filters[field] = value
+    return render(
+        request,
+        "tienda/panel_orders.html",
+        {
+            "orders": qs[:PAGE_SIZE],
+            "total_count": qs.count(),
+            "page_size": PAGE_SIZE,
+            "q": q,
+            "filters": filters,
+            "status_choices": Order.Status.choices,
+            "payment_choices": Order.PaymentStatus.choices,
+            "production_choices": Order.ProductionStatus.choices,
+            "shipping_choices": Order.ShippingStatus.choices,
+        },
+    )
+
+
+@staff_required
+def order(request, public_id):
+    order = get_object_or_404(Order, public_id=public_id)
+    error = None
+    if request.method == "POST":
+        try:
+            services.apply_transition(
+                order,
+                request.POST.get("field", ""),
+                request.POST.get("value", ""),
+                user=request.user,
+                note=request.POST.get("note", ""),
+            )
+        except services.TransitionError as exc:
+            error = str(exc)
+            order.refresh_from_db()
+        else:
+            return redirect("panel_order", public_id=order.public_id)
+    return render(
+        request,
+        "tienda/panel_order.html",
+        {
+            "order": order,
+            "snap": order.snapshot,
+            "events": order.events.select_related("by"),
+            "allowed": services.allowed_transitions(order),
+            "cost": services.cost_estimate(order),
+            "error": error,
+        },
+        status=400 if error else 200,
+    )

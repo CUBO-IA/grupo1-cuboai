@@ -237,3 +237,17 @@ footer { text-align: center; padding: 30px; color: #756960; }
 @media (max-width: 700px) {
     .fit-layout { grid-template-columns: 1fr; }
 }
+
+/* Staff panel */
+.panel-wrap { max-width: 1200px; margin: 0 auto; padding: 20px 25px 80px; }
+.panel-filters { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.panel-filters input, .panel-filters select, .panel-action input {
+    padding: 9px 10px; border: 1px solid #d8cdbd; border-radius: 6px; background: #fff;
+}
+.panel-filters input[type=search] { flex: 1 1 240px; }
+.panel-table-wrap { overflow-x: auto; }
+.panel-table { width: 100%; border-collapse: collapse; background: #fff; border: 1px solid #eadfd5; }
+.panel-table th, .panel-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #eadfd5; font-size: .9rem; white-space: nowrap; }
+.panel-action { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; align-items: center; }
+.panel-action .button { margin-top: 0; }
+.panel-events { padding-left: 18px; line-height: 1.8; font-size: .9rem; }
