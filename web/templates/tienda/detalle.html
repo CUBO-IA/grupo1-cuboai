@@ -1,0 +1,40 @@
+{% extends "tienda/base.html" %}
+{% load static %}
+{% block title %}Weiner Kingdom | Product{% endblock %}
+{% block content %}
+<section class="detail">
+{% if producto %}
+    <img class="detail-image" src="{% static producto.imagen %}" alt="{{ producto.nombre }}">
+    <div class="detail-content">
+        <p class="eyebrow">WEINER KINGDOM</p>
+        <h1>{{ producto.nombre }}</h1>
+        <p class="detail-price">{{ producto.precio }}</p>
+
+        <section class="wk-description" aria-label="Product description">
+            <p class="wk-collection">WEINER KINGDOM · SIGNATURE COLLECTION</p>
+            <h2 class="wk-title">{{ producto.nombre }}</h2>
+            <p class="wk-tagline">{{ producto.tagline }}</p>
+            <div class="wk-divider" aria-hidden="true"></div>
+            <p class="wk-intro">{{ producto.descripcion }}</p>
+
+            {% for feature in producto.caracteristicas %}
+            <div class="wk-feature">
+                <span class="wk-icon" aria-hidden="true">{{ feature.icono }}</span>
+                <div>
+                    <h3>{{ feature.titulo }}</h3>
+                    <p>{{ feature.texto }}</p>
+                </div>
+            </div>
+            {% endfor %}
+
+            <div class="wk-footer">YOUR WEINER. YOUR STYLE. EVERY SPECIAL MOMENT.</div>
+        </section>
+
+        <a class="button" href="{% url 'productos' %}">Back to Products</a>
+    </div>
+{% else %}
+    <h1>Product not found</h1>
+    <a class="button" href="{% url 'productos' %}">Back to Products</a>
+{% endif %}
+</section>
+{% endblock %}

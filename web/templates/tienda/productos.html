@@ -1,0 +1,22 @@
+{% extends "tienda/base.html" %}
+{% load static %}
+{% block title %}Weiner Kingdom | Products{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <p class="eyebrow">OUR COLLECTION</p>
+    <h1>Products</h1>
+</section>
+
+<section class="product-grid">
+{% for key, item in productos.items %}
+    <article class="card">
+        <img src="{% static item.imagen %}" alt="{{ item.nombre }}">
+        <div class="card-body">
+            <h2>{{ item.nombre }}</h2>
+            <p class="price">{{ item.precio }}</p>
+            <a class="button" href="{% url 'detalle' key %}">View Product</a>
+        </div>
+    </article>
+{% endfor %}
+</section>
+{% endblock %}

@@ -1,0 +1,198 @@
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #fffaf5;
+    color: #2d241f;
+}
+.site-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 22px 7%;
+    background: #fff;
+    border-bottom: 1px solid #eadfd5;
+}
+.logo { color: #2d241f; text-decoration: none; font-size: 1.35rem; font-weight: 800; }
+nav { display: flex; gap: 24px; }
+nav a { color: #2d241f; text-decoration: none; }
+main { min-height: 78vh; }
+.hero {
+    text-align: center;
+    padding: 110px 20px;
+    background: #f2dfcf;
+}
+.hero h1, .page-heading h1, .detail h1 { font-size: clamp(2.5rem, 7vw, 5rem); margin: 10px 0 20px; }
+.hero p { font-size: 1.15rem; max-width: 600px; margin: 0 auto 30px; line-height: 1.6; }
+.eyebrow { letter-spacing: .18em; font-size: .75rem; font-weight: 700; }
+.button {
+    display: inline-block;
+    background: #2d241f;
+    color: #fff;
+    text-decoration: none;
+    padding: 12px 20px;
+    border-radius: 6px;
+}
+.intro, .page-heading { text-align: center; padding: 70px 20px 35px; }
+.product-grid {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 20px 25px 80px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 25px;
+}
+.card {
+    background: #fff;
+    border: 1px solid #eadfd5;
+    border-radius: 12px;
+    overflow: hidden;
+}
+.card img { width: 100%; display: block; background: #f2dfcf; }
+.card-body { padding: 22px; }
+.card h2 { margin-top: 0; }
+.price, .detail-price { font-weight: 800; font-size: 1.4rem; }
+.detail {
+    max-width: 1000px;
+    margin: 70px auto;
+    padding: 0 25px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 60px;
+    align-items: center;
+}
+.detail img { width: 100%; background: #f2dfcf; border-radius: 12px; }
+.detail p { line-height: 1.7; }
+footer { text-align: center; padding: 30px; color: #756960; }
+@media (max-width: 700px) {
+    .site-header { flex-direction: column; gap: 15px; }
+    .product-grid, .detail { grid-template-columns: 1fr; }
+    .hero { padding: 75px 20px; }
+}
+
+
+.hero {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 40px;
+    padding: 60px;
+    background-color: #f8f3ed;
+}
+
+.hero-text {
+    width: 50%;
+}
+
+.hero-image {
+    width: 50%;
+}
+
+.hero-image img {
+    width: 100%;
+    max-height: 450px;
+    object-fit: cover;
+    border-radius: 20px;
+}
+
+.hero h1 {
+    font-size: 55px;
+    margin: 10px 0;
+}
+
+.hero p {
+    font-size: 18px;
+    line-height: 1.6;
+}
+
+.eyebrow {
+    letter-spacing: 3px;
+    font-weight: bold;
+}
+
+.button {
+    display: inline-block;
+    margin-top: 20px;
+    padding: 12px 25px;
+    background-color: #5b3924;
+    color: white;
+    text-decoration: none;
+    border-radius: 25px;
+}
+
+.intro {
+    text-align: center;
+    padding: 50px 20px;
+}
+
+.intro h2 {
+    font-size: 32px;
+}
+
+
+
+/* WEINER KINGDOM — product description panel (scoped to product detail) */
+.detail-content { min-width: 0; }
+.detail-content > h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 400; }
+.detail-image { align-self: center; }
+.wk-description {
+    width: 100%;
+    margin-top: 24px;
+    padding: 28px;
+    border: 1px solid #E1D6C6;
+    border-radius: 14px;
+    background: #F6F1E9;
+    color: #29251F;
+    font-family: Georgia, "Times New Roman", serif;
+    box-sizing: border-box;
+}
+.wk-collection {
+    margin: 0 0 14px;
+    color: #8A6D4B;
+    font-family: Arial, sans-serif;
+    font-size: 10px;
+    line-height: 1.6;
+    letter-spacing: 2px;
+}
+.wk-description .wk-title {
+    margin: 0 0 8px;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(1.5rem, 3vw, 1.9rem);
+    line-height: 1.25;
+    font-weight: 400;
+}
+.wk-tagline {
+    margin: 0 0 22px;
+    color: #756858;
+    font-size: 15px;
+    font-style: italic;
+    line-height: 1.6;
+}
+.wk-divider { height: 1px; margin: 20px 0; background: #D8CDBD; }
+.wk-intro { margin: 0 0 24px; font-size: 14px; line-height: 1.8; }
+.wk-feature { display: flex; align-items: flex-start; gap: 13px; margin: 22px 0; }
+.wk-icon { flex: 0 0 24px; color: #8A6D4B; font-size: 23px; line-height: 1.2; text-align: center; }
+.wk-feature h3 {
+    margin: 3px 0 7px;
+    font-family: Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
+    font-weight: 600;
+}
+.wk-feature p { margin: 0; color: #62594F; font-family: Arial, sans-serif; font-size: 12px; line-height: 1.7; }
+.wk-footer {
+    margin-top: 26px;
+    padding: 16px 12px;
+    background: #29251F;
+    color: #fff;
+    font-family: Arial, sans-serif;
+    font-size: 10px;
+    line-height: 1.8;
+    letter-spacing: 1.5px;
+    text-align: center;
+}
+@media (max-width: 700px) {
+    .detail { gap: 28px; margin: 35px auto; }
+    .wk-description { padding: 20px; }
+    .wk-footer { letter-spacing: 1px; }
+}

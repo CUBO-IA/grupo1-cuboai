@@ -1,0 +1,48 @@
+{% extends "tienda/base.html" %}
+{% load static %}
+
+{% block title %}Weiner Kingdom | Home{% endblock %}
+
+{% block content %}
+
+<section class="hero">
+
+    <div class="hero-text">
+
+        <p class="eyebrow">WELCOME TO</p>
+
+        <h1>Weiner Kingdom</h1>
+
+        <p>
+            Fun, stylish and adorable designs
+            for your favorite dachshund.
+        </p>
+
+        <a class="button" href="{% url 'productos' %}">
+            View Products
+        </a>
+
+    </div>
+
+    <div class="hero-image">
+
+        <img src="{% static 'tienda/img/hero.JPG' %}"
+             alt="Dachshund">
+
+    </div>
+
+</section>
+
+
+<section class="intro">
+
+    <h2>Made for the little dachshunds.</h2>
+
+    <p>
+        Explore our simple collection of dog designs
+        in La Madriguera Café, San Benito.
+    </p>
+
+</section>
+
+{% endblock %}
