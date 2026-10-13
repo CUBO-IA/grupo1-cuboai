@@ -8,7 +8,7 @@ Tienda web en Django para prendas de perros dachshund. Flujo implementado de ext
 
 Catálogo → asistente guiado → Smart Fit (medidas) → Smart Quote → checkout → pedido persistente → panel privado (estados, costos) → seguimiento del cliente.
 
-Limitación central: **no existe regla comercial de precio por talla**, por lo que toda cotización y pedido tiene **precio provisional** (precio base del catálogo). No hay pagos reales ni descuento Bitcoin.
+Limitación central: **no existe regla comercial de precio por talla**, por lo que toda cotización y pedido tiene **precio provisional** (precio base del catálogo; el negocio indica revisión manual). No hay pagos reales. Tras la especificación comercial se implementó el descuento Bitcoin del 15 % (sobre productos, sin envío) en estado pendiente de verificación de pago, y la producción exige pago registrado. Ver `docs/especificacion-comercial.md`.
 
 ## 2. Stack
 
@@ -91,7 +91,7 @@ Pendiente / limitaciones: sin límite de intentos de login; `DEBUG=True` y `ALLO
 
 ## 8. Pruebas
 
-`manage.py test`: **82 pruebas, todas OK** (tests.py 35, test_panel.py 20, test_flow.py 8, test_assistant_costs.py 19). Cubren catálogo, validación y persistencia de Smart Fit, conversión de unidades, cotización y precio no manipulable, checkout (validación, idempotencia, snapshot, recálculo), permisos del panel, búsqueda y filtros, transiciones válidas e inválidas, costos, asistente, fugas de datos internos, CSRF y flujo completo.
+`manage.py test`: **96 pruebas, todas OK** (tests.py 35, test_panel.py 20, test_flow.py 8, test_assistant_costs.py 20, test_commercial_spec.py 13; incluye las de la especificación comercial). Cubren catálogo, validación y persistencia de Smart Fit, conversión de unidades, cotización y precio no manipulable, checkout (validación, idempotencia, snapshot, recálculo), permisos del panel, búsqueda y filtros, transiciones válidas e inválidas, costos, asistente, fugas de datos internos, CSRF y flujo completo.
 
 Ensayo manual (clon limpio del remoto, Windows 10, `runserver`, navegador integrado): flujo completo ejecutado y documentado en `docs/task-12-ensayo-y-alcance.md`. Hallazgos corregidos: error 500 por bloqueo de SQLite en envíos simultáneos y texto contradictorio "Paid — no payment has been collected".
 
@@ -113,9 +113,9 @@ Ensayo manual (clon limpio del remoto, Windows 10, `runserver`, navegador integr
 ## 10. Decisiones pendientes del negocio
 
 1. Fórmula o tabla de precio por talla/peso/materiales y aplicación del tope de $850.
-2. Descuento Bitcoin: tasa comercial vigente, base elegible, exclusión de envío.
+2. Procedimiento de verificación de pagos (Bitcoin, tarjeta, PayPal) para aplicar definitivamente el descuento.
 3. Costos reales de fabricación (el objetivo de $175 no está comprobado).
-4. ¿Se puede producir sin pago registrado o con precio provisional?
+4. ¿Puede producirse un pedido con precio provisional? (la producción ya exige pago verificado).
 5. Qué productos requieren contorno de cuello.
 6. Política de envíos, devoluciones y privacidad.
 7. Aprobación de las reglas de transición de estados.

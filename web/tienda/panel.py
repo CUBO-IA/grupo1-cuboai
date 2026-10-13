@@ -72,8 +72,10 @@ def order(request, public_id):
     order = get_object_or_404(Order, public_id=public_id)
     error = None
     cost_form = CostForm(initial={
-        "estimated_cost": order.estimated_cost,
-        "actual_cost": order.actual_cost,
+        "estimated_materials": order.estimated_materials,
+        "estimated_labor": order.estimated_labor,
+        "actual_materials": order.actual_materials,
+        "actual_labor": order.actual_labor,
         "cost_notes": order.cost_notes,
     })
     if request.method == "POST" and request.POST.get("form") == "costs":
@@ -83,8 +85,10 @@ def order(request, public_id):
             services.update_costs(
                 order,
                 user=request.user,
-                estimated_cost=d["estimated_cost"],
-                actual_cost=d["actual_cost"],
+                estimated_materials=d["estimated_materials"],
+                estimated_labor=d["estimated_labor"],
+                actual_materials=d["actual_materials"],
+                actual_labor=d["actual_labor"],
                 notes=d["cost_notes"],
             )
             return redirect("panel_order", public_id=order.public_id)

@@ -20,6 +20,7 @@ CUSTOMER = {
     "customer_name": "Ana Perez", "customer_email": "ana@example.com",
     "customer_phone": "+503 7000 0000", "country": "El Salvador",
     "city": "San Salvador", "address": "Calle 1 #2",
+    "payment_method": "unspecified",
 }
 
 

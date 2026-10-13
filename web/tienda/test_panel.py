@@ -173,6 +173,7 @@ class TransitionTests(TestCase):
         self.assertEqual(OrderEvent.objects.count(), 0)
 
     def test_no_shipping_before_production_completed(self):
+        services.apply_transition(self.order, "payment_status", "paid", note="R1")
         services.apply_transition(self.order, "production_status", "in_production")
         with self.assertRaises(services.TransitionError):
             services.apply_transition(self.order, "shipping_status", "shipped")
@@ -187,6 +188,7 @@ class TransitionTests(TestCase):
         with self.assertRaises(services.TransitionError):
             services.apply_transition(self.order, "production_status", "in_production")
         other = make_order("Otro")
+        services.apply_transition(other, "payment_status", "paid", note="R2")
         services.apply_transition(other, "production_status", "in_production")
         services.apply_transition(other, "production_status", "completed")
         services.apply_transition(other, "shipping_status", "shipped")

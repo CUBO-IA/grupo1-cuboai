@@ -29,7 +29,8 @@
         </div>
         {% endfor %}
         <button class="button" type="submit">Place order</button>
-        <p class="fit-help">Placing the order does not charge you. Payment is not collected on this site yet.</p>
+        <p class="fit-help">Placing the order does not charge you and does not confirm payment. Payment is not collected on this site; production starts only after our team verifies your payment.</p>
+        <p class="fit-help">Bitcoin: 15% discount on the products subtotal (shipping excluded). It is shown separately and becomes final only once your payment is verified.</p>
     </form>
 
     <aside class="fit-tips">
@@ -45,7 +46,7 @@
             <dd><strong>${{ breakdown.total }}</strong></dd>
         </dl>
         {% if not breakdown.is_final %}
-        <p class="fit-alert" role="status">Provisional price: size-based adjustments are not applied yet. Weiner Kingdom will confirm the final price before any payment.</p>
+        <p class="fit-alert" role="status">Provisional price: size-based adjustments are not applied yet. Our team will review your quote manually and confirm the final price before any payment.</p>
         {% endif %}
         <a class="button" href="{% url 'smart_quote' quote.public_id %}">Back to quote</a>
     </aside>

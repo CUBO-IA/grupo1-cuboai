@@ -13,6 +13,8 @@
         <h2>States</h2>
         <dl class="fit-summary">
             <dt>Order</dt><dd>{{ order.get_status_display }}</dd>
+            <dt>Payment method</dt><dd>{{ order.get_payment_method_display }}</dd>
+            <dt>Discount</dt><dd>{% if order.discount_status == "none" %}None{% else %}{{ order.discount_amount }} USD — {{ order.get_discount_status_display }}{% endif %}</dd>
             <dt>Payment</dt><dd>{{ order.get_payment_status_display }}{% if order.payment_reference %} — ref: {{ order.payment_reference }}{% endif %}</dd>
             <dt>Production</dt><dd>{{ order.get_production_status_display }}</dd>
             <dt>Shipping</dt><dd>{{ order.get_shipping_status_display }}</dd>
@@ -75,7 +77,8 @@
         <p class="fit-alert" role="status">ESTIMATE — not verified costs.</p>
         {% endif %}
         <dl class="fit-summary">
-            <dt>Order total</dt><dd>${{ cost.total }}{% if cost.total_is_provisional %} (provisional){% endif %}</dd>
+            <dt>Products subtotal</dt><dd>${{ cost.total }}{% if cost.total_is_provisional %} (provisional){% endif %}</dd>
+            <dt>Amount due</dt><dd>${{ cost.revenue }}{% if cost.discount_pending %} (Bitcoin discount ${{ cost.discount_amount }} pending verification){% endif %}</dd>
             <dt>Cost used</dt>
             <dd>${{ cost.cost }}
                 {% if cost.cost_source == "actual" %}(actual){% elif cost.cost_source == "estimated" %}(estimate entered by staff){% else %}(target, not a proven cost){% endif %}

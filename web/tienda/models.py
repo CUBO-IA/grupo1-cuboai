@@ -81,6 +81,15 @@ class Order(models.Model):
         IN_PRODUCTION = "in_production", "In production"
         COMPLETED = "completed", "Completed"
 
+    class PaymentMethod(models.TextChoices):
+        UNSPECIFIED = "unspecified", "To be arranged"
+        BITCOIN = "bitcoin", "Bitcoin"
+
+    class DiscountStatus(models.TextChoices):
+        NONE = "none", "None"
+        PENDING = "pending_verification", "Pending payment verification"
+        APPLIED = "applied", "Applied"
+
     class ShippingStatus(models.TextChoices):
         NOT_SHIPPED = "not_shipped", "Not shipped"
         SHIPPED = "shipped", "Shipped"
@@ -107,7 +116,32 @@ class Order(models.Model):
     # Evidencia aportada por el personal al marcar el pago (p. ej. referencia).
     payment_reference = models.CharField(max_length=120, blank=True)
 
+    # Método de pago elegido y descuento Bitcoin (15 % sobre el subtotal de
+    # productos, sin envío). El descuento queda PENDIENTE hasta que el pago
+    # sea verificado; `total` es siempre el subtotal de productos.
+    payment_method = models.CharField(
+        max_length=20, choices=PaymentMethod.choices, default=PaymentMethod.UNSPECIFIED
+    )
+    discount_rate = models.DecimalField(max_digits=5, decimal_places=4, default=0)
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    discount_status = models.CharField(
+        max_length=24, choices=DiscountStatus.choices, default=DiscountStatus.NONE
+    )
+
     # Costos internos. Estimado y real son valores distintos; ambos opcionales.
+    # Los totales se derivan de materiales + mano de obra cuando se cargan.
+    estimated_materials = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    estimated_labor = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    actual_materials = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    actual_labor = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
     estimated_cost = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
     )
@@ -133,6 +167,17 @@ class Order(models.Model):
         default=ShippingStatus.NOT_SHIPPED,
     )
     created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def amount_due(self):
+        """Importe a pagar: el descuento solo cuenta cuando está aplicado."""
+        if self.discount_status == self.DiscountStatus.APPLIED:
+            return self.total - self.discount_amount
+        return self.total
+
+    @property
+    def amount_if_discount(self):
+        return self.total - self.discount_amount
 
     @property
     def number(self):

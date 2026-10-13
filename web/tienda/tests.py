@@ -261,6 +261,7 @@ def _customer(**overrides):
         "country": "El Salvador",
         "city": "San Salvador",
         "address": "Calle 1 #2",
+        "payment_method": "unspecified",
     }
     data.update(overrides)
     return data
@@ -322,6 +323,8 @@ class CheckoutTests(TestCase):
             {"city": ""},
             {"address": ""},
             {"address": "x" * 301},
+            {"payment_method": "card"},
+            {"payment_method": ""},
         ):
             r = self.client.post(self.url, _customer(**override))
             self.assertEqual(r.status_code, 200, override)

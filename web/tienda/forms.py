@@ -106,6 +106,14 @@ class CheckoutForm(forms.Form):
     address = forms.CharField(
         label="Delivery address", max_length=300, widget=forms.Textarea(attrs={"rows": 3})
     )
+    payment_method = forms.ChoiceField(
+        label="Preferred payment method",
+        choices=[
+            ("unspecified", "To be arranged with Weiner Kingdom"),
+            ("bitcoin", "Bitcoin (15% off products; payment verified by our team)"),
+        ],
+        initial="unspecified",
+    )
 
     def clean_customer_phone(self):
         phone = self.cleaned_data["customer_phone"]
@@ -119,12 +127,22 @@ class CheckoutForm(forms.Form):
 
 
 class CostForm(forms.Form):
-    estimated_cost = forms.DecimalField(
-        label="Estimated cost (USD)", required=False, min_value=Decimal("0"),
+    """Costos internos; el total se calcula como materiales + mano de obra."""
+
+    estimated_materials = forms.DecimalField(
+        label="Estimated materials (USD)", required=False, min_value=Decimal("0"),
         max_digits=10, decimal_places=2,
     )
-    actual_cost = forms.DecimalField(
-        label="Actual cost (USD)", required=False, min_value=Decimal("0"),
+    estimated_labor = forms.DecimalField(
+        label="Estimated labor (USD)", required=False, min_value=Decimal("0"),
+        max_digits=10, decimal_places=2,
+    )
+    actual_materials = forms.DecimalField(
+        label="Actual materials (USD)", required=False, min_value=Decimal("0"),
+        max_digits=10, decimal_places=2,
+    )
+    actual_labor = forms.DecimalField(
+        label="Actual labor (USD)", required=False, min_value=Decimal("0"),
         max_digits=10, decimal_places=2,
     )
     cost_notes = forms.CharField(label="Notes", required=False, max_length=300)

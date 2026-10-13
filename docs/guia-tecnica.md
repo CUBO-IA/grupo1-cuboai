@@ -42,7 +42,9 @@ DogProfile 1 ──< Quote 1 ──0..1 Order 1 ──< OrderEvent
 - **Precio:** siempre se calcula en el servidor desde `PRODUCTOS` (`services.get_base_price`). Cualquier precio enviado por el navegador se ignora.
 - **Cotización:** provisional (solo precio base). El ajuste por talla **no existe** porque la regla comercial no está definida.
 - **Pedido:** idempotente por cotización (un pedido por cotización, transacción + restricción única).
-- **Pago:** no hay pasarela. Marcar un pedido como pagado es un registro manual de staff con referencia obligatoria.
+- **Pago:** no hay pasarela. Marcar un pedido como pagado es un registro manual de staff con referencia obligatoria. La producción solo puede iniciar con el pago registrado.
+- **Descuento Bitcoin:** 15 % del subtotal de productos (sin envío), calculado en el servidor (`services.compute_discount`), mostrado por separado y en estado `pending_verification` hasta que el pago se registra; entonces pasa a `applied` y reduce el importe a pagar (`Order.amount_due`).
+- **Costos:** materiales y mano de obra, estimados y reales; el total es la suma.
 - **Costos:** el panel usa, en orden, costo real > costo estimado cargado > objetivo provisional de $175, y etiqueta cada caso. Los costos nunca se muestran al cliente.
 - **Seguimiento:** la página del pedido explica cada estado y lista las actualizaciones sin notas internas; no sugiere pago ni envío sin registro del personal.
 - **Asistente:** determinista, solo catálogo; declara desconocido lo que no tiene.

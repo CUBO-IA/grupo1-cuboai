@@ -88,37 +88,52 @@ class CostTests(TestCase):
         self.assertEqual(s["cost_source"], "target")
         self.assertFalse(s["is_actual"])
 
-    def test_estimated_then_actual_priority(self):
-        services.update_costs(self.order, self.staff, estimated_cost=Decimal("200"))
+    def test_components_sum_and_priority(self):
+        services.update_costs(
+            self.order, self.staff,
+            estimated_materials=Decimal("120"), estimated_labor=Decimal("80"),
+        )
         self.order.refresh_from_db()
+        self.assertEqual(self.order.estimated_cost, Decimal("200"))
         s = services.cost_summary(self.order)
         self.assertEqual((s["cost_source"], s["margin"]), ("estimated", Decimal("100.00")))
         services.update_costs(
-            self.order, self.staff, estimated_cost=Decimal("200"), actual_cost=Decimal("180.50")
+            self.order, self.staff,
+            estimated_materials=Decimal("120"), estimated_labor=Decimal("80"),
+            actual_materials=Decimal("100.25"), actual_labor=Decimal("80.25"),
         )
         self.order.refresh_from_db()
+        self.assertEqual(self.order.actual_cost, Decimal("180.50"))
         s = services.cost_summary(self.order)
         self.assertEqual((s["cost_source"], s["margin"]), ("actual", Decimal("119.50")))
         self.assertTrue(s["is_actual"])
 
+    def test_partial_component_is_enough(self):
+        services.update_costs(self.order, self.staff, actual_materials=Decimal("90"))
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.actual_cost, Decimal("90"))
+        self.assertIsNone(self.order.estimated_cost)
+
     def test_negative_rejected_in_service_and_form(self):
         with self.assertRaises(services.TransitionError):
-            services.update_costs(self.order, self.staff, actual_cost=Decimal("-1"))
+            services.update_costs(self.order, self.staff, actual_labor=Decimal("-1"))
         self.client.force_login(self.staff)
-        r = self.client.post(self.url, {"form": "costs", "actual_cost": "-5"})
+        r = self.client.post(self.url, {"form": "costs", "actual_labor": "-5"})
         self.assertEqual(r.status_code, 400)
         self.order.refresh_from_db()
         self.assertIsNone(self.order.actual_cost)
 
     def test_invalid_text_rejected(self):
         self.client.force_login(self.staff)
-        r = self.client.post(self.url, {"form": "costs", "actual_cost": "abc"})
+        r = self.client.post(self.url, {"form": "costs", "actual_materials": "abc"})
         self.assertEqual(r.status_code, 400)
 
     def test_edit_via_panel_labels_and_history(self):
         self.client.force_login(self.staff)
         r = self.client.post(
-            self.url, {"form": "costs", "actual_cost": "190.25", "cost_notes": "fabric invoice"}
+            self.url,
+            {"form": "costs", "actual_materials": "100.25", "actual_labor": "90",
+             "cost_notes": "fabric invoice"},
         )
         self.assertRedirects(r, self.url)
         page = self.client.get(self.url)
@@ -128,25 +143,29 @@ class CostTests(TestCase):
         self.order.refresh_from_db()
         self.assertEqual(self.order.actual_cost, Decimal("190.25"))
         self.assertEqual(self.order.cost_notes, "fabric invoice")
-        self.assertEqual(OrderEvent.objects.get().field, "actual_cost")
+        fields = set(OrderEvent.objects.values_list("field", flat=True))
+        self.assertEqual(fields, {"actual_materials", "actual_labor", "actual_cost"})
 
     def test_costs_require_staff_and_csrf(self):
-        r = self.client.post(self.url, {"form": "costs", "actual_cost": "1"})
+        r = self.client.post(self.url, {"form": "costs", "actual_labor": "1"})
         self.assertEqual(r.status_code, 302)
         self.client.force_login(User.objects.create_user("u", password="x"))
-        r = self.client.post(self.url, {"form": "costs", "actual_cost": "1"})
+        r = self.client.post(self.url, {"form": "costs", "actual_labor": "1"})
         self.assertEqual(r.status_code, 403)
         c = Client(enforce_csrf_checks=True)
         c.force_login(self.staff)
-        self.assertEqual(c.post(self.url, {"form": "costs", "actual_cost": "1"}).status_code, 403)
+        self.assertEqual(c.post(self.url, {"form": "costs", "actual_labor": "1"}).status_code, 403)
         self.order.refresh_from_db()
         self.assertIsNone(self.order.actual_cost)
 
     def test_costs_never_shown_to_customer(self):
-        services.update_costs(self.order, self.staff, actual_cost=Decimal("171.23"),
-                              notes="secret note")
+        services.update_costs(
+            self.order, self.staff, actual_materials=Decimal("100.23"),
+            actual_labor=Decimal("71"), notes="secret note",
+        )
         page = self.client.get(reverse("order_detail", args=[self.order.public_id]))
         self.assertNotContains(page, "171.23")
+        self.assertNotContains(page, "100.23")
         self.assertNotContains(page, "secret note")
         self.assertNotContains(page, "margin", html=False)
 

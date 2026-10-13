@@ -73,3 +73,5 @@ DogProfile 1 ──< Quote 1 ──0..1 Order 1 ──< OrderEvent
 - [Checklist del MVP, IA y limitaciones](docs/mvp-checklist-y-limitaciones.md)
 - [Task 2: catálogo y datos](docs/task-02-catalogo-datos.md)
 - [Task 12: ensayo y alcance congelado](docs/task-12-ensayo-y-alcance.md)
+- [Especificación comercial y su implementación](docs/especificacion-comercial.md)
+- [Borrador de políticas (no publicado)](docs/politicas-borrador.md)

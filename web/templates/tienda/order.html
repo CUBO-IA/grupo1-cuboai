@@ -29,11 +29,21 @@
             <dt>Back length</dt><dd>{{ snap.dog.back_length_cm }} cm</dd>
             <dt>Chest girth</dt><dd>{{ snap.dog.chest_girth_cm }} cm</dd>
             <dt>Neck girth</dt><dd>{% if snap.dog.neck_girth_cm %}{{ snap.dog.neck_girth_cm }} cm{% else %}Not provided{% endif %}</dd>
-            <dt>{% if order.price_is_provisional %}Estimated total{% else %}Total{% endif %}</dt>
-            <dd><strong>${{ order.total }}</strong></dd>
+            <dt>Products subtotal{% if order.price_is_provisional %} (provisional){% endif %}</dt>
+            <dd>${{ order.total }}</dd>
+            <dt>Shipping cost</dt><dd>Not calculated yet</dd>
+            {% if order.discount_status != "none" %}
+            <dt>Bitcoin discount ({% widthratio order.discount_rate 1 100 %}%)</dt>
+            <dd>-${{ order.discount_amount }}
+                {% if order.discount_status == "pending_verification" %}<span class="fit-help">Pending payment verification — not applied yet. Amount if applied: ${{ order.amount_if_discount }}.</span>
+                {% else %}<span class="fit-help">Applied after payment verification.</span>{% endif %}
+            </dd>
+            {% endif %}
+            <dt>Amount due</dt>
+            <dd><strong>${{ order.amount_due }}</strong></dd>
         </dl>
         {% if order.price_is_provisional %}
-        <p class="fit-alert" role="status">Provisional price: Weiner Kingdom will confirm the final price before any payment.</p>
+        <p class="fit-alert" role="status">Provisional price: our team will review your quote manually and confirm the final price before any payment.</p>
         {% endif %}
 
         <h2>Delivery</h2>

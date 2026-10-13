@@ -1,6 +1,6 @@
 # Checklist de aceptación del MVP, IA y limitaciones
 
-Estado a la Task 11. "Verificado" significa cubierto por pruebas automatizadas ejecutadas en esta sesión (`manage.py test`: 82 pruebas OK). Ensayo en navegador documentado en `task-12-ensayo-y-alcance.md`; el aspecto visual no pudo verificarse con capturas.
+Estado a la Task 11. "Verificado" significa cubierto por pruebas automatizadas ejecutadas en esta sesión (`manage.py test`: 96 pruebas OK). Ensayo en navegador documentado en `task-12-ensayo-y-alcance.md`; el aspecto visual no pudo verificarse con capturas.
 
 ## Checklist
 
@@ -17,7 +17,9 @@ Estado a la Task 11. "Verificado" significa cubierto por pruebas automatizadas e
 | 9 | Transiciones de estado con historial | Verificado |
 | 10 | Costos y margen con distinción real/estimado | Verificado |
 | 11 | Asistente limitado al catálogo, sin inventar datos | Verificado (flujo determinista) |
-| 12 | Descuento Bitcoin | **No implementado: falta la tasa comercial** |
+| 12 | Descuento Bitcoin 15 % sobre productos (sin envío), separado y calculado en el servidor | Implementado como **pendiente de verificación de pago**; procedimiento de verificación no definido |
+| 12b | Producción solo tras verificar el pago | Verificado |
+| 12c | Costos de materiales y mano de obra editables, real vs estimado | Verificado |
 | 13 | Pagos reales | **Fuera de alcance** |
 | 14 | Responsive sin desbordes a 375 px | Verificado (geometría); aspecto visual pendiente de revisión humana |
 | 15 | Ensayo completo de demo desde clon limpio | Realizado; ver `task-12-ensayo-y-alcance.md` |
@@ -37,13 +39,16 @@ Estado a la Task 11. "Verificado" significa cubierto por pruebas automatizadas e
 - Costos: el objetivo de $175 es provisional; los costos reales los carga el personal.
 - Rangos de validación de medidas provisionales (no validados por el negocio).
 - Sin correos de confirmación ni notificaciones.
-- Las reglas de transición (p. ej. no enviar antes de terminar producción) son supuestos técnicos pendientes de aprobación.
+- Las reglas de transición (p. ej. no enviar antes de terminar producción) son supuestos técnicos pendientes de aprobación; la regla de producción tras pago verificado sí viene de la especificación comercial.
+- El descuento Bitcoin solo se confirma cuando el personal registra el pago con referencia; no existe verificación automática ni pasarela.
+- Tarjeta y PayPal no están disponibles: su procedimiento de verificación no está definido.
+- Las políticas comerciales son solo un borrador (`docs/politicas-borrador.md`) y no están publicadas.
 
 ## Decisiones comerciales pendientes
 1. Fórmula/tabla de precio por talla y aplicación del tope de $850.
-2. Tasa y base elegible del descuento Bitcoin.
+2. Procedimiento de verificación de pagos (Bitcoin, tarjeta, PayPal) y de aplicación definitiva del descuento.
 3. Costos reales de fabricación.
-4. Si se puede producir sin pago o con precio provisional.
+4. Si un pedido con precio provisional puede producirse (la producción ya exige pago verificado).
 5. Qué productos requieren el contorno del cuello.
 6. Política de envíos, devoluciones y privacidad de datos.
 
