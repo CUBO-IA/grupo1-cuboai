@@ -36,6 +36,16 @@ class Quote(models.Model):
     total_price = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
     )
+
+    class Pricing(models.TextChoices):
+        PROVISIONAL = "provisional", "Provisional"
+        FINAL = "final", "Final"
+
+    # Provisional: solo precio base, sin ajuste por talla (regla comercial
+    # pendiente). Final: total validado con una regla comercial aprobada.
+    pricing = models.CharField(
+        max_length=20, choices=Pricing.choices, default=Pricing.PROVISIONAL
+    )
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.DRAFT
     )

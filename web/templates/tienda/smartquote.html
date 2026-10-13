@@ -1,0 +1,34 @@
+{% extends "tienda/base.html" %}
+{% block title %}Weiner Kingdom | Your quote{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <p class="eyebrow">SMART QUOTE</p>
+    <h1>{{ producto.nombre }} for {{ dog.name }}</h1>
+</section>
+
+<section class="fit-layout fit-layout-single">
+    <div class="fit-form">
+        {% if breakdown.is_final %}
+        <p class="fit-help"><strong>Final quote</strong></p>
+        {% else %}
+        <p class="fit-alert" role="status">Provisional quote — the final price is not confirmed yet.</p>
+        {% endif %}
+
+        <dl class="fit-summary">
+            {% for line in breakdown.lines %}
+            <dt>{{ line.label }}</dt>
+            <dd>
+                {% if line.amount is not None %}${{ line.amount }}{% else %}—{% endif %}
+                {% if line.note %}<span class="fit-help">{{ line.note }}</span>{% endif %}
+            </dd>
+            {% endfor %}
+            <dt>{% if breakdown.is_final %}Total{% else %}Estimated total (base price){% endif %}</dt>
+            <dd><strong>${{ breakdown.total }}</strong></dd>
+        </dl>
+
+        <p class="fit-help">Prices are calculated by Weiner Kingdom on our server. Size-based adjustments will be added once approved.</p>
+        <a class="button" href="{% url 'smart_fit_resultado' dog.pk %}">Back to measurements</a>
+        <a class="button" href="{% url 'productos' %}">Back to Products</a>
+    </div>
+</section>
+{% endblock %}

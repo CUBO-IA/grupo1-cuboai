@@ -16,7 +16,20 @@
             <dt>Chest girth</dt><dd>{{ dog.chest_girth_cm }} cm</dd>
             <dt>Neck girth</dt><dd>{% if dog.neck_girth_cm %}{{ dog.neck_girth_cm }} cm{% else %}Not provided{% endif %}</dd>
         </dl>
-        <p class="fit-help">Measurements are stored in kg and cm. No price or size has been calculated yet.</p>
+        <p class="fit-help">Measurements are stored in kg and cm. No size has been calculated yet.</p>
+
+        <form method="post" action="{% url 'smart_quote_crear' dog.pk %}" class="fit-field">
+            {% csrf_token %}
+            <label for="producto">Get a quote for</label>
+            <select id="producto" name="producto" required>
+                {% for key, item in productos.items %}
+                <option value="{{ key }}">{{ item.nombre }}</option>
+                {% endfor %}
+            </select>
+            {% if quote_error %}<p class="fit-error">{{ quote_error }}</p>{% endif %}
+            <button class="button" type="submit">Get quote</button>
+        </form>
+
         <a class="button" href="{% url 'productos' %}">Back to Products</a>
         <a class="button" href="{% url 'smart_fit' %}">Measure another dog</a>
     </div>

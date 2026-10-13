@@ -1,7 +1,7 @@
 from django.shortcuts import get_object_or_404, redirect, render
 
 from .forms import SmartFitForm
-from .models import DogProfile
+from .models import DogProfile, Quote
 
 PRODUCTOS = {
     "wedding-dog": {
@@ -84,4 +84,43 @@ def smart_fit(request):
 
 def smart_fit_resultado(request, pk):
     dog = get_object_or_404(DogProfile, pk=pk)
-    return render(request, "tienda/smartfit_resultado.html", {"dog": dog})
+    return render(
+        request, "tienda/smartfit_resultado.html", {"dog": dog, "productos": PRODUCTOS}
+    )
+
+
+def smart_quote_crear(request, pk):
+    # Local import: services depende de PRODUCTOS (definido en este módulo).
+    from . import services
+
+    dog = get_object_or_404(DogProfile, pk=pk)
+    if request.method != "POST":
+        return redirect("smart_fit_resultado", pk=dog.pk)
+    # Solo se lee la clave del producto; cualquier precio enviado se ignora.
+    slug = request.POST.get("producto", "")
+    try:
+        quote = services.create_quote(dog, slug)
+    except services.UnknownProduct:
+        return render(
+            request,
+            "tienda/smartfit_resultado.html",
+            {"dog": dog, "productos": PRODUCTOS, "quote_error": "Please choose a product."},
+            status=400,
+        )
+    return redirect("smart_quote", pk=quote.pk)
+
+
+def smart_quote(request, pk):
+    from . import services
+
+    quote = get_object_or_404(Quote, pk=pk)
+    return render(
+        request,
+        "tienda/smartquote.html",
+        {
+            "quote": quote,
+            "dog": quote.dog,
+            "producto": services.get_product(quote.product_slug),
+            "breakdown": services.build_breakdown(quote),
+        },
+    )
