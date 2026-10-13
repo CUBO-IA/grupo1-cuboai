@@ -1,4 +1,7 @@
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, redirect, render
+
+from .forms import SmartFitForm
+from .models import DogProfile
 
 PRODUCTOS = {
     "wedding-dog": {
@@ -66,3 +69,19 @@ def detalle(request, producto):
     if item is None:
         return render(request, "tienda/detalle.html", {"producto": None}, status=404)
     return render(request, "tienda/detalle.html", {"producto": item})
+
+
+def smart_fit(request):
+    if request.method == "POST":
+        form = SmartFitForm(request.POST)
+        if form.is_valid():
+            dog = form.save()
+            return redirect("smart_fit_resultado", pk=dog.pk)
+    else:
+        form = SmartFitForm(initial={"weight_unit": "kg", "length_unit": "cm"})
+    return render(request, "tienda/smartfit.html", {"form": form})
+
+
+def smart_fit_resultado(request, pk):
+    dog = get_object_or_404(DogProfile, pk=pk)
+    return render(request, "tienda/smartfit_resultado.html", {"dog": dog})

@@ -5,4 +5,6 @@ urlpatterns = [
     path("", views.inicio, name="inicio"),
     path("productos/", views.productos, name="productos"),
     path("producto/<str:producto>/", views.detalle, name="detalle"),
+    path("smart-fit/", views.smart_fit, name="smart_fit"),
+    path("smart-fit/<int:pk>/", views.smart_fit_resultado, name="smart_fit_resultado"),
 ]

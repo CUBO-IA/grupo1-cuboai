@@ -1,0 +1,24 @@
+{% extends "tienda/base.html" %}
+{% block title %}Weiner Kingdom | Measurements saved{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <p class="eyebrow">SMART FIT</p>
+    <h1>Measurements saved</h1>
+</section>
+
+<section class="fit-layout fit-layout-single">
+    <div class="fit-form">
+        <h2>{{ dog.name }}</h2>
+        <dl class="fit-summary">
+            <dt>Breed</dt><dd>{{ dog.breed }}</dd>
+            <dt>Weight</dt><dd>{{ dog.weight_kg }} kg</dd>
+            <dt>Back length</dt><dd>{{ dog.back_length_cm }} cm</dd>
+            <dt>Chest girth</dt><dd>{{ dog.chest_girth_cm }} cm</dd>
+            <dt>Neck girth</dt><dd>{% if dog.neck_girth_cm %}{{ dog.neck_girth_cm }} cm{% else %}Not provided{% endif %}</dd>
+        </dl>
+        <p class="fit-help">Measurements are stored in kg and cm. No price or size has been calculated yet.</p>
+        <a class="button" href="{% url 'productos' %}">Back to Products</a>
+        <a class="button" href="{% url 'smart_fit' %}">Measure another dog</a>
+    </div>
+</section>
+{% endblock %}

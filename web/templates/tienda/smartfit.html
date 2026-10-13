@@ -1,0 +1,76 @@
+{% extends "tienda/base.html" %}
+{% block title %}Weiner Kingdom | Smart Fit{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <p class="eyebrow">SMART FIT</p>
+    <h1>Your dog's measurements</h1>
+</section>
+
+<section class="fit-layout">
+    <form class="fit-form" method="post" novalidate>
+        {% csrf_token %}
+        {% if form.errors %}
+        <p class="fit-alert" role="alert">Please review the highlighted fields.</p>
+        {% endif %}
+
+        <div class="fit-field">
+            <label for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+            {{ form.name }}
+            {% for e in form.name.errors %}<p class="fit-error">{{ e }}</p>{% endfor %}
+        </div>
+        <div class="fit-field">
+            <label for="{{ form.breed.id_for_label }}">{{ form.breed.label }}</label>
+            {{ form.breed }}
+            {% for e in form.breed.errors %}<p class="fit-error">{{ e }}</p>{% endfor %}
+        </div>
+
+        <div class="fit-field">
+            <label for="{{ form.weight.id_for_label }}">{{ form.weight.label }}</label>
+            <div class="fit-row">
+                {{ form.weight }}
+                {{ form.weight_unit }}
+            </div>
+            {% for e in form.weight.errors %}<p class="fit-error">{{ e }}</p>{% endfor %}
+            {% for e in form.weight_unit.errors %}<p class="fit-error">{{ e }}</p>{% endfor %}
+        </div>
+
+        <div class="fit-field">
+            <label for="{{ form.length_unit.id_for_label }}">{{ form.length_unit.label }}</label>
+            {{ form.length_unit }}
+            <p class="fit-help">Used for back length, chest girth and neck girth.</p>
+            {% for e in form.length_unit.errors %}<p class="fit-error">{{ e }}</p>{% endfor %}
+        </div>
+
+        <div class="fit-field">
+            <label for="{{ form.back_length.id_for_label }}">{{ form.back_length.label }}</label>
+            {{ form.back_length }}
+            <p class="fit-help">From the base of the neck to the base of the tail, with your dog standing.</p>
+            {% for e in form.back_length.errors %}<p class="fit-error">{{ e }}</p>{% endfor %}
+        </div>
+        <div class="fit-field">
+            <label for="{{ form.chest_girth.id_for_label }}">{{ form.chest_girth.label }}</label>
+            {{ form.chest_girth }}
+            <p class="fit-help">Around the widest part of the chest, just behind the front legs.</p>
+            {% for e in form.chest_girth.errors %}<p class="fit-error">{{ e }}</p>{% endfor %}
+        </div>
+        <div class="fit-field">
+            <label for="{{ form.neck_girth.id_for_label }}">{{ form.neck_girth.label }}</label>
+            {{ form.neck_girth }}
+            <p class="fit-help">Where a collar normally sits; leave room for two fingers. You can skip this for now.</p>
+            {% for e in form.neck_girth.errors %}<p class="fit-error">{{ e }}</p>{% endfor %}
+        </div>
+
+        <button class="button" type="submit">Save measurements</button>
+    </form>
+
+    <aside class="fit-tips">
+        <h2>How to measure</h2>
+        <ol>
+            <li>Use a soft tape measure and keep your dog standing and relaxed.</li>
+            <li>Keep the tape snug but not tight.</li>
+            <li>Measure twice and use the larger value if they differ.</li>
+            <li>Choose your unit once; the same unit applies to all lengths.</li>
+        </ol>
+    </aside>
+</section>
+{% endblock %}
