@@ -116,3 +116,15 @@ class CheckoutForm(forms.Form):
                 "Enter a valid phone number, e.g. +503 7000 0000."
             )
         return phone
+
+
+class CostForm(forms.Form):
+    estimated_cost = forms.DecimalField(
+        label="Estimated cost (USD)", required=False, min_value=Decimal("0"),
+        max_digits=10, decimal_places=2,
+    )
+    actual_cost = forms.DecimalField(
+        label="Actual cost (USD)", required=False, min_value=Decimal("0"),
+        max_digits=10, decimal_places=2,
+    )
+    cost_notes = forms.CharField(label="Notes", required=False, max_length=300)

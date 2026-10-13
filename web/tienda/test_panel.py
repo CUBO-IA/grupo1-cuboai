@@ -211,10 +211,11 @@ class TransitionTests(TestCase):
         self.assertEqual(self.order.payment_status, "unpaid")
 
     def test_cost_estimate_labelled_and_decimal(self):
-        est = services.cost_estimate(self.order)
-        self.assertEqual(est["target_cost"], Decimal("175.00"))
-        self.assertEqual(est["estimated_margin"], Decimal("125.00"))
-        self.assertEqual(est["estimated_margin_pct"], Decimal("41.7"))
+        est = services.cost_summary(self.order)
+        self.assertEqual(est["cost_source"], "target")
+        self.assertEqual(est["cost"], Decimal("175.00"))
+        self.assertEqual(est["margin"], Decimal("125.00"))
+        self.assertEqual(est["margin_pct"], Decimal("41.7"))
         self.client.force_login(self.staff)
         r = self.client.get(reverse("panel_order", args=[self.order.public_id]))
         self.assertContains(r, "ESTIMATE")

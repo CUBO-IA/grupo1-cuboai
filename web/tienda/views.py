@@ -161,4 +161,40 @@ def checkout(request, public_id):
 
 def order_detail(request, public_id):
     order = get_object_or_404(Order, public_id=public_id)
-    return render(request, "tienda/order.html", {"order": order, "snap": order.snapshot})
+    labels = {
+        "status": "Order",
+        "payment_status": "Payment",
+        "production_status": "Production",
+        "shipping_status": "Shipping",
+    }
+    public_events = [
+        {"created_at": e.created_at, "label": f"{labels[e.field]}: {e.to_value.replace('_', ' ')}"}
+        for e in order.events.filter(field__in=labels)
+    ]
+    return render(
+        request,
+        "tienda/order.html",
+        {"order": order, "snap": order.snapshot, "public_events": public_events},
+    )
+
+
+def assistant(request):
+    from . import assistant as bot
+
+    occasion = request.GET.get("occasion", "")
+    q = request.GET.get("q", "")[: bot.MAX_QUERY_LENGTH]
+    reply = None
+    if q.strip():
+        reply = bot.answer(q)
+    elif occasion:
+        reply = bot.recommend(occasion) or bot.answer("")
+    return render(
+        request,
+        "tienda/assistant.html",
+        {
+            "occasions": [(k, v[0]) for k, v in bot.OCCASIONS.items()],
+            "selected": occasion,
+            "q": q,
+            "reply": reply,
+        },
+    )

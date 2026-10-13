@@ -8,6 +8,7 @@ urlpatterns = [
     path("productos/", views.productos, name="productos"),
     path("producto/<str:producto>/", views.detalle, name="detalle"),
     path("smart-fit/", views.smart_fit, name="smart_fit"),
+    path("guide/", views.assistant, name="assistant"),
     path("smart-fit/<uuid:public_id>/", views.smart_fit_resultado, name="smart_fit_resultado"),
     path("smart-fit/<uuid:public_id>/cotizar/", views.smart_quote_crear, name="smart_quote_crear"),
     path("quote/<uuid:public_id>/", views.smart_quote, name="smart_quote"),

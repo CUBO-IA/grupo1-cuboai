@@ -1,4 +1,4 @@
-# Guía técnica — Wiener Kingdom MVP (estado Task 7)
+# Guía técnica — Wiener Kingdom MVP (estado Task 11)
 
 ## Ejecución local (Windows)
 
@@ -23,6 +23,7 @@ python -m venv .venv
 | Smart Fit (medidas) | `/smart-fit/` → `/smart-fit/<uuid>/` | `views.smart_fit`, `smart_fit_resultado` |
 | Cotización | `POST /smart-fit/<uuid>/cotizar/` → `/quote/<uuid>/` | `smart_quote_crear`, `smart_quote` |
 | Checkout | `/quote/<uuid>/checkout/` → `/order/<uuid>/` | `checkout`, `order_detail` |
+| Asistente guiado | `/guide/` | `views.assistant` (`tienda/assistant.py`) |
 | Panel privado | `/panel/login/`, `/panel/`, `/panel/orders/<uuid>/` | `tienda/panel.py` |
 
 ## Modelos
@@ -42,7 +43,9 @@ DogProfile 1 ──< Quote 1 ──0..1 Order 1 ──< OrderEvent
 - **Cotización:** provisional (solo precio base). El ajuste por talla **no existe** porque la regla comercial no está definida.
 - **Pedido:** idempotente por cotización (un pedido por cotización, transacción + restricción única).
 - **Pago:** no hay pasarela. Marcar un pedido como pagado es un registro manual de staff con referencia obligatoria.
-- **Costos:** el panel muestra una estimación basada en el objetivo de $175, etiquetada como no verificada.
+- **Costos:** el panel usa, en orden, costo real > costo estimado cargado > objetivo provisional de $175, y etiqueta cada caso. Los costos nunca se muestran al cliente.
+- **Seguimiento:** la página del pedido explica cada estado y lista las actualizaciones sin notas internas; no sugiere pago ni envío sin registro del personal.
+- **Asistente:** determinista, solo catálogo; declara desconocido lo que no tiene.
 
 ## Seguridad actual
 

@@ -6,6 +6,7 @@ from django.http import HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 
 from . import services
+from .forms import CostForm
 from .models import Order
 
 PAGE_SIZE = 25
@@ -70,7 +71,25 @@ def orders(request):
 def order(request, public_id):
     order = get_object_or_404(Order, public_id=public_id)
     error = None
-    if request.method == "POST":
+    cost_form = CostForm(initial={
+        "estimated_cost": order.estimated_cost,
+        "actual_cost": order.actual_cost,
+        "cost_notes": order.cost_notes,
+    })
+    if request.method == "POST" and request.POST.get("form") == "costs":
+        cost_form = CostForm(request.POST)
+        if cost_form.is_valid():
+            d = cost_form.cleaned_data
+            services.update_costs(
+                order,
+                user=request.user,
+                estimated_cost=d["estimated_cost"],
+                actual_cost=d["actual_cost"],
+                notes=d["cost_notes"],
+            )
+            return redirect("panel_order", public_id=order.public_id)
+        order.refresh_from_db()
+    elif request.method == "POST":
         try:
             services.apply_transition(
                 order,
@@ -92,8 +111,9 @@ def order(request, public_id):
             "snap": order.snapshot,
             "events": order.events.select_related("by"),
             "allowed": services.allowed_transitions(order),
-            "cost": services.cost_estimate(order),
+            "cost": services.cost_summary(order),
+            "cost_form": cost_form,
             "error": error,
         },
-        status=400 if error else 200,
+        status=400 if (error or cost_form.errors) else 200,
     )

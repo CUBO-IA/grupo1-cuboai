@@ -1,0 +1,48 @@
+{% extends "tienda/base.html" %}
+{% block title %}Weiner Kingdom | Guide{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <p class="eyebrow">GUIDED ASSISTANT</p>
+    <h1>Find the right piece</h1>
+</section>
+
+<section class="fit-layout">
+    <div class="fit-form">
+        <form method="get">
+            <div class="fit-field">
+                <label for="occasion">What is it for?</label>
+                <select id="occasion" name="occasion">
+                    <option value="">Choose an occasion</option>
+                    {% for key, label in occasions %}
+                    <option value="{{ key }}" {% if selected == key %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="fit-field">
+                <label for="q">Or ask a short question</label>
+                <input id="q" name="q" type="text" maxlength="200" value="{{ q }}" placeholder="e.g. How much is the Dog Sweater?">
+            </div>
+            <button class="button" type="submit">Ask</button>
+        </form>
+    </div>
+
+    <aside class="fit-tips">
+        <h2>Answer</h2>
+        {% if reply %}
+            <p {% if reply.unknown %}class="fit-alert"{% endif %}>{{ reply.message }}</p>
+            {% for p in reply.products %}
+            <div class="fit-field">
+                <strong>{{ p.name }}</strong> — {{ p.price }}
+                <p class="fit-help">{{ p.tagline }}</p>
+                <a class="button" href="{% url 'detalle' p.slug %}">View product</a>
+            </div>
+            {% endfor %}
+            {% if reply.next == "smart_fit" %}
+            <a class="button" href="{% url 'smart_fit' %}">Enter my dog's measurements</a>
+            {% endif %}
+        {% else %}
+            <p class="fit-help">Pick an occasion or type a question. This assistant only uses our real catalog; it does not know about orders, payments or shipping.</p>
+        {% endif %}
+    </aside>
+</section>
+{% endblock %}

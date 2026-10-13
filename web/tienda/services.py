@@ -164,17 +164,60 @@ def apply_transition(order, field, new_value, user=None, note=""):
     return order
 
 
-def cost_estimate(order):
-    """Estimación interna: el costo es un objetivo provisional, no real."""
-    margin = order.total - TARGET_MANUFACTURING_COST
+def cost_summary(order):
+    """Costo y margen internos, indicando de dónde sale cada valor.
+
+    Prioridad: costo real > costo estimado cargado > objetivo provisional.
+    """
+    if order.actual_cost is not None:
+        cost, source = order.actual_cost, "actual"
+    elif order.estimated_cost is not None:
+        cost, source = order.estimated_cost, "estimated"
+    else:
+        cost, source = TARGET_MANUFACTURING_COST, "target"
+    margin = order.total - cost
     pct = (margin / order.total * 100).quantize(Decimal("0.1")) if order.total else None
     return {
         "total": order.total,
         "total_is_provisional": order.price_is_provisional,
+        "cost": cost,
+        "cost_source": source,
+        "is_actual": source == "actual",
+        "margin": margin,
+        "margin_pct": pct,
         "target_cost": TARGET_MANUFACTURING_COST,
-        "estimated_margin": margin,
-        "estimated_margin_pct": pct,
     }
+
+
+def update_costs(order, user=None, estimated_cost=None, actual_cost=None, notes=""):
+    """Guarda costos internos y registra el cambio en el historial."""
+    from django.db import transaction
+
+    from .models import Order, OrderEvent
+
+    for value in (estimated_cost, actual_cost):
+        if value is not None and value < 0:
+            raise TransitionError("Costs cannot be negative.")
+    with transaction.atomic():
+        order = Order.objects.select_for_update().get(pk=order.pk)
+        changes = []
+        for field, new in (("estimated_cost", estimated_cost), ("actual_cost", actual_cost)):
+            old = getattr(order, field)
+            if old != new:
+                changes.append((field, old, new))
+                setattr(order, field, new)
+        order.cost_notes = (notes or "").strip()[:300]
+        order.save()
+        for field, old, new in changes:
+            OrderEvent.objects.create(
+                order=order,
+                field=field,
+                from_value="" if old is None else str(old),
+                to_value="" if new is None else str(new),
+                note="",
+                by=user if getattr(user, "pk", None) else None,
+            )
+    return order
 
 
 class QuoteNotOrderable(Exception):

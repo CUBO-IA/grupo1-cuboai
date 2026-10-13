@@ -6,6 +6,7 @@ Preparación (antes de grabar): `migrate`, `createsuperuser`, `runserver`; base 
 |---|---|---|
 | 0:00 | Inicio → **Products** | "Cuatro prendas para dachshunds; cada ficha conserva su diseño original." |
 | 0:20 | Abrir **Wedding Dog** | "Precio base $650, descripción y características." |
+| 0:30 | Menú **Guide** → elegir "Holiday" | "Un asistente que solo usa el catálogo real y no inventa envíos ni pagos." |
 | 0:35 | Menú **Smart Fit** | "Registramos las medidas; si mezclo unidades, el sistema las valida." |
 | 0:50 | Enviar el formulario vacío, luego con valores válidos (p. ej. Luna, 6 kg, 33 cm, 40 cm) | "Errores claros; los datos se conservan; se guardan en kg y cm." |
 | 1:15 | **Get quote** → Wedding Dog | "La cotización la calcula el servidor. Es provisional: el ajuste por talla aún no está aprobado." |

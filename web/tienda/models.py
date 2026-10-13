@@ -107,6 +107,15 @@ class Order(models.Model):
     # Evidencia aportada por el personal al marcar el pago (p. ej. referencia).
     payment_reference = models.CharField(max_length=120, blank=True)
 
+    # Costos internos. Estimado y real son valores distintos; ambos opcionales.
+    estimated_cost = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    actual_cost = models.DecimalField(
+        max_digits=10, decimal_places=2, null=True, blank=True
+    )
+    cost_notes = models.CharField(max_length=300, blank=True)
+
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.PENDING
     )

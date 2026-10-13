@@ -1,0 +1,173 @@
+from decimal import Decimal
+
+from django.contrib.auth.models import User
+from django.test import Client, TestCase
+from django.urls import reverse
+
+from . import assistant, services
+from .models import Order, OrderEvent
+from .test_panel import make_order
+
+
+class AssistantTests(TestCase):
+    def ask(self, **params):
+        return self.client.get(reverse("assistant"), params)
+
+    def test_page_renders_empty(self):
+        r = self.client.get(reverse("assistant"))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, "does not know about orders")
+
+    def test_occasion_recommendations_use_catalog(self):
+        expected = {
+            "wedding": ("Wedding Dog", "$650"),
+            "adventure": ("Tactical Dog", "$300"),
+            "holiday": ("Christmas Dog", "$250"),
+            "everyday": ("Dog Sweater", "$125"),
+        }
+        for key, (name, price) in expected.items():
+            r = self.ask(occasion=key)
+            self.assertContains(r, name)
+            self.assertContains(r, price)
+
+    def test_price_question_uses_real_price(self):
+        r = self.ask(q="How much is the Dog Sweater?")
+        self.assertContains(r, "$125")
+        self.assertContains(r, "confirmed by Weiner Kingdom")
+
+    def test_measurement_question_points_to_smart_fit(self):
+        r = self.ask(q="How do I measure my dog for the wedding suit?")
+        self.assertContains(r, reverse("smart_fit"))
+        self.assertContains(r, "do not calculate a size")
+
+    def test_unsupported_topics_are_not_invented(self):
+        for q in ("Do you ship to Guatemala?", "Can I pay with bitcoin?",
+                  "Where is my order?", "What is your refund policy?"):
+            reply = assistant.answer(q)
+            self.assertTrue(reply["unknown"], q)
+            self.assertIn("don't have confirmed information", reply["message"])
+            self.assertEqual(reply["products"], [])
+            self.assertNotRegex(reply["message"], r"\$\d")
+
+    def test_ambiguous_question_asks_for_clarification(self):
+        reply = assistant.answer("price of wedding and christmas")
+        self.assertIn("more than one product", reply["message"])
+        self.assertEqual(len(reply["products"]), 2)
+
+    def test_unknown_question_and_empty_input(self):
+        self.assertTrue(assistant.answer("tell me a joke")["unknown"])
+        self.assertTrue(assistant.answer("   ")["unknown"])
+        r = self.ask(occasion="bogus")
+        self.assertEqual(r.status_code, 200)
+
+    def test_input_is_escaped_and_length_limited(self):
+        r = self.ask(q="<script>alert(1)</script>" + "a" * 500)
+        self.assertNotContains(r, "<script>alert(1)</script>")
+        self.assertEqual(r.status_code, 200)
+
+    def test_assistant_does_not_write_data(self):
+        self.ask(q="wedding", occasion="wedding")
+        self.assertEqual(Order.objects.count(), 0)
+
+    def test_prices_follow_catalog_changes(self):
+        from unittest import mock
+
+        changed = {**services.PRODUCTOS["dog-sweater"], "precio": "$130"}
+        with mock.patch.dict(services.PRODUCTOS, {"dog-sweater": changed}):
+            self.assertIn("$130", assistant.answer("price of the sweater")["message"])
+
+
+class CostTests(TestCase):
+    def setUp(self):
+        self.order = make_order()
+        self.staff = User.objects.create_user("staff", password="x", is_staff=True)
+        self.url = reverse("panel_order", args=[self.order.public_id])
+
+    def test_default_is_target_estimate(self):
+        s = services.cost_summary(self.order)
+        self.assertEqual(s["cost_source"], "target")
+        self.assertFalse(s["is_actual"])
+
+    def test_estimated_then_actual_priority(self):
+        services.update_costs(self.order, self.staff, estimated_cost=Decimal("200"))
+        self.order.refresh_from_db()
+        s = services.cost_summary(self.order)
+        self.assertEqual((s["cost_source"], s["margin"]), ("estimated", Decimal("100.00")))
+        services.update_costs(
+            self.order, self.staff, estimated_cost=Decimal("200"), actual_cost=Decimal("180.50")
+        )
+        self.order.refresh_from_db()
+        s = services.cost_summary(self.order)
+        self.assertEqual((s["cost_source"], s["margin"]), ("actual", Decimal("119.50")))
+        self.assertTrue(s["is_actual"])
+
+    def test_negative_rejected_in_service_and_form(self):
+        with self.assertRaises(services.TransitionError):
+            services.update_costs(self.order, self.staff, actual_cost=Decimal("-1"))
+        self.client.force_login(self.staff)
+        r = self.client.post(self.url, {"form": "costs", "actual_cost": "-5"})
+        self.assertEqual(r.status_code, 400)
+        self.order.refresh_from_db()
+        self.assertIsNone(self.order.actual_cost)
+
+    def test_invalid_text_rejected(self):
+        self.client.force_login(self.staff)
+        r = self.client.post(self.url, {"form": "costs", "actual_cost": "abc"})
+        self.assertEqual(r.status_code, 400)
+
+    def test_edit_via_panel_labels_and_history(self):
+        self.client.force_login(self.staff)
+        r = self.client.post(
+            self.url, {"form": "costs", "actual_cost": "190.25", "cost_notes": "fabric invoice"}
+        )
+        self.assertRedirects(r, self.url)
+        page = self.client.get(self.url)
+        self.assertContains(page, "ACTUAL cost recorded")
+        self.assertContains(page, "(actual)")
+        self.assertNotContains(page, "ESTIMATE — not verified")
+        self.order.refresh_from_db()
+        self.assertEqual(self.order.actual_cost, Decimal("190.25"))
+        self.assertEqual(self.order.cost_notes, "fabric invoice")
+        self.assertEqual(OrderEvent.objects.get().field, "actual_cost")
+
+    def test_costs_require_staff_and_csrf(self):
+        r = self.client.post(self.url, {"form": "costs", "actual_cost": "1"})
+        self.assertEqual(r.status_code, 302)
+        self.client.force_login(User.objects.create_user("u", password="x"))
+        r = self.client.post(self.url, {"form": "costs", "actual_cost": "1"})
+        self.assertEqual(r.status_code, 403)
+        c = Client(enforce_csrf_checks=True)
+        c.force_login(self.staff)
+        self.assertEqual(c.post(self.url, {"form": "costs", "actual_cost": "1"}).status_code, 403)
+        self.order.refresh_from_db()
+        self.assertIsNone(self.order.actual_cost)
+
+    def test_costs_never_shown_to_customer(self):
+        services.update_costs(self.order, self.staff, actual_cost=Decimal("171.23"),
+                              notes="secret note")
+        page = self.client.get(reverse("order_detail", args=[self.order.public_id]))
+        self.assertNotContains(page, "171.23")
+        self.assertNotContains(page, "secret note")
+        self.assertNotContains(page, "margin", html=False)
+
+
+class TrackingTests(TestCase):
+    def test_states_explained_and_not_overstated(self):
+        order = make_order()
+        page = self.client.get(reverse("order_detail", args=[order.public_id]))
+        self.assertContains(page, "What the states mean")
+        self.assertContains(page, "no carrier tracking is connected")
+        self.assertContains(page, "No updates yet")
+        self.assertNotContains(page, "Shipped</dd>")
+        self.assertNotContains(page, "Paid</dd>")
+
+    def test_updates_visible_without_internal_notes(self):
+        order = make_order()
+        staff = User.objects.create_user("s", password="x", is_staff=True)
+        services.apply_transition(order, "payment_status", "paid", user=staff, note="BANK-SECRET-9")
+        services.apply_transition(order, "production_status", "in_production", user=staff)
+        page = self.client.get(reverse("order_detail", args=[order.public_id]))
+        self.assertContains(page, "Payment: paid")
+        self.assertContains(page, "Production: in production")
+        self.assertNotContains(page, "BANK-SECRET-9")
+        self.assertNotContains(page, "staff")

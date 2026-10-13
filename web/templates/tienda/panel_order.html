@@ -68,13 +68,35 @@
     </div>
 
     <aside class="fit-tips">
-        <h2>Internal cost estimate</h2>
+        <h2>Internal cost and margin</h2>
+        {% if cost.is_actual %}
+        <p class="fit-help"><strong>ACTUAL cost recorded.</strong></p>
+        {% else %}
         <p class="fit-alert" role="status">ESTIMATE — not verified costs.</p>
+        {% endif %}
         <dl class="fit-summary">
             <dt>Order total</dt><dd>${{ cost.total }}{% if cost.total_is_provisional %} (provisional){% endif %}</dd>
-            <dt>Target manufacturing cost</dt><dd>${{ cost.target_cost }} (target, not a proven cost)</dd>
-            <dt>Estimated margin</dt><dd>${{ cost.estimated_margin }}{% if cost.estimated_margin_pct is not None %} ({{ cost.estimated_margin_pct }}%){% endif %}</dd>
+            <dt>Cost used</dt>
+            <dd>${{ cost.cost }}
+                {% if cost.cost_source == "actual" %}(actual){% elif cost.cost_source == "estimated" %}(estimate entered by staff){% else %}(target, not a proven cost){% endif %}
+            </dd>
+            <dt>{% if cost.is_actual %}Margin{% else %}Estimated margin{% endif %}</dt>
+            <dd>${{ cost.margin }}{% if cost.margin_pct is not None %} ({{ cost.margin_pct }}%){% endif %}</dd>
         </dl>
+
+        <h3>Edit costs</h3>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="form" value="costs">
+            {% for field in cost_form %}
+            <div class="fit-field">
+                <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+                {{ field }}
+                {% for e in field.errors %}<p class="fit-error">{{ e }}</p>{% endfor %}
+            </div>
+            {% endfor %}
+            <button class="button" type="submit">Save costs</button>
+        </form>
     </aside>
 </section>
 {% endblock %}

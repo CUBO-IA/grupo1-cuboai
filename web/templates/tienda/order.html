@@ -14,6 +14,12 @@
             <dt>Production</dt><dd>{{ order.get_production_status_display }}</dd>
             <dt>Shipping</dt><dd>{{ order.get_shipping_status_display }}</dd>
         </dl>
+        <p class="fit-help">
+            What the states mean: <em>Pending</em> — we received your order and have not confirmed it yet.
+            <em>Unpaid</em> — no payment has been recorded. <em>Not started / In production</em> — the piece has not been started or is being made.
+            <em>Not shipped / Shipped</em> — set by our team when the package leaves; no carrier tracking is connected.
+            A state only changes when our team records it.
+        </p>
 
         <h2>Summary</h2>
         <dl class="fit-summary">
@@ -37,6 +43,15 @@
             <dt>Phone</dt><dd>{{ order.customer_phone }}</dd>
             <dt>Address</dt><dd>{{ order.address }}, {{ order.city }}, {{ order.country }}</dd>
         </dl>
+
+        <h2>Updates</h2>
+        <ul class="panel-events">
+        {% for e in public_events %}
+            <li>{{ e.created_at|date:"Y-m-d H:i" }} — {{ e.label }}</li>
+        {% empty %}
+            <li>No updates yet.</li>
+        {% endfor %}
+        </ul>
 
         <a class="button" href="{% url 'productos' %}">Back to Products</a>
     </div>
