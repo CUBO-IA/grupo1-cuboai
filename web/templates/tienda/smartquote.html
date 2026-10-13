@@ -27,7 +27,8 @@
         </dl>
 
         <p class="fit-help">Prices are calculated by Weiner Kingdom on our server. Size-based adjustments will be added once approved.</p>
-        <a class="button" href="{% url 'smart_fit_resultado' dog.pk %}">Back to measurements</a>
+        <a class="button" href="{% url 'checkout' quote.public_id %}">Continue to checkout</a>
+        <a class="button" href="{% url 'smart_fit_resultado' dog.public_id %}">Back to measurements</a>
         <a class="button" href="{% url 'productos' %}">Back to Products</a>
     </div>
 </section>

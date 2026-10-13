@@ -18,7 +18,7 @@
         </dl>
         <p class="fit-help">Measurements are stored in kg and cm. No size has been calculated yet.</p>
 
-        <form method="post" action="{% url 'smart_quote_crear' dog.pk %}" class="fit-field">
+        <form method="post" action="{% url 'smart_quote_crear' dog.public_id %}" class="fit-field">
             {% csrf_token %}
             <label for="producto">Get a quote for</label>
             <select id="producto" name="producto" required>

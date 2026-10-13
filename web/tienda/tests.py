@@ -1,3 +1,4 @@
+import uuid
 from decimal import Decimal
 
 from django.contrib.staticfiles import finders
@@ -83,7 +84,7 @@ class SmartFitTests(TestCase):
     def test_valid_submission_persists_and_reloads(self):
         r = self.client.post(self.url, _valid_post())
         dog = DogProfile.objects.get()
-        self.assertRedirects(r, _reverse("smart_fit_resultado", args=[dog.pk]))
+        self.assertRedirects(r, _reverse("smart_fit_resultado", args=[dog.public_id]))
         self.assertEqual(dog.weight_kg, Decimal("7.50"))
         self.assertEqual(dog.back_length_cm, Decimal("35.0"))
         self.assertEqual(dog.chest_girth_cm, Decimal("42.5"))
@@ -150,7 +151,7 @@ class SmartFitTests(TestCase):
 
     def test_result_404_for_unknown_profile(self):
         self.assertEqual(
-            self.client.get(_reverse("smart_fit_resultado", args=[999])).status_code, 404
+            self.client.get(_reverse("smart_fit_resultado", args=[uuid.uuid4()])).status_code, 404
         )
 
 
@@ -206,10 +207,10 @@ class QuoteServiceTests(TestCase):
 class QuoteViewTests(TestCase):
     def test_quote_flow(self):
         dog = _make_dog()
-        url = _reverse("smart_quote_crear", args=[dog.pk])
+        url = _reverse("smart_quote_crear", args=[dog.public_id])
         r = self.client.post(url, {"producto": "tactical-dog"})
         quote = Quote.objects.get()
-        self.assertRedirects(r, _reverse("smart_quote", args=[quote.pk]))
+        self.assertRedirects(r, _reverse("smart_quote", args=[quote.public_id]))
         page = self.client.get(r.url)
         self.assertContains(page, "Provisional quote")
         self.assertContains(page, "$300.00")
@@ -218,7 +219,7 @@ class QuoteViewTests(TestCase):
     def test_client_cannot_set_price(self):
         dog = _make_dog()
         self.client.post(
-            _reverse("smart_quote_crear", args=[dog.pk]),
+            _reverse("smart_quote_crear", args=[dog.public_id]),
             {"producto": "dog-sweater", "base_price": "1", "total_price": "1",
              "pricing": "final", "status": "accepted"},
         )
@@ -230,16 +231,16 @@ class QuoteViewTests(TestCase):
 
     def test_unknown_product_and_missing_dog(self):
         dog = _make_dog()
-        r = self.client.post(_reverse("smart_quote_crear", args=[dog.pk]), {"producto": "x"})
+        r = self.client.post(_reverse("smart_quote_crear", args=[dog.public_id]), {"producto": "x"})
         self.assertEqual(r.status_code, 400)
         self.assertEqual(Quote.objects.count(), 0)
-        r = self.client.post(_reverse("smart_quote_crear", args=[999]), {"producto": "dog-sweater"})
+        r = self.client.post(_reverse("smart_quote_crear", args=[uuid.uuid4()]), {"producto": "dog-sweater"})
         self.assertEqual(r.status_code, 404)
-        self.assertEqual(self.client.get(_reverse("smart_quote", args=[999])).status_code, 404)
+        self.assertEqual(self.client.get(_reverse("smart_quote", args=[uuid.uuid4()])).status_code, 404)
 
     def test_get_on_create_redirects_without_creating(self):
         dog = _make_dog()
-        r = self.client.get(_reverse("smart_quote_crear", args=[dog.pk]))
+        r = self.client.get(_reverse("smart_quote_crear", args=[dog.public_id]))
         self.assertEqual(r.status_code, 302)
         self.assertEqual(Quote.objects.count(), 0)
 
@@ -248,5 +249,154 @@ class QuoteViewTests(TestCase):
 
         dog = _make_dog()
         c = Client(enforce_csrf_checks=True)
-        r = c.post(_reverse("smart_quote_crear", args=[dog.pk]), {"producto": "dog-sweater"})
+        r = c.post(_reverse("smart_quote_crear", args=[dog.public_id]), {"producto": "dog-sweater"})
         self.assertEqual(r.status_code, 403)
+
+
+def _customer(**overrides):
+    data = {
+        "customer_name": "Ana Perez",
+        "customer_email": "ana@example.com",
+        "customer_phone": "+503 7000 0000",
+        "country": "El Salvador",
+        "city": "San Salvador",
+        "address": "Calle 1 #2",
+    }
+    data.update(overrides)
+    return data
+
+
+class CheckoutTests(TestCase):
+    def setUp(self):
+        self.dog = _make_dog()
+        self.quote = services.create_quote(self.dog, "tactical-dog")
+        self.url = _reverse("checkout", args=[self.quote.public_id])
+
+    def test_get_shows_review(self):
+        r = self.client.get(self.url)
+        self.assertContains(r, "Tactical Dog")
+        self.assertContains(r, "$300.00")
+        self.assertContains(r, "Provisional price")
+        self.assertContains(r, "csrfmiddlewaretoken")
+
+    def test_valid_order_created(self):
+        r = self.client.post(self.url, _customer())
+        order = Order.objects.get()
+        self.assertRedirects(r, _reverse("order_detail", args=[order.public_id]))
+        self.assertEqual(order.quote, self.quote)
+        self.assertEqual(order.total, Decimal("300.00"))
+        self.assertTrue(order.price_is_provisional)
+        self.assertEqual(order.status, Order.Status.PENDING)
+        self.assertEqual(order.payment_status, Order.PaymentStatus.UNPAID)
+        self.assertEqual(order.production_status, Order.ProductionStatus.NOT_STARTED)
+        self.assertEqual(order.shipping_status, Order.ShippingStatus.NOT_SHIPPED)
+        self.quote.refresh_from_db()
+        self.assertEqual(self.quote.status, Quote.Status.ACCEPTED)
+        page = self.client.get(r.url)
+        self.assertContains(page, order.number)
+        self.assertContains(page, "no payment has been collected")
+        self.assertContains(page, "Unpaid")
+
+    def test_resubmission_does_not_duplicate(self):
+        self.client.post(self.url, _customer())
+        r = self.client.post(self.url, _customer(customer_name="Other"))
+        self.assertEqual(Order.objects.count(), 1)
+        self.assertEqual(Order.objects.get().customer_name, "Ana Perez")
+        self.assertEqual(r.status_code, 302)
+        self.assertEqual(self.client.get(self.url).status_code, 302)
+
+    def test_service_idempotent(self):
+        o1, created1 = services.create_order(self.quote, _customer())
+        o2, created2 = services.create_order(self.quote, _customer())
+        self.assertTrue(created1)
+        self.assertFalse(created2)
+        self.assertEqual(o1.pk, o2.pk)
+
+    def test_invalid_fields(self):
+        for override in (
+            {"customer_name": ""},
+            {"customer_email": "nope"},
+            {"customer_phone": "abc"},
+            {"customer_phone": "123"},
+            {"country": ""},
+            {"city": ""},
+            {"address": ""},
+            {"address": "x" * 301},
+        ):
+            r = self.client.post(self.url, _customer(**override))
+            self.assertEqual(r.status_code, 200, override)
+            self.assertTrue(r.context["form"].errors, override)
+        self.assertEqual(Order.objects.count(), 0)
+
+    def test_input_kept_on_error(self):
+        r = self.client.post(self.url, _customer(customer_email="bad", city="Santa Ana"))
+        self.assertContains(r, "Santa Ana")
+
+    def test_client_cannot_set_total(self):
+        self.client.post(
+            self.url, _customer(total="1", price_is_provisional="", payment_status="paid")
+        )
+        order = Order.objects.get()
+        self.assertEqual(order.total, Decimal("300.00"))
+        self.assertEqual(order.payment_status, Order.PaymentStatus.UNPAID)
+
+    def test_total_recalculated_from_catalog(self):
+        from unittest import mock
+
+        changed = {**services.PRODUCTOS["tactical-dog"], "precio": "$310"}
+        with mock.patch.dict(services.PRODUCTOS, {"tactical-dog": changed}):
+            self.client.post(self.url, _customer())
+        order = Order.objects.get()
+        self.assertEqual(order.total, Decimal("310.00"))
+        self.assertEqual(order.snapshot["base_price"], "310.00")
+
+    def test_snapshot_survives_catalog_and_dog_changes(self):
+        self.client.post(self.url, _customer())
+        order = Order.objects.get()
+        self.dog.weight_kg = Decimal("20.00")
+        self.dog.name = "Changed"
+        self.dog.save()
+        order.refresh_from_db()
+        self.assertEqual(order.snapshot["dog"]["name"], "Rex")
+        self.assertEqual(order.snapshot["dog"]["weight_kg"], "7.50")
+        self.assertEqual(order.snapshot["product"]["name"], "Tactical Dog")
+        self.assertEqual(order.snapshot["pricing"], "provisional")
+
+    def test_unknown_ids_404_and_int_ids_do_not_route(self):
+        for name in ("checkout", "order_detail", "smart_quote", "smart_fit_resultado"):
+            r = self.client.get(_reverse(name, args=[uuid.uuid4()]))
+            self.assertEqual(r.status_code, 404, name)
+        self.assertEqual(self.client.get("/quote/1/").status_code, 404)
+        self.assertEqual(self.client.get("/order/1/").status_code, 404)
+        self.assertEqual(self.client.get("/smart-fit/1/").status_code, 404)
+
+    def test_cancelled_quote_blocked(self):
+        self.quote.status = Quote.Status.CANCELLED
+        self.quote.save()
+        self.assertEqual(self.client.get(self.url).status_code, 400)
+        self.assertEqual(self.client.post(self.url, _customer()).status_code, 400)
+        self.assertEqual(Order.objects.count(), 0)
+
+    def test_csrf_enforced(self):
+        from django.test import Client
+
+        c = Client(enforce_csrf_checks=True)
+        self.assertEqual(c.post(self.url, _customer()).status_code, 403)
+        self.assertEqual(Order.objects.count(), 0)
+
+    def test_full_flow(self):
+        r = self.client.post(
+            _reverse("smart_fit"),
+            {"name": "Luna", "breed": "Dachshund", "weight": "6", "weight_unit": "kg",
+             "length_unit": "cm", "back_length": "33", "chest_girth": "40", "neck_girth": ""},
+        )
+        r = self.client.post(
+            _reverse("smart_quote_crear", args=[DogProfile.objects.get(name="Luna").public_id]),
+            {"producto": "wedding-dog"},
+        )
+        r = self.client.get(r.url)
+        self.assertContains(r, "$650.00")
+        quote = Quote.objects.get(product_slug="wedding-dog")
+        r = self.client.post(_reverse("checkout", args=[quote.public_id]), _customer())
+        self.assertContains(self.client.get(r.url), "Luna")
+        self.assertEqual(Order.objects.get().total, Decimal("650.00"))

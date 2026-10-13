@@ -82,3 +82,67 @@ def build_breakdown(quote):
         "total": quote.total_price if is_final else quote.base_price,
         "is_final": is_final,
     }
+
+
+class QuoteNotOrderable(Exception):
+    pass
+
+
+def _dec(value):
+    return None if value is None else str(value)
+
+
+def create_order(quote, customer):
+    """Crea el pedido de una cotización; idempotente por cotización.
+
+    El total se recalcula aquí desde el catálogo; nada del navegador influye.
+    Si la cotización ya tiene pedido, devuelve (pedido_existente, False).
+    """
+    from django.db import IntegrityError, transaction
+
+    from .models import Order
+
+    with transaction.atomic():
+        quote = Quote.objects.select_for_update().select_related("dog").get(pk=quote.pk)
+        existing = Order.objects.filter(quote=quote).first()
+        if existing:
+            return existing, False
+        if quote.status == Quote.Status.CANCELLED:
+            raise QuoteNotOrderable("cancelled")
+
+        base_price = get_base_price(quote.product_slug)
+        is_final = quote.pricing == Quote.Pricing.FINAL and quote.total_price is not None
+        total = quote.total_price if is_final else base_price
+        product = get_product(quote.product_slug)
+        dog = quote.dog
+        snapshot = {
+            "currency": "USD",
+            "product": {"slug": quote.product_slug, "name": product["nombre"]},
+            "base_price": _dec(base_price),
+            "total": _dec(total),
+            "pricing": "final" if is_final else "provisional",
+            "dog": {
+                "name": dog.name,
+                "breed": dog.breed,
+                "weight_kg": _dec(dog.weight_kg),
+                "back_length_cm": _dec(dog.back_length_cm),
+                "chest_girth_cm": _dec(dog.chest_girth_cm),
+                "neck_girth_cm": _dec(dog.neck_girth_cm),
+            },
+            "quote_public_id": str(quote.public_id),
+        }
+        try:
+            with transaction.atomic():
+                order = Order.objects.create(
+                    quote=quote,
+                    total=total,
+                    price_is_provisional=not is_final,
+                    snapshot=snapshot,
+                    **customer,
+                )
+        except IntegrityError:
+            return Order.objects.get(quote=quote), False
+        quote.base_price = base_price
+        quote.status = Quote.Status.ACCEPTED
+        quote.save(update_fields=["base_price", "status"])
+        return order, True

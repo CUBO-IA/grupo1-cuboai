@@ -1,7 +1,7 @@
 from django.shortcuts import get_object_or_404, redirect, render
 
-from .forms import SmartFitForm
-from .models import DogProfile, Quote
+from .forms import CheckoutForm, SmartFitForm
+from .models import DogProfile, Order, Quote
 
 PRODUCTOS = {
     "wedding-dog": {
@@ -76,26 +76,26 @@ def smart_fit(request):
         form = SmartFitForm(request.POST)
         if form.is_valid():
             dog = form.save()
-            return redirect("smart_fit_resultado", pk=dog.pk)
+            return redirect("smart_fit_resultado", public_id=dog.public_id)
     else:
         form = SmartFitForm(initial={"weight_unit": "kg", "length_unit": "cm"})
     return render(request, "tienda/smartfit.html", {"form": form})
 
 
-def smart_fit_resultado(request, pk):
-    dog = get_object_or_404(DogProfile, pk=pk)
+def smart_fit_resultado(request, public_id):
+    dog = get_object_or_404(DogProfile, public_id=public_id)
     return render(
         request, "tienda/smartfit_resultado.html", {"dog": dog, "productos": PRODUCTOS}
     )
 
 
-def smart_quote_crear(request, pk):
+def smart_quote_crear(request, public_id):
     # Local import: services depende de PRODUCTOS (definido en este módulo).
     from . import services
 
-    dog = get_object_or_404(DogProfile, pk=pk)
+    dog = get_object_or_404(DogProfile, public_id=public_id)
     if request.method != "POST":
-        return redirect("smart_fit_resultado", pk=dog.pk)
+        return redirect("smart_fit_resultado", public_id=dog.public_id)
     # Solo se lee la clave del producto; cualquier precio enviado se ignora.
     slug = request.POST.get("producto", "")
     try:
@@ -107,13 +107,13 @@ def smart_quote_crear(request, pk):
             {"dog": dog, "productos": PRODUCTOS, "quote_error": "Please choose a product."},
             status=400,
         )
-    return redirect("smart_quote", pk=quote.pk)
+    return redirect("smart_quote", public_id=quote.public_id)
 
 
-def smart_quote(request, pk):
+def smart_quote(request, public_id):
     from . import services
 
-    quote = get_object_or_404(Quote, pk=pk)
+    quote = get_object_or_404(Quote, public_id=public_id)
     return render(
         request,
         "tienda/smartquote.html",
@@ -124,3 +124,41 @@ def smart_quote(request, pk):
             "breakdown": services.build_breakdown(quote),
         },
     )
+
+
+def checkout(request, public_id):
+    from . import services
+
+    quote = get_object_or_404(Quote.objects.select_related("dog"), public_id=public_id)
+    existing = Order.objects.filter(quote=quote).first()
+    if existing:
+        return redirect("order_detail", public_id=existing.public_id)
+    if quote.status == Quote.Status.CANCELLED:
+        return render(request, "tienda/checkout.html", {"cancelled": True}, status=400)
+
+    if request.method == "POST":
+        form = CheckoutForm(request.POST)
+        if form.is_valid():
+            try:
+                order, _ = services.create_order(quote, form.cleaned_data)
+            except services.QuoteNotOrderable:
+                return render(request, "tienda/checkout.html", {"cancelled": True}, status=400)
+            return redirect("order_detail", public_id=order.public_id)
+    else:
+        form = CheckoutForm()
+    return render(
+        request,
+        "tienda/checkout.html",
+        {
+            "form": form,
+            "quote": quote,
+            "dog": quote.dog,
+            "producto": services.get_product(quote.product_slug),
+            "breakdown": services.build_breakdown(quote),
+        },
+    )
+
+
+def order_detail(request, public_id):
+    order = get_object_or_404(Order, public_id=public_id)
+    return render(request, "tienda/order.html", {"order": order, "snap": order.snapshot})

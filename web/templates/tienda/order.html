@@ -1,0 +1,44 @@
+{% extends "tienda/base.html" %}
+{% block title %}Weiner Kingdom | Order {{ order.number }}{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <p class="eyebrow">ORDER RECEIVED</p>
+    <h1>{{ order.number }}</h1>
+</section>
+
+<section class="fit-layout fit-layout-single">
+    <div class="fit-form">
+        <dl class="fit-summary">
+            <dt>Order status</dt><dd>{{ order.get_status_display }}</dd>
+            <dt>Payment</dt><dd>{{ order.get_payment_status_display }} — no payment has been collected</dd>
+            <dt>Production</dt><dd>{{ order.get_production_status_display }}</dd>
+            <dt>Shipping</dt><dd>{{ order.get_shipping_status_display }}</dd>
+        </dl>
+
+        <h2>Summary</h2>
+        <dl class="fit-summary">
+            <dt>Product</dt><dd>{{ snap.product.name }}</dd>
+            <dt>Dog</dt><dd>{{ snap.dog.name }} ({{ snap.dog.breed }})</dd>
+            <dt>Weight</dt><dd>{{ snap.dog.weight_kg }} kg</dd>
+            <dt>Back length</dt><dd>{{ snap.dog.back_length_cm }} cm</dd>
+            <dt>Chest girth</dt><dd>{{ snap.dog.chest_girth_cm }} cm</dd>
+            <dt>Neck girth</dt><dd>{% if snap.dog.neck_girth_cm %}{{ snap.dog.neck_girth_cm }} cm{% else %}Not provided{% endif %}</dd>
+            <dt>{% if order.price_is_provisional %}Estimated total{% else %}Total{% endif %}</dt>
+            <dd><strong>${{ order.total }}</strong></dd>
+        </dl>
+        {% if order.price_is_provisional %}
+        <p class="fit-alert" role="status">Provisional price: Weiner Kingdom will confirm the final price before any payment.</p>
+        {% endif %}
+
+        <h2>Delivery</h2>
+        <dl class="fit-summary">
+            <dt>Name</dt><dd>{{ order.customer_name }}</dd>
+            <dt>Email</dt><dd>{{ order.customer_email }}</dd>
+            <dt>Phone</dt><dd>{{ order.customer_phone }}</dd>
+            <dt>Address</dt><dd>{{ order.address }}, {{ order.city }}, {{ order.country }}</dd>
+        </dl>
+
+        <a class="button" href="{% url 'productos' %}">Back to Products</a>
+    </div>
+</section>
+{% endblock %}

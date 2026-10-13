@@ -95,3 +95,24 @@ class SmartFitForm(forms.Form):
             chest_girth_cm=d["chest_girth_cm"],
             neck_girth_cm=d.get("neck_girth_cm"),
         )
+
+
+class CheckoutForm(forms.Form):
+    customer_name = forms.CharField(label="Full name", max_length=120)
+    customer_email = forms.EmailField(label="Email", max_length=254)
+    customer_phone = forms.CharField(label="Phone", max_length=30)
+    country = forms.CharField(label="Country", max_length=80)
+    city = forms.CharField(label="City", max_length=80)
+    address = forms.CharField(
+        label="Delivery address", max_length=300, widget=forms.Textarea(attrs={"rows": 3})
+    )
+
+    def clean_customer_phone(self):
+        phone = self.cleaned_data["customer_phone"]
+        digits = [c for c in phone if c.isdigit()]
+        allowed = set("+0123456789 ()-.")
+        if len(digits) < 7 or len(digits) > 15 or not set(phone) <= allowed:
+            raise forms.ValidationError(
+                "Enter a valid phone number, e.g. +503 7000 0000."
+            )
+        return phone

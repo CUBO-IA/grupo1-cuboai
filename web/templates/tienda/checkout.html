@@ -1,0 +1,54 @@
+{% extends "tienda/base.html" %}
+{% block title %}Weiner Kingdom | Checkout{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <p class="eyebrow">CHECKOUT</p>
+    <h1>Review your order</h1>
+</section>
+
+{% if cancelled %}
+<section class="fit-layout fit-layout-single">
+    <div class="fit-form">
+        <p class="fit-alert" role="alert">This quote is no longer available.</p>
+        <a class="button" href="{% url 'productos' %}">Back to Products</a>
+    </div>
+</section>
+{% else %}
+<section class="fit-layout">
+    <form class="fit-form" method="post" novalidate>
+        {% csrf_token %}
+        {% if form.errors %}
+        <p class="fit-alert" role="alert">Please review the highlighted fields.</p>
+        {% endif %}
+        <h2>Delivery details</h2>
+        {% for field in form %}
+        <div class="fit-field">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% for e in field.errors %}<p class="fit-error">{{ e }}</p>{% endfor %}
+        </div>
+        {% endfor %}
+        <button class="button" type="submit">Place order</button>
+        <p class="fit-help">Placing the order does not charge you. Payment is not collected on this site yet.</p>
+    </form>
+
+    <aside class="fit-tips">
+        <h2>Order summary</h2>
+        <dl class="fit-summary">
+            <dt>Product</dt><dd>{{ producto.nombre }}</dd>
+            <dt>Dog</dt><dd>{{ dog.name }} ({{ dog.breed }})</dd>
+            <dt>Weight</dt><dd>{{ dog.weight_kg }} kg</dd>
+            <dt>Back length</dt><dd>{{ dog.back_length_cm }} cm</dd>
+            <dt>Chest girth</dt><dd>{{ dog.chest_girth_cm }} cm</dd>
+            <dt>Neck girth</dt><dd>{% if dog.neck_girth_cm %}{{ dog.neck_girth_cm }} cm{% else %}Not provided{% endif %}</dd>
+            <dt>{% if breakdown.is_final %}Total{% else %}Estimated total{% endif %}</dt>
+            <dd><strong>${{ breakdown.total }}</strong></dd>
+        </dl>
+        {% if not breakdown.is_final %}
+        <p class="fit-alert" role="status">Provisional price: size-based adjustments are not applied yet. Weiner Kingdom will confirm the final price before any payment.</p>
+        {% endif %}
+        <a class="button" href="{% url 'smart_quote' quote.public_id %}">Back to quote</a>
+    </aside>
+</section>
+{% endif %}
+{% endblock %}
