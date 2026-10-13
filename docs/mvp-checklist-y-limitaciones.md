@@ -1,6 +1,6 @@
 # Checklist de aceptación del MVP, IA y limitaciones
 
-Estado a la Task 11. "Verificado" significa cubierto por pruebas automatizadas ejecutadas en esta sesión (`manage.py test`: 80 pruebas OK). No hubo una revisión visual completa en navegador.
+Estado a la Task 11. "Verificado" significa cubierto por pruebas automatizadas ejecutadas en esta sesión (`manage.py test`: 82 pruebas OK). Ensayo en navegador documentado en `task-12-ensayo-y-alcance.md`; el aspecto visual no pudo verificarse con capturas.
 
 ## Checklist
 
@@ -19,8 +19,8 @@ Estado a la Task 11. "Verificado" significa cubierto por pruebas automatizadas e
 | 11 | Asistente limitado al catálogo, sin inventar datos | Verificado (flujo determinista) |
 | 12 | Descuento Bitcoin | **No implementado: falta la tasa comercial** |
 | 13 | Pagos reales | **Fuera de alcance** |
-| 14 | Revisión visual y responsive en navegador | **Pendiente de revisión humana** |
-| 15 | Ensayo completo de demo (Task 12) | Pendiente |
+| 14 | Responsive sin desbordes a 375 px | Verificado (geometría); aspecto visual pendiente de revisión humana |
+| 15 | Ensayo completo de demo desde clon limpio | Realizado; ver `task-12-ensayo-y-alcance.md` |
 
 ## Integraciones de IA
 

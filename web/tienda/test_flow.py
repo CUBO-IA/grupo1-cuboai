@@ -126,3 +126,27 @@ class EndToEndTests(TestCase):
         r = fresh.get(reverse("smart_fit_resultado", args=[dog.public_id]))
         self.assertContains(r, "Luna")
         self.assertContains(r, "33.0 cm")
+
+
+class PaidWordingTests(TestCase):
+    def test_paid_order_does_not_say_no_payment_collected(self):
+        from . import services as svc
+        from .test_panel import make_order
+
+        order = make_order()
+        page = self.client.get(reverse("order_detail", args=[order.public_id]))
+        self.assertContains(page, "no payment has been collected")
+        svc.apply_transition(order, "payment_status", "paid", note="BANK-1")
+        page = self.client.get(reverse("order_detail", args=[order.public_id]))
+        self.assertNotContains(page, "no payment has been collected")
+        self.assertContains(page, "recorded by Weiner Kingdom")
+        self.assertNotContains(page, "BANK-1")
+
+
+class DatabaseConcurrencyConfigTests(TestCase):
+    def test_sqlite_writes_wait_instead_of_failing(self):
+        from django.conf import settings
+
+        options = settings.DATABASES["default"]["OPTIONS"]
+        self.assertEqual(options["transaction_mode"], "IMMEDIATE")
+        self.assertGreaterEqual(options["timeout"], 5)

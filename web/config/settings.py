@@ -58,5 +58,8 @@ DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": BASE_DIR / "db.sqlite3",
+        # Las escrituras simultáneas (p. ej. doble clic en checkout) esperan su
+        # turno en vez de fallar con "database is locked".
+        "OPTIONS": {"transaction_mode": "IMMEDIATE", "timeout": 20},
     }
 }

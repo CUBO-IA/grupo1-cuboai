@@ -10,7 +10,7 @@
     <div class="fit-form">
         <dl class="fit-summary">
             <dt>Order status</dt><dd>{{ order.get_status_display }}</dd>
-            <dt>Payment</dt><dd>{{ order.get_payment_status_display }} — no payment has been collected</dd>
+            <dt>Payment</dt><dd>{{ order.get_payment_status_display }}{% if order.payment_status == "unpaid" %} — no payment has been collected{% else %} — recorded by Weiner Kingdom{% endif %}</dd>
             <dt>Production</dt><dd>{{ order.get_production_status_display }}</dd>
             <dt>Shipping</dt><dd>{{ order.get_shipping_status_display }}</dd>
         </dl>
