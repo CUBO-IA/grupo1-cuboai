@@ -41,7 +41,8 @@ class Quote(models.Model):
     )
     # El catálogo vive en tienda.views.PRODUCTOS; se referencia por su clave.
     product_slug = models.CharField(max_length=50)
-    base_price = models.DecimalField(max_digits=10, decimal_places=2)
+    base_price = models.DecimalField(max_digits=10, decimal_places=2)  # precio unitario
+    quantity = models.PositiveSmallIntegerField(default=1)
     # Nulo hasta que exista una regla comercial de precio por talla.
     total_price = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
@@ -104,7 +105,9 @@ class Order(models.Model):
     quote = models.OneToOneField(
         Quote, on_delete=models.PROTECT, related_name="order"
     )
+    # Subtotal de productos = precio unitario × cantidad (sin envío).
     total = models.DecimalField(max_digits=10, decimal_places=2)
+    quantity = models.PositiveSmallIntegerField(default=1)
     # True mientras no exista regla de precio por talla aprobada.
     price_is_provisional = models.BooleanField(default=True)
 

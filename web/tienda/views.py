@@ -75,6 +75,15 @@ def detalle(request, producto):
 SESSION_DOGS = "dogs"
 
 
+def _uuid_or_none(raw):
+    import uuid
+
+    try:
+        return uuid.UUID(str(raw))
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
 def _remember_dog(request, dog):
     """Recuerda hasta 5 perfiles en la sesión para reutilizarlos."""
     ids = [i for i in request.session.get(SESSION_DOGS, []) if i != str(dog.public_id)]
@@ -126,11 +135,16 @@ def smart_fit_editar(request, public_id):
     dog = get_object_or_404(DogProfile, public_id=public_id)
     producto = _requested_product(request)
     require_neck = bool(producto) and services.measurement_requirements(producto)["neck_girth"]
+    back_quote = Quote.objects.filter(
+        public_id=_uuid_or_none(request.GET.get("quote")), dog=dog
+    ).first()
     if request.method == "POST":
         form = SmartFitForm(request.POST, require_neck=require_neck)
         if form.is_valid():
             form.save(instance=dog)
             _remember_dog(request, dog)
+            if back_quote:
+                return redirect("smart_quote", public_id=back_quote.public_id)
             url = reverse("smart_fit_resultado", args=[dog.public_id])
             return redirect(url + (f"?producto={producto}" if producto else ""))
     else:
@@ -162,6 +176,7 @@ def smart_fit_resultado(request, public_id):
             "productos": PRODUCTOS,
             "preselect": _requested_product(request),
             "size": size,
+            "max_quantity": services.MAX_QUANTITY,
         },
     )
 
@@ -173,38 +188,66 @@ def smart_quote_crear(request, public_id):
     dog = get_object_or_404(DogProfile, public_id=public_id)
     if request.method != "POST":
         return redirect("smart_fit_resultado", public_id=dog.public_id)
-    # Solo se lee la clave del producto; cualquier precio enviado se ignora.
+    # Solo se leen la clave del producto y la cantidad; cualquier precio se ignora.
     slug = request.POST.get("producto", "")
     if slug in PRODUCTOS and services.missing_measurements(dog, slug):
         # La prenda exige una medida que falta: se pide antes de cotizar.
         url = reverse("smart_fit_editar", args=[dog.public_id])
         return redirect(f"{url}?producto={slug}")
-    try:
-        quote = services.create_quote(dog, slug)
-    except services.UnknownProduct:
+
+    def _error(message):
         return render(
             request,
             "tienda/smartfit_resultado.html",
-            {"dog": dog, "productos": PRODUCTOS, "quote_error": "Please choose a product."},
+            {"dog": dog, "productos": PRODUCTOS, "quote_error": message,
+             "max_quantity": services.MAX_QUANTITY, "preselect": slug if slug in PRODUCTOS else ""},
             status=400,
         )
+
+    try:
+        quantity = services.normalize_quantity(request.POST.get("quantity", "1"))
+    except services.QuantityError as exc:
+        return _error(str(exc))
+    try:
+        quote = services.create_quote(dog, slug, quantity)
+    except services.UnknownProduct:
+        return _error("Please choose a product.")
     return redirect("smart_quote", public_id=quote.public_id)
 
 
-def smart_quote(request, public_id):
+def _quote_context(quote, payment_method="unspecified"):
     from . import services
 
-    quote = get_object_or_404(Quote, public_id=public_id)
-    return render(
-        request,
-        "tienda/smartquote.html",
-        {
-            "quote": quote,
-            "dog": quote.dog,
-            "producto": services.get_product(quote.product_slug),
-            "breakdown": services.build_breakdown(quote),
-        },
-    )
+    producto = services.get_product(quote.product_slug)
+    return {
+        "quote": quote,
+        "dog": quote.dog,
+        "producto": producto,
+        "breakdown": services.build_breakdown(quote, payment_method),
+        "size": services.classify_size(quote.dog),
+        "max_quantity": services.MAX_QUANTITY,
+        "quantities": range(1, services.MAX_QUANTITY + 1),
+    }
+
+
+def smart_quote(request, public_id):
+    quote = get_object_or_404(Quote.objects.select_related("dog"), public_id=public_id)
+    return render(request, "tienda/smartquote.html", _quote_context(quote))
+
+
+def smart_quote_cantidad(request, public_id):
+    from . import services
+
+    quote = get_object_or_404(Quote.objects.select_related("dog"), public_id=public_id)
+    if request.method != "POST":
+        return redirect("smart_quote", public_id=quote.public_id)
+    try:
+        services.set_quote_quantity(quote, request.POST.get("quantity", ""))
+    except services.QuantityError as exc:
+        context = _quote_context(quote)
+        context["quantity_error"] = str(exc)
+        return render(request, "tienda/smartquote.html", context, status=400)
+    return redirect("smart_quote", public_id=quote.public_id)
 
 
 def checkout(request, public_id):
@@ -220,6 +263,17 @@ def checkout(request, public_id):
     if request.method == "POST":
         form = CheckoutForm(request.POST)
         if form.is_valid():
+            if request.POST.get("step") == "review":
+                # Paso de revisión: se muestran todos los importes antes de confirmar.
+                method = form.cleaned_data["payment_method"]
+                context = _quote_context(quote, method)
+                context.update(
+                    {
+                        "data": form.cleaned_data,
+                        "payment_label": dict(form.fields["payment_method"].choices)[method],
+                    }
+                )
+                return render(request, "tienda/checkout_review.html", context)
             try:
                 order, _ = services.create_order(quote, form.cleaned_data)
             except services.QuoteNotOrderable:
@@ -227,17 +281,9 @@ def checkout(request, public_id):
             return redirect("order_detail", public_id=order.public_id)
     else:
         form = CheckoutForm()
-    return render(
-        request,
-        "tienda/checkout.html",
-        {
-            "form": form,
-            "quote": quote,
-            "dog": quote.dog,
-            "producto": services.get_product(quote.product_slug),
-            "breakdown": services.build_breakdown(quote),
-        },
-    )
+    context = _quote_context(quote)
+    context["form"] = form
+    return render(request, "tienda/checkout.html", context)
 
 
 def order_detail(request, public_id):

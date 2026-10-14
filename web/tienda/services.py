@@ -13,6 +13,11 @@ from .models import Quote
 from .views import PRODUCTOS
 
 
+# Precio final máximo por producto indicado en la guía. Es solo un tope
+# técnico: no existe aún una fórmula de ajuste por talla.
+UNIT_PRICE_CAP = Decimal("850.00")
+
+
 class UnknownProduct(Exception):
     pass
 
@@ -35,14 +40,33 @@ def get_base_price(slug):
         price = Decimal(str(raw).strip().lstrip("$").replace(",", ""))
     except InvalidOperation:
         raise InvalidCatalogPrice(raw) from None
-    if price <= 0:
+    if price <= 0 or price > UNIT_PRICE_CAP:
         raise InvalidCatalogPrice(raw)
     return price.quantize(Decimal("0.01"))
 
 
-def create_quote(dog, slug):
+MAX_QUANTITY = 10  # supuesto técnico, pendiente de aprobación del negocio
+
+
+class QuantityError(Exception):
+    pass
+
+
+def normalize_quantity(raw):
+    """Cantidad entera entre 1 y MAX_QUANTITY; lanza QuantityError si no."""
+    try:
+        qty = int(str(raw).strip())
+    except (TypeError, ValueError):
+        raise QuantityError("Enter a whole number of units.") from None
+    if qty < 1 or qty > MAX_QUANTITY:
+        raise QuantityError(f"Quantity must be between 1 and {MAX_QUANTITY}.")
+    return qty
+
+
+def create_quote(dog, slug, quantity=1):
     """Crea (o reutiliza) la cotización provisional borrador de un perro/producto."""
     base_price = get_base_price(slug)
+    quantity = normalize_quantity(quantity)
     existing = (
         Quote.objects.filter(
             dog=dog,
@@ -55,32 +79,88 @@ def create_quote(dog, slug):
     )
     if existing:
         # Si el catálogo cambió, el precio del borrador se refresca.
+        changed = []
         if existing.base_price != base_price:
             existing.base_price = base_price
-            existing.save(update_fields=["base_price"])
+            changed.append("base_price")
+        if existing.quantity != quantity:
+            existing.quantity = quantity
+            changed.append("quantity")
+        if changed:
+            existing.save(update_fields=changed)
         return existing
-    return Quote.objects.create(dog=dog, product_slug=slug, base_price=base_price)
+    return Quote.objects.create(
+        dog=dog, product_slug=slug, base_price=base_price, quantity=quantity
+    )
 
 
-def build_breakdown(quote):
-    """Desglose legible; el total mostrado es provisional mientras no haya regla."""
+def set_quote_quantity(quote, quantity):
+    """Corrige la cantidad de una cotización borrador (solo sin pedido)."""
+    quantity = normalize_quantity(quantity)
+    if quote.status != Quote.Status.DRAFT or hasattr(quote, "order"):
+        raise QuantityError("This quote can no longer be changed.")
+    quote.quantity = quantity
+    quote.save(update_fields=["quantity"])
+    return quote
+
+
+def compute_totals(quote, payment_method="unspecified"):
+    """Importes de una cotización, siempre calculados en el servidor.
+
+    - Precio unitario: catálogo (o total_price si una regla futura lo fija).
+    - Subtotal de productos = unitario × cantidad.
+    - Descuento Bitcoin: 15 % del subtotal de productos; el envío no entra.
+    - Envío: sin tarifa definida, se muestra como pendiente.
+    """
+    unit_base = get_base_price(quote.product_slug)
+    is_final = quote.pricing == Quote.Pricing.FINAL and quote.total_price is not None
+    unit = quote.total_price if is_final else unit_base
+    subtotal = _money(unit * quote.quantity)
+    rate, discount = compute_discount(subtotal, payment_method)
+    return {
+        "unit_base_price": unit_base,
+        "unit_price": unit,
+        "quantity": quote.quantity,
+        "subtotal": subtotal,
+        "is_final": is_final,
+        "discount_rate": rate,
+        "discount_amount": discount,
+        "shipping": None,  # por confirmar
+        "amount_due": subtotal,  # el descuento aplica al verificar el pago
+        "total_if_discount": _money(subtotal - discount),
+    }
+
+
+def build_breakdown(quote, payment_method="unspecified"):
+    """Desglose legible; provisional mientras no haya regla de ajuste por talla."""
+    t = compute_totals(quote, payment_method)
+    name = get_product(quote.product_slug)["nombre"]
     lines = [
-        {
-            "label": f"{get_product(quote.product_slug)['nombre']} — base price",
-            "amount": quote.base_price,
-            "note": "",
-        },
+        {"label": f"{name} — unit base price", "amount": t["unit_price"], "note": ""},
+        {"label": "Quantity", "amount": None, "note": str(t["quantity"]), "plain": True},
         {
             "label": "Size adjustment",
             "amount": None,
             "note": "Not calculated yet. The sizing rule is pending business approval.",
         },
+        {"label": "Products subtotal", "amount": t["subtotal"], "note": ""},
     ]
-    is_final = quote.pricing == Quote.Pricing.FINAL and quote.total_price is not None
+    if t["discount_rate"]:
+        lines.append(
+            {
+                "label": "Bitcoin discount (15%)",
+                "amount": -t["discount_amount"],
+                "note": "Applied once your payment is verified.",
+            }
+        )
+    lines.append(
+        {"label": "Shipping", "amount": None, "note": "To be confirmed."}
+    )
     return {
         "lines": lines,
-        "total": quote.total_price if is_final else quote.base_price,
-        "is_final": is_final,
+        "total": t["subtotal"],
+        "is_final": t["is_final"],
+        "totals": t,
     }
 
 
@@ -204,9 +284,10 @@ def cost_summary(order):
             (order.snapshot or {}).get("product", {}).get("slug", "")
         )
         if frozen:
-            cost, source = Decimal(frozen["total_cost"]), "product_estimate"
+            cost = Decimal(frozen["total_cost"]) * order.quantity
+            source = "product_estimate"
         elif live:
-            cost, source = live["total_cost"], "product_estimate"
+            cost, source = live["total_cost"] * order.quantity, "product_estimate"
         else:
             cost, source = TARGET_MANUFACTURING_COST, "target"
     revenue = order.amount_due
@@ -472,12 +553,13 @@ def create_order(quote, customer):
         if quote.status == Quote.Status.CANCELLED:
             raise QuoteNotOrderable("cancelled")
 
-        base_price = get_base_price(quote.product_slug)
-        is_final = quote.pricing == Quote.Pricing.FINAL and quote.total_price is not None
-        total = quote.total_price if is_final else base_price
+        totals = compute_totals(quote, payment_method)
+        base_price = totals["unit_base_price"]
+        is_final = totals["is_final"]
+        total = totals["subtotal"]
         product = get_product(quote.product_slug)
         dog = quote.dog
-        rate, discount_amount = compute_discount(total, payment_method)
+        rate, discount_amount = totals["discount_rate"], totals["discount_amount"]
         cost = product_cost_summary(quote.product_slug)
         size = classify_size(dog)
         snapshot = {
@@ -486,6 +568,10 @@ def create_order(quote, customer):
             "base_price": _dec(base_price),
             "total": _dec(total),
             "pricing": "final" if is_final else "provisional",
+            "quantity": quote.quantity,
+            "unit_price": _dec(totals["unit_price"]),
+            "subtotal": _dec(total),
+            "shipping": {"status": "pending", "amount": None},
             "dog": {
                 "name": dog.name,
                 "breed": dog.breed,
@@ -531,6 +617,7 @@ def create_order(quote, customer):
                 order = Order.objects.create(
                     quote=quote,
                     total=total,
+                    quantity=quote.quantity,
                     price_is_provisional=not is_final,
                     snapshot=snapshot,
                     payment_method=payment_method,

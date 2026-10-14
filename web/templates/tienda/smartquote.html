@@ -1,4 +1,5 @@
 {% extends "tienda/base.html" %}
+{% load static %}
 {% block title %}Weiner Kingdom | Your quote{% endblock %}
 {% block content %}
 <section class="page-heading">
@@ -6,7 +7,7 @@
     <h1>{{ producto.nombre }} for {{ dog.display_name }}</h1>
 </section>
 
-<section class="fit-layout fit-layout-single">
+<section class="fit-layout">
     <div class="fit-form">
         {% if breakdown.is_final %}
         <p class="fit-help"><strong>Final quote</strong></p>
@@ -14,22 +15,66 @@
         <p class="fit-alert" role="status">Provisional quote — the final price is not confirmed yet. Our team reviews every quote manually before confirming it.</p>
         {% endif %}
 
+        <div class="quote-product">
+            <img src="{% static producto.imagen %}" alt="{{ producto.nombre }}">
+            <div>
+                <h2>{{ producto.nombre }}</h2>
+                <p class="fit-help">{{ producto.tagline }}</p>
+            </div>
+        </div>
+
         <dl class="fit-summary">
             {% for line in breakdown.lines %}
             <dt>{{ line.label }}</dt>
             <dd>
-                {% if line.amount is not None %}${{ line.amount }}{% else %}—{% endif %}
-                {% if line.note %}<span class="fit-help">{{ line.note }}</span>{% endif %}
+                {% if line.amount is not None %}{% if line.amount < 0 %}-${{ line.amount|cut:"-" }}{% else %}${{ line.amount }}{% endif %}
+                {% elif line.plain %}{{ line.note }}
+                {% else %}—{% endif %}
+                {% if line.note and not line.plain %}<span class="fit-help">{{ line.note }}</span>{% endif %}
             </dd>
             {% endfor %}
-            <dt>{% if breakdown.is_final %}Total{% else %}Estimated total (base price){% endif %}</dt>
+            <dt>{% if breakdown.is_final %}Total (before shipping){% else %}Estimated total (before shipping){% endif %}</dt>
             <dd><strong>${{ breakdown.total }}</strong></dd>
         </dl>
 
-        <p class="fit-help">Prices are calculated by Weiner Kingdom on our server. Size-based adjustments will be added once approved.</p>
+        <form method="post" action="{% url 'smart_quote_cantidad' quote.public_id %}" class="fit-field">
+            {% csrf_token %}
+            <label for="quantity">Quantity</label>
+            <div class="fit-row">
+                <select id="quantity" name="quantity">
+                    {% for n in quantities %}<option value="{{ n }}" {% if n == quote.quantity %}selected{% endif %}>{{ n }}</option>{% endfor %}
+                </select>
+                <button class="button" type="submit">Update</button>
+            </div>
+            {% if quantity_error %}<p class="fit-error">{{ quantity_error }}</p>{% endif %}
+        </form>
+
+        <p class="fit-help">Prices are calculated by Weiner Kingdom on our server. Size-based adjustments will be added once approved. Shipping is confirmed separately and is not included.</p>
         <a class="button" href="{% url 'checkout' quote.public_id %}">Continue to checkout</a>
-        <a class="button" href="{% url 'smart_fit_resultado' dog.public_id %}">Back to measurements</a>
-        <a class="button" href="{% url 'productos' %}">Back to Products</a>
     </div>
+
+    <aside class="fit-tips">
+        <h2>Measurements used</h2>
+        <dl class="fit-summary">
+            <dt>Dog</dt><dd>{{ dog.display_name }} ({{ dog.breed }})</dd>
+            <dt>Weight</dt><dd>{{ dog.weight_kg }} kg</dd>
+            <dt>Back length</dt><dd>{{ dog.back_length_cm }} cm</dd>
+            <dt>Chest girth</dt><dd>{{ dog.chest_girth_cm }} cm</dd>
+            <dt>Neck girth</dt><dd>{% if dog.neck_girth_cm %}{{ dog.neck_girth_cm }} cm{% else %}Not provided{% endif %}</dd>
+            <dt>Reference size</dt>
+            <dd>
+                {% if size.status == "matched" %}{{ size.candidates.0.text }}
+                {% elif size.status == "ambiguous" %}Between sizes — manual review
+                {% else %}Outside table — manual review{% endif %}
+                <span class="fit-help">Not validated; it does not change the price.</span>
+            </dd>
+        </dl>
+        <p>
+            <a class="button" href="{% url 'smart_fit_editar' dog.public_id %}?producto={{ quote.product_slug }}&amp;quote={{ quote.public_id }}">Edit measurements</a>
+        </p>
+        <p>
+            <a class="button" href="{% url 'smart_fit_resultado' dog.public_id %}">Change product</a>
+        </p>
+    </aside>
 </section>
 {% endblock %}

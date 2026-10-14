@@ -51,6 +51,10 @@
                 <option value="{{ key }}" {% if key == preselect %}selected{% endif %}>{{ item.nombre }}</option>
                 {% endfor %}
             </select>
+            <label for="quantity">Quantity</label>
+            <select id="quantity" name="quantity">
+                {% for n in "1234567890" %}{% if forloop.counter <= max_quantity %}<option value="{{ forloop.counter }}">{{ forloop.counter }}</option>{% endif %}{% endfor %}
+            </select>
             {% if quote_error %}<p class="fit-error">{{ quote_error }}</p>{% endif %}
             <button class="button" type="submit">Get quote</button>
         </form>

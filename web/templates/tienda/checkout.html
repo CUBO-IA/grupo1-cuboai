@@ -1,9 +1,10 @@
 {% extends "tienda/base.html" %}
+{% load static %}
 {% block title %}Weiner Kingdom | Checkout{% endblock %}
 {% block content %}
 <section class="page-heading">
     <p class="eyebrow">CHECKOUT</p>
-    <h1>Review your order</h1>
+    <h1>Delivery and payment</h1>
 </section>
 
 {% if cancelled %}
@@ -17,6 +18,7 @@
 <section class="fit-layout">
     <form class="fit-form" method="post" novalidate>
         {% csrf_token %}
+        <input type="hidden" name="step" value="review">
         {% if form.errors %}
         <p class="fit-alert" role="alert">Please review the highlighted fields.</p>
         {% endif %}
@@ -28,22 +30,27 @@
             {% for e in field.errors %}<p class="fit-error">{{ e }}</p>{% endfor %}
         </div>
         {% endfor %}
-        <button class="button" type="submit">Place order</button>
-        <p class="fit-help">Placing the order does not charge you and does not confirm payment. Payment is not collected on this site; production starts only after our team verifies your payment.</p>
+        <button class="button" type="submit">Review order</button>
+        <p class="fit-help">You will see the full breakdown before confirming. Placing the order does not charge you and does not confirm payment; production starts only after our team verifies your payment.</p>
         <p class="fit-help">Bitcoin: 15% discount on the products subtotal (shipping excluded). It is shown separately and becomes final only once your payment is verified.</p>
     </form>
 
     <aside class="fit-tips">
         <h2>Order summary</h2>
+        <div class="quote-product">
+            <img src="{% static producto.imagen %}" alt="{{ producto.nombre }}">
+            <div><strong>{{ producto.nombre }}</strong><br><span class="fit-help">Quantity: {{ quote.quantity }}</span></div>
+        </div>
         <dl class="fit-summary">
-            <dt>Product</dt><dd>{{ producto.nombre }}</dd>
             <dt>Dog</dt><dd>{{ dog.display_name }} ({{ dog.breed }})</dd>
             <dt>Weight</dt><dd>{{ dog.weight_kg }} kg</dd>
             <dt>Back length</dt><dd>{{ dog.back_length_cm }} cm</dd>
             <dt>Chest girth</dt><dd>{{ dog.chest_girth_cm }} cm</dd>
             <dt>Neck girth</dt><dd>{% if dog.neck_girth_cm %}{{ dog.neck_girth_cm }} cm{% else %}Not provided{% endif %}</dd>
-            <dt>{% if breakdown.is_final %}Total{% else %}Estimated total{% endif %}</dt>
+            <dt>Unit price</dt><dd>${{ breakdown.totals.unit_price }}</dd>
+            <dt>{% if breakdown.is_final %}Products subtotal{% else %}Estimated subtotal{% endif %}</dt>
             <dd><strong>${{ breakdown.total }}</strong></dd>
+            <dt>Shipping</dt><dd>To be confirmed</dd>
         </dl>
         {% if not breakdown.is_final %}
         <p class="fit-alert" role="status">Provisional price: size-based adjustments are not applied yet. Our team will review your quote manually and confirm the final price before any payment.</p>

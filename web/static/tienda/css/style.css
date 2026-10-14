@@ -251,3 +251,8 @@ footer { text-align: center; padding: 30px; color: #756960; }
 .panel-action { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; align-items: center; }
 .panel-action .button { margin-top: 0; }
 .panel-events { padding-left: 18px; line-height: 1.8; font-size: .9rem; }
+
+/* Quote and checkout summary */
+.quote-product { display: flex; gap: 14px; align-items: center; margin-bottom: 18px; }
+.quote-product img { width: 88px; height: 88px; object-fit: cover; border-radius: 10px; background: #f2dfcf; }
+.quote-product h2 { margin: 0 0 4px; }

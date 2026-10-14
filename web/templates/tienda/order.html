@@ -29,6 +29,8 @@
             <dt>Back length</dt><dd>{{ snap.dog.back_length_cm }} cm</dd>
             <dt>Chest girth</dt><dd>{{ snap.dog.chest_girth_cm }} cm</dd>
             <dt>Neck girth</dt><dd>{% if snap.dog.neck_girth_cm %}{{ snap.dog.neck_girth_cm }} cm{% else %}Not provided{% endif %}</dd>
+            <dt>Quantity</dt><dd>{{ order.quantity }}</dd>
+            <dt>Unit price</dt><dd>${{ snap.unit_price }}</dd>
             <dt>Products subtotal{% if order.price_is_provisional %} (provisional){% endif %}</dt>
             <dd>${{ order.total }}</dd>
             <dt>Shipping cost</dt><dd>Not calculated yet</dd>

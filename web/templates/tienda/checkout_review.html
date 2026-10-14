@@ -1,0 +1,75 @@
+{% extends "tienda/base.html" %}
+{% load static %}
+{% block title %}Weiner Kingdom | Review your order{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <p class="eyebrow">CHECKOUT</p>
+    <h1>Review your order</h1>
+</section>
+
+<section class="fit-layout">
+    <div class="fit-form">
+        <div class="quote-product">
+            <img src="{% static producto.imagen %}" alt="{{ producto.nombre }}">
+            <div><strong>{{ producto.nombre }}</strong><br><span class="fit-help">Quantity: {{ quote.quantity }}</span></div>
+        </div>
+
+        <h2>Amounts</h2>
+        <dl class="fit-summary">
+            <dt>Unit price</dt><dd>${{ breakdown.totals.unit_price }}</dd>
+            <dt>Quantity</dt><dd>{{ breakdown.totals.quantity }}</dd>
+            <dt>Size adjustment</dt><dd>Not calculated yet <span class="fit-help">The sizing rule is pending business approval.</span></dd>
+            <dt>Products subtotal{% if not breakdown.is_final %} (provisional){% endif %}</dt><dd>${{ breakdown.totals.subtotal }}</dd>
+            {% if breakdown.totals.discount_rate %}
+            <dt>Bitcoin discount (15%)</dt>
+            <dd>-${{ breakdown.totals.discount_amount }} <span class="fit-help">Not applied yet: it becomes final once your payment is verified.</span></dd>
+            {% endif %}
+            <dt>Shipping</dt><dd>To be confirmed</dd>
+            <dt>Amount due now</dt><dd><strong>${{ breakdown.totals.amount_due }}</strong> <span class="fit-help">before shipping</span></dd>
+            {% if breakdown.totals.discount_rate %}
+            <dt>If Bitcoin payment is verified</dt><dd>${{ breakdown.totals.total_if_discount }} <span class="fit-help">before shipping</span></dd>
+            {% endif %}
+            <dt>Payment method</dt><dd>{{ payment_label }}</dd>
+        </dl>
+        {% if not breakdown.is_final %}
+        <p class="fit-alert" role="status">Provisional price. Our team will review your quote manually and confirm the final price before any payment.</p>
+        {% endif %}
+
+        <h2>Delivery</h2>
+        <dl class="fit-summary">
+            <dt>Name</dt><dd>{{ data.customer_name }}</dd>
+            <dt>Email</dt><dd>{{ data.customer_email }}</dd>
+            <dt>Phone</dt><dd>{{ data.customer_phone }}</dd>
+            <dt>Address</dt><dd>{{ data.address }}, {{ data.city }}, {{ data.country }}</dd>
+        </dl>
+
+        <form method="post" action="{% url 'checkout' quote.public_id %}">
+            {% csrf_token %}
+            <input type="hidden" name="step" value="confirm">
+            <input type="hidden" name="customer_name" value="{{ data.customer_name }}">
+            <input type="hidden" name="customer_email" value="{{ data.customer_email }}">
+            <input type="hidden" name="customer_phone" value="{{ data.customer_phone }}">
+            <input type="hidden" name="country" value="{{ data.country }}">
+            <input type="hidden" name="city" value="{{ data.city }}">
+            <input type="hidden" name="address" value="{{ data.address }}">
+            <input type="hidden" name="payment_method" value="{{ data.payment_method }}">
+            <button class="button" type="submit">Confirm order</button>
+            <a class="button" href="{% url 'checkout' quote.public_id %}">Edit details</a>
+        </form>
+        <p class="fit-help">Confirming creates your order. It does not charge you and does not confirm payment.</p>
+    </div>
+
+    <aside class="fit-tips">
+        <h2>Measurements confirmed</h2>
+        <dl class="fit-summary">
+            <dt>Dog</dt><dd>{{ dog.display_name }} ({{ dog.breed }})</dd>
+            <dt>Weight</dt><dd>{{ dog.weight_kg }} kg</dd>
+            <dt>Back length</dt><dd>{{ dog.back_length_cm }} cm</dd>
+            <dt>Chest girth</dt><dd>{{ dog.chest_girth_cm }} cm</dd>
+            <dt>Neck girth</dt><dd>{% if dog.neck_girth_cm %}{{ dog.neck_girth_cm }} cm{% else %}Not provided{% endif %}</dd>
+        </dl>
+        <p><a class="button" href="{% url 'smart_fit_editar' dog.public_id %}?producto={{ quote.product_slug }}&amp;quote={{ quote.public_id }}">Edit measurements</a></p>
+        <p><a class="button" href="{% url 'smart_quote' quote.public_id %}">Change quantity</a></p>
+    </aside>
+</section>
+{% endblock %}

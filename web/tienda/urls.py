@@ -13,6 +13,7 @@ urlpatterns = [
     path("smart-fit/<uuid:public_id>/editar/", views.smart_fit_editar, name="smart_fit_editar"),
     path("smart-fit/<uuid:public_id>/cotizar/", views.smart_quote_crear, name="smart_quote_crear"),
     path("quote/<uuid:public_id>/", views.smart_quote, name="smart_quote"),
+    path("quote/<uuid:public_id>/cantidad/", views.smart_quote_cantidad, name="smart_quote_cantidad"),
     path("quote/<uuid:public_id>/checkout/", views.checkout, name="checkout"),
     path("order/<uuid:public_id>/", views.order_detail, name="order_detail"),
     path(

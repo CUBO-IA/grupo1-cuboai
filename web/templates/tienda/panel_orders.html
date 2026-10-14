@@ -40,7 +40,7 @@
             <tr>
                 <td><a href="{% url 'panel_order' o.public_id %}">{{ o.number }}</a></td>
                 <td>{{ o.customer_name }}</td>
-                <td>{{ o.snapshot.product.name }}</td>
+                <td>{{ o.snapshot.product.name }}{% if o.quantity > 1 %} × {{ o.quantity }}{% endif %}</td>
                 <td>${{ o.total }}{% if o.price_is_provisional %} (prov.){% endif %}</td>
                 <td>{{ o.get_status_display }}</td>
                 <td>{{ o.get_payment_status_display }}</td>
