@@ -18,6 +18,18 @@ CUSTOMER = {
 }
 
 
+
+class BtcTestCase(TestCase):
+    """TestCase base: el descuento Bitcoin es opt-in por producto (pendiente de
+    confirmar por el negocio); estas pruebas lo habilitan explícitamente."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from .models import ProductPaymentRule
+
+        ProductPaymentRule.objects.update(bitcoin_discount_eligible=True)
+
+
 def make_dog(**kw):
     values = dict(
         name="Rex", breed="Dachshund", weight_kg=Decimal("7.50"),
@@ -31,11 +43,11 @@ def make_quote(slug="wedding-dog", quantity=1, **kw):
     return services.create_quote(make_dog(**kw), slug, quantity)
 
 
-class QuantityTests(TestCase):
+class QuantityTests(BtcTestCase):
     def test_default_and_explicit_quantity(self):
         dog = make_dog()
-        self.assertEqual(services.create_quote(dog, "dog-sweater").quantity, 1)
-        q = services.create_quote(dog, "dog-sweater", 3)
+        self.assertEqual(services.create_quote(dog, "cable-knit-jumper").quantity, 1)
+        q = services.create_quote(dog, "cable-knit-jumper", 3)
         self.assertEqual(q.quantity, 3)
         self.assertEqual(Quote.objects.count(), 1)  # el borrador se reutiliza
 
@@ -43,7 +55,7 @@ class QuantityTests(TestCase):
         dog = make_dog()
         for bad in (0, -1, 11, 100, "abc", "", None, "1.5"):
             with self.assertRaises(services.QuantityError, msg=repr(bad)):
-                services.create_quote(dog, "dog-sweater", bad)
+                services.create_quote(dog, "cable-knit-jumper", bad)
         self.assertEqual(Quote.objects.count(), 0)
 
     def test_totals_use_quantity(self):
@@ -55,12 +67,12 @@ class QuantityTests(TestCase):
         self.assertEqual(t["amount_due"], Decimal("900.00"))
 
     def test_bitcoin_discount_on_subtotal_not_shipping(self):
-        q = make_quote("dog-sweater", 4)
+        q = make_quote("cable-knit-jumper", 4)
         t = services.compute_totals(q, "bitcoin")
-        self.assertEqual(t["subtotal"], Decimal("500.00"))
-        self.assertEqual(t["discount_amount"], Decimal("75.00"))
-        self.assertEqual(t["total_if_discount"], Decimal("425.00"))
-        self.assertEqual(t["amount_due"], Decimal("500.00"))  # aún no aplicado
+        self.assertEqual(t["subtotal"], Decimal("600.00"))
+        self.assertEqual(t["discount_amount"], Decimal("90.00"))
+        self.assertEqual(t["total_if_discount"], Decimal("510.00"))
+        self.assertEqual(t["amount_due"], Decimal("600.00"))  # aún no aplicado
         self.assertIsNone(t["shipping"])
 
     def test_unit_price_cap_guard(self):
@@ -96,26 +108,26 @@ class QuoteViewTests(TestCase):
         for bad in ("0", "11", "x", ""):
             r = self.client.post(
                 reverse("smart_quote_crear", args=[dog.public_id]),
-                {"producto": "dog-sweater", "quantity": bad},
+                {"producto": "cable-knit-jumper", "quantity": bad},
             )
             self.assertEqual(r.status_code, 400, bad)
         self.assertEqual(Quote.objects.count(), 0)
 
     def test_update_quantity(self):
-        quote = make_quote("dog-sweater")
+        quote = make_quote("cable-knit-jumper")
         url = reverse("smart_quote_cantidad", args=[quote.public_id])
         r = self.client.post(url, {"quantity": "5"})
         self.assertRedirects(r, reverse("smart_quote", args=[quote.public_id]))
         quote.refresh_from_db()
         self.assertEqual(quote.quantity, 5)
-        self.assertContains(self.client.get(r.url), "$625.00")
+        self.assertContains(self.client.get(r.url), "$750.00")
         r = self.client.post(url, {"quantity": "99"})
         self.assertEqual(r.status_code, 400)
         quote.refresh_from_db()
         self.assertEqual(quote.quantity, 5)
 
     def test_quantity_locked_after_order(self):
-        quote = make_quote("dog-sweater", 2)
+        quote = make_quote("cable-knit-jumper", 2)
         services.create_order(quote, CUSTOMER)
         r = self.client.post(
             reverse("smart_quote_cantidad", args=[quote.public_id]), {"quantity": "5"}
@@ -125,11 +137,11 @@ class QuoteViewTests(TestCase):
         self.assertEqual(quote.quantity, 2)
 
     def test_edit_measurements_returns_to_quote(self):
-        quote = make_quote("dog-sweater")
+        quote = make_quote("cable-knit-jumper")
         dog = quote.dog
         url = (
             reverse("smart_fit_editar", args=[dog.public_id])
-            + f"?producto=dog-sweater&quote={quote.public_id}"
+            + f"?producto=cable-knit-jumper&quote={quote.public_id}"
         )
         data = {"name": "Rex", "breed": "Dachshund", "weight": "7.5", "weight_unit": "kg",
                 "length_unit": "cm", "back_length": "38", "chest_girth": "44", "neck_girth": ""}
@@ -139,7 +151,7 @@ class QuoteViewTests(TestCase):
         self.assertEqual(dog.back_length_cm, Decimal("38.0"))
 
     def test_quote_param_of_other_dog_is_ignored(self):
-        quote = make_quote("dog-sweater")
+        quote = make_quote("cable-knit-jumper")
         other = make_dog()
         url = (
             reverse("smart_fit_editar", args=[other.public_id])
@@ -161,13 +173,13 @@ class QuoteViewTests(TestCase):
             self.assertEqual(r.status_code, 404, name)
 
     def test_csrf_on_quantity(self):
-        quote = make_quote("dog-sweater")
+        quote = make_quote("cable-knit-jumper")
         c = Client(enforce_csrf_checks=True)
         r = c.post(reverse("smart_quote_cantidad", args=[quote.public_id]), {"quantity": "3"})
         self.assertEqual(r.status_code, 403)
 
 
-class ReviewStepTests(TestCase):
+class ReviewStepTests(BtcTestCase):
     def setUp(self):
         self.quote = make_quote("wedding-dog", 2)
         self.url = reverse("checkout", args=[self.quote.public_id])
@@ -260,15 +272,15 @@ class ReviewStepTests(TestCase):
 
 class CostWithQuantityTests(TestCase):
     def test_cost_scales_with_quantity_and_stays_private(self):
-        quote = make_quote("dog-sweater", 3)
+        quote = make_quote("cable-knit-jumper", 3)
         order, _ = services.create_order(quote, CUSTOMER)
         s = services.cost_summary(order)
-        self.assertEqual(s["cost"], Decimal("249.00"))  # 3 × 83
-        self.assertEqual(s["revenue"], Decimal("375.00"))
-        self.assertEqual(s["margin"], Decimal("126.00"))  # 3 × 42
+        self.assertEqual(s["cost"], Decimal("105.00"))  # 3 × 35.00 (materiales)
+        self.assertEqual(s["revenue"], Decimal("450.00"))
+        self.assertEqual(s["margin"], Decimal("345.00"))
         page = self.client.get(reverse("order_detail", args=[order.public_id]))
-        self.assertNotContains(page, "249")
-        self.assertNotContains(page, "126.00")
+        self.assertNotContains(page, "105.00")
+        self.assertNotContains(page, "345.00")
         staff = User.objects.create_user("s", password="x", is_staff=True)
         self.client.force_login(staff)
         panel = self.client.get(reverse("panel_order", args=[order.public_id]))

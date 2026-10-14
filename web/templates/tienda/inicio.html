@@ -5,44 +5,39 @@
 
 {% block content %}
 
-<section class="hero">
-
-    <div class="hero-text">
-
-        <p class="eyebrow">WELCOME TO</p>
-
-        <h1>Weiner Kingdom</h1>
-
-        <p>
-            Fun, stylish and adorable designs
-            for your favorite dachshund.
-        </p>
-
-        <a class="button" href="{% url 'productos' %}">
-            View Products
-        </a>
-
-    </div>
-
-    <div class="hero-image">
-
-        <img src="{% static 'tienda/img/hero.JPG' %}"
-             alt="Dachshund">
-
-    </div>
-
+<section class="home-render" aria-label="Weiner Kingdom">
+    <img src="{% static 'tienda/img/home-render.jpg' %}"
+         alt="Weiner Kingdom — dachshunds wearing tailored coats">
+    <nav class="home-ribbon" aria-label="Main sections">
+        <a href="{% url 'productos' %}">Products</a>
+        <a href="{% url 'smart_fit' %}">Smart Fit</a>
+        <a href="{% url 'assistant' %}">Guide</a>
+    </nav>
 </section>
-
 
 <section class="intro">
 
     <h2>Made for the little dachshunds.</h2>
 
     <p>
-        Explore our simple collection of dog designs
-        in La Madriguera Café, San Benito.
+        Choose a garment, share your dog's measurements once, and we turn
+        that information into an order that is ready to be made.
+        Explore our collection in La Madriguera Café, San Benito.
     </p>
 
+    <p>
+        <a class="button" href="{% url 'productos' %}">View Products</a>
+        <a class="button" href="{% url 'smart_fit' %}">Start Smart Fit</a>
+    </p>
+
+</section>
+
+<section class="home-steps" aria-label="How it works">
+    <ol>
+        <li><strong>1. Choose</strong><span>Pick a garment from the collection.</span></li>
+        <li><strong>2. Measure</strong><span>Enter your dog's measurements with simple instructions.</span></li>
+        <li><strong>3. Order</strong><span>Review your quote and confirm your order. Our team confirms the final price and payment.</span></li>
+    </ol>
 </section>
 
 {% endblock %}

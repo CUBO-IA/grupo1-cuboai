@@ -20,10 +20,12 @@ class AssistantTests(TestCase):
 
     def test_occasion_recommendations_use_catalog(self):
         expected = {
-            "wedding": ("Wedding Dog", "$650"),
+            "wedding": ("Wedding Dog Suit Pair for Two", "$650"),
             "adventure": ("Tactical Dog", "$300"),
             "holiday": ("Christmas Dog", "$250"),
-            "everyday": ("Dog Sweater", "$125"),
+            "warmth": ("Luxury Cable Knit Dachshund Jumper", "$150"),
+            "bath": ("Bamboo Dachshund Drying Robe", "$88"),
+            "walks": ("Walnut Whip Dachshund Harness Fleece", "$250"),
         }
         for key, (name, price) in expected.items():
             r = self.ask(occasion=key)
@@ -31,8 +33,8 @@ class AssistantTests(TestCase):
             self.assertContains(r, price)
 
     def test_price_question_uses_real_price(self):
-        r = self.ask(q="How much is the Dog Sweater?")
-        self.assertContains(r, "$125")
+        r = self.ask(q="How much is the cable knit jumper?")
+        self.assertContains(r, "$150")
         self.assertContains(r, "confirmed by Weiner Kingdom")
 
     def test_measurement_question_points_to_smart_fit(self):
@@ -72,9 +74,9 @@ class AssistantTests(TestCase):
     def test_prices_follow_catalog_changes(self):
         from unittest import mock
 
-        changed = {**services.PRODUCTOS["dog-sweater"], "precio": "$130"}
-        with mock.patch.dict(services.PRODUCTOS, {"dog-sweater": changed}):
-            self.assertIn("$130", assistant.answer("price of the sweater")["message"])
+        changed = {**services.PRODUCTOS["cable-knit-jumper"], "precio": "$130"}
+        with mock.patch.dict(services.PRODUCTOS, {"cable-knit-jumper": changed}):
+            self.assertIn("$130", assistant.answer("price of the jumper")["message"])
 
 
 class CostTests(TestCase):

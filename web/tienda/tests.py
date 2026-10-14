@@ -9,10 +9,16 @@ from .models import DogProfile, Order, Quote
 from .views import PRODUCTOS
 
 EXPECTED = {
-    "wedding-dog": ("Wedding Dog", "$650"),
+    "wedding-dog": ("Waterproof Linen Dachshund Wedding Dog Suit Pair for Two", "$650"),
     "tactical-dog": ("Tactical Dog", "$300"),
     "christmas-dog": ("Christmas Dog", "$250"),
-    "dog-sweater": ("Dog Sweater", "$125"),
+    "alnut-whip-harness": ("Walnut Whip Dachshund Harness Fleece", "$250.00"),
+    "beige-anti-rub-harness": (
+        "Beige Sophisticated Sausage Dachshund Anti-Rub Dog Harness", "$63.00"
+    ),
+    "tutti-frutti-harness": ("Tutti Frutti Houndstooth Anti-Rub Harness – Ribbon", "$63.00"),
+    "cable-knit-jumper": ("Luxury Cable Knit Dachshund Jumper", "$150.00"),
+    "bamboo-drying-robe": ("Showercover Bamboo Dachshund Drying Robe", "$88.00"),
 }
 
 
@@ -45,9 +51,9 @@ class ModelTests(TestCase):
             chest_girth_cm=Decimal("42.5"),
         )
         quote = Quote.objects.create(
-            dog=dog, product_slug="dog-sweater", base_price=Decimal("125.00")
+            dog=dog, product_slug="cable-knit-jumper", base_price=Decimal("150.00")
         )
-        order = Order.objects.create(quote=quote, total=Decimal("125.00"))
+        order = Order.objects.create(quote=quote, total=Decimal("150.00"))
         self.assertEqual(quote.status, Quote.Status.DRAFT)
         self.assertEqual(order.status, Order.Status.PENDING)
         self.assertIsNone(quote.total_price)
@@ -172,7 +178,7 @@ class QuoteServiceTests(TestCase):
         self.assertEqual(services.get_base_price("wedding-dog"), Decimal("650.00"))
         self.assertEqual(services.get_base_price("tactical-dog"), Decimal("300.00"))
         self.assertEqual(services.get_base_price("christmas-dog"), Decimal("250.00"))
-        self.assertEqual(services.get_base_price("dog-sweater"), Decimal("125.00"))
+        self.assertEqual(services.get_base_price("cable-knit-jumper"), Decimal("150.00"))
 
     def test_unknown_product(self):
         for slug in ("", "nope", "../etc"):
@@ -190,12 +196,12 @@ class QuoteServiceTests(TestCase):
 
     def test_create_quote_is_provisional_and_reused(self):
         dog = _make_dog()
-        q = services.create_quote(dog, "dog-sweater")
-        self.assertEqual(q.base_price, Decimal("125.00"))
+        q = services.create_quote(dog, "cable-knit-jumper")
+        self.assertEqual(q.base_price, Decimal("150.00"))
         self.assertIsNone(q.total_price)
         self.assertEqual(q.pricing, Quote.Pricing.PROVISIONAL)
         self.assertEqual(q.status, Quote.Status.DRAFT)
-        self.assertEqual(services.create_quote(dog, "dog-sweater").pk, q.pk)
+        self.assertEqual(services.create_quote(dog, "cable-knit-jumper").pk, q.pk)
         self.assertEqual(Quote.objects.count(), 1)
 
     def test_breakdown_provisional(self):
@@ -222,11 +228,11 @@ class QuoteViewTests(TestCase):
         dog = _make_dog()
         self.client.post(
             _reverse("smart_quote_crear", args=[dog.public_id]),
-            {"producto": "dog-sweater", "base_price": "1", "total_price": "1",
+            {"producto": "cable-knit-jumper", "base_price": "1", "total_price": "1",
              "pricing": "final", "status": "accepted"},
         )
         q = Quote.objects.get()
-        self.assertEqual(q.base_price, Decimal("125.00"))
+        self.assertEqual(q.base_price, Decimal("150.00"))
         self.assertIsNone(q.total_price)
         self.assertEqual(q.pricing, Quote.Pricing.PROVISIONAL)
         self.assertEqual(q.status, Quote.Status.DRAFT)
@@ -236,7 +242,7 @@ class QuoteViewTests(TestCase):
         r = self.client.post(_reverse("smart_quote_crear", args=[dog.public_id]), {"producto": "x"})
         self.assertEqual(r.status_code, 400)
         self.assertEqual(Quote.objects.count(), 0)
-        r = self.client.post(_reverse("smart_quote_crear", args=[uuid.uuid4()]), {"producto": "dog-sweater"})
+        r = self.client.post(_reverse("smart_quote_crear", args=[uuid.uuid4()]), {"producto": "cable-knit-jumper"})
         self.assertEqual(r.status_code, 404)
         self.assertEqual(self.client.get(_reverse("smart_quote", args=[uuid.uuid4()])).status_code, 404)
 
@@ -251,7 +257,7 @@ class QuoteViewTests(TestCase):
 
         dog = _make_dog()
         c = Client(enforce_csrf_checks=True)
-        r = c.post(_reverse("smart_quote_crear", args=[dog.public_id]), {"producto": "dog-sweater"})
+        r = c.post(_reverse("smart_quote_crear", args=[dog.public_id]), {"producto": "cable-knit-jumper"})
         self.assertEqual(r.status_code, 403)
 
 

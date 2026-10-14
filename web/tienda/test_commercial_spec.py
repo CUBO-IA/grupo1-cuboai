@@ -20,6 +20,17 @@ CUSTOMER = {
 }
 
 
+class BtcTestCase(TestCase):
+    """TestCase base: el descuento Bitcoin es opt-in por producto (pendiente de
+    confirmar por el negocio); estas pruebas lo habilitan explícitamente."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from .models import ProductPaymentRule
+
+        ProductPaymentRule.objects.update(bitcoin_discount_eligible=True)
+
+
 def make_order(slug="wedding-dog", payment_method="unspecified"):
     dog = DogProfile.objects.create(
         name="Rex", breed="Dachshund", weight_kg=Decimal("7.50"),
@@ -30,13 +41,13 @@ def make_order(slug="wedding-dog", payment_method="unspecified"):
     return order
 
 
-class BitcoinDiscountTests(TestCase):
+class BitcoinDiscountTests(BtcTestCase):
     def test_discount_is_15_percent_of_product_subtotal(self):
         for slug, subtotal, discount in (
             ("wedding-dog", "650.00", "97.50"),
             ("tactical-dog", "300.00", "45.00"),
             ("christmas-dog", "250.00", "37.50"),
-            ("dog-sweater", "125.00", "18.75"),
+            ("cable-knit-jumper", "150.00", "22.50"),
         ):
             order = make_order(slug, "bitcoin")
             self.assertEqual(order.total, Decimal(subtotal))
@@ -89,17 +100,17 @@ class BitcoinDiscountTests(TestCase):
             name="Rex", breed="Dachshund", weight_kg=Decimal("7.5"),
             back_length_cm=Decimal("35"), chest_girth_cm=Decimal("42"),
         )
-        quote = services.create_quote(dog, "dog-sweater")
+        quote = services.create_quote(dog, "cable-knit-jumper")
         data = {**CUSTOMER, "payment_method": "bitcoin",
                 "discount_amount": "99", "discount_status": "applied", "total": "1"}
         r = self.client.post(reverse("checkout", args=[quote.public_id]), data)
         order = Order.objects.get()
-        self.assertEqual(order.discount_amount, Decimal("18.75"))
+        self.assertEqual(order.discount_amount, Decimal("22.50"))
         self.assertEqual(order.discount_status, Order.DiscountStatus.PENDING)
-        self.assertEqual(order.total, Decimal("125.00"))
+        self.assertEqual(order.total, Decimal("150.00"))
         page = self.client.get(r.url)
         self.assertContains(page, "Bitcoin discount (15%)")
-        self.assertContains(page, "-$18.75")
+        self.assertContains(page, "-$22.50")
         self.assertContains(page, "Pending payment verification")
         self.assertContains(page, "Shipping cost")
 
@@ -122,7 +133,7 @@ class BitcoinDiscountTests(TestCase):
         self.assertEqual(summary["margin"], Decimal("377.50"))
 
 
-class ProductionGateTests(TestCase):
+class ProductionGateTests(BtcTestCase):
     def test_production_blocked_until_payment_verified(self):
         order = make_order()
         with self.assertRaises(services.TransitionError) as ctx:
@@ -157,7 +168,7 @@ class ProductionGateTests(TestCase):
         self.assertEqual(order.shipping_status, "not_shipped")
 
 
-class ManualReviewWordingTests(TestCase):
+class ManualReviewWordingTests(BtcTestCase):
     def test_quote_and_order_mention_manual_review(self):
         order = make_order()
         quote_page = self.client.get(reverse("smart_quote", args=[order.quote.public_id]))
@@ -170,7 +181,7 @@ class ManualReviewWordingTests(TestCase):
             name="Rex", breed="Dachshund", weight_kg=Decimal("7.5"),
             back_length_cm=Decimal("35"), chest_girth_cm=Decimal("42"),
         )
-        quote = services.create_quote(dog, "dog-sweater")
+        quote = services.create_quote(dog, "cable-knit-jumper")
         page = self.client.get(reverse("checkout", args=[quote.public_id]))
         self.assertContains(page, "does not confirm payment")
         self.assertContains(page, "production starts only after")

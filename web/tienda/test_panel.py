@@ -101,7 +101,7 @@ class PanelListTests(TestCase):
             User.objects.create_user("staff", password="x", is_staff=True)
         )
         self.a = make_order("Ana Perez", "wedding-dog")
-        self.b = make_order("Bruno Diaz", "dog-sweater")
+        self.b = make_order("Bruno Diaz", "cable-knit-jumper")
         services.apply_transition(self.b, "status", "confirmed")
 
     def get(self, **params):

@@ -10,6 +10,28 @@
     <div class="fit-form">
         {% if error %}<p class="fit-alert" role="alert">{{ error }}</p>{% endif %}
 
+        <ol class="progress-line" aria-label="Order progress">
+            {% for step in progress %}
+            <li class="{% if step.done %}done{% elif step.current %}current{% endif %}">{{ step.label }}</li>
+            {% endfor %}
+        </ol>
+        {% if order.status == "cancelled" %}<p class="fit-alert" role="status">This order is cancelled.</p>{% endif %}
+
+        <h2>Readiness</h2>
+        <ul class="readiness">
+            {% for c in readiness.checks %}
+            <li class="{% if c.ok %}ok{% else %}pending{% endif %}">
+                <strong>{% if c.ok %}✓{% else %}○{% endif %} {{ c.label }}</strong>
+                {% if c.detail %}<span class="fit-help"> — {{ c.detail }}</span>{% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        <p>
+            {% if readiness.ready %}<strong>Ready to make.</strong>
+            {% else %}<strong>Not ready to make:</strong> {{ readiness.blockers|join:"; " }}.{% endif %}
+        </p>
+        <p><a class="button" href="{% url 'panel_order_sheet' order.public_id %}">Workshop sheet</a></p>
+
         <h2>States</h2>
         <dl class="fit-summary">
             <dt>Order</dt><dd>{{ order.get_status_display }}</dd>
@@ -49,6 +71,21 @@
             <button class="button" type="submit">Set payment method</button>
         </form>
         {% endif %}
+
+        <h2>Size and tracking</h2>
+        <form method="post" class="panel-action">
+            {% csrf_token %}
+            <input type="hidden" name="form" value="size">
+            <input type="text" name="size_confirmed" maxlength="40" value="{{ order.size_confirmed }}" placeholder="Confirmed size (e.g. M)">
+            <button class="button" type="submit">Confirm size</button>
+        </form>
+        <form method="post" class="panel-action">
+            {% csrf_token %}
+            <input type="hidden" name="form" value="tracking">
+            <input type="text" name="tracking_number" maxlength="60" value="{{ order.tracking_number }}" placeholder="Tracking number (optional)">
+            <input type="text" name="tracking_carrier" maxlength="60" value="{{ order.tracking_carrier }}" placeholder="Carrier (optional)">
+            <button class="button" type="submit">Save tracking</button>
+        </form>
 
         <h2>Customer</h2>
         <dl class="fit-summary">

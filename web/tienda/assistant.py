@@ -6,16 +6,21 @@ declara como desconocido en vez de inventarse. No sustituye las validaciones
 del backend: las medidas y el precio se siguen validando en Smart Fit/Smart Quote.
 """
 
-from .views import PRODUCTOS
+from .catalog import PRODUCTOS
 
 MAX_QUERY_LENGTH = 200
 
-# Ocasiones guiadas -> producto del catálogo.
+# Ocasiones guiadas -> productos del catálogo.
 OCCASIONS = {
-    "wedding": ("A wedding or special celebration", "wedding-dog"),
-    "adventure": ("Outdoor adventures", "tactical-dog"),
-    "holiday": ("Holiday gatherings and photos", "christmas-dog"),
-    "everyday": ("Everyday walks", "dog-sweater"),
+    "wedding": ("A wedding or special celebration", ["wedding-dog"]),
+    "adventure": ("Outdoor adventures", ["tactical-dog"]),
+    "holiday": ("Holiday gatherings and photos", ["christmas-dog"]),
+    "walks": (
+        "Walks with a harness",
+        ["alnut-whip-harness", "beige-anti-rub-harness", "tutti-frutti-harness"],
+    ),
+    "warmth": ("Warmth and everyday style", ["cable-knit-jumper"]),
+    "bath": ("After-bath drying", ["bamboo-drying-robe"]),
 }
 
 # Palabras clave -> producto (coinciden con nombres y descripciones del catálogo).
@@ -23,7 +28,11 @@ PRODUCT_KEYWORDS = {
     "wedding-dog": ("wedding", "formal", "suit", "celebration"),
     "tactical-dog": ("tactical", "adventure", "outdoor", "bold"),
     "christmas-dog": ("christmas", "holiday", "festive", "xmas"),
-    "dog-sweater": ("sweater", "everyday", "walk", "walks"),
+    "alnut-whip-harness": ("walnut", "alnut", "fleece", "harness"),
+    "beige-anti-rub-harness": ("beige", "harness"),
+    "tutti-frutti-harness": ("tutti", "frutti", "houndstooth", "ribbon", "harness"),
+    "cable-knit-jumper": ("jumper", "cable", "knit", "sweater"),
+    "bamboo-drying-robe": ("robe", "bamboo", "drying", "bath", "towel"),
 }
 
 PRICE_WORDS = ("price", "cost", "how much", "cuanto", "precio")
@@ -64,10 +73,11 @@ def recommend(occasion):
     """Recomendación guiada por ocasión; None si la opción no existe."""
     if occasion not in OCCASIONS:
         return None
-    slug = OCCASIONS[occasion][1]
+    slugs = OCCASIONS[occasion][1]
+    names = ", ".join(PRODUCTOS[s]["nombre"] for s in slugs)
     return {
-        "message": f"For this occasion we suggest {PRODUCTOS[slug]['nombre']}.",
-        "products": [_product_card(slug)],
+        "message": f"For this occasion we suggest: {names}.",
+        "products": [_product_card(s) for s in slugs],
         "next": "smart_fit",
         "unknown": False,
     }

@@ -123,6 +123,12 @@ class Order(models.Model):
     # Copia de producto, precio y medidas al momento de crear el pedido.
     snapshot = models.JSONField(default=dict)
 
+    # Seguimiento del envío: opcional, lo registra el personal cuando existe.
+    tracking_number = models.CharField(max_length=60, blank=True)
+    tracking_carrier = models.CharField(max_length=60, blank=True)
+    # Talla confirmada por el personal (cuando la de referencia no es concluyente).
+    size_confirmed = models.CharField(max_length=40, blank=True)
+
     # Evidencia aportada por el personal al marcar el pago (p. ej. referencia).
     payment_reference = models.CharField(max_length=120, blank=True)
 

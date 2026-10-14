@@ -1,7 +1,7 @@
 """Smart Quote: cotización calculada siempre en el servidor.
 
 El cliente solo indica qué perro y qué producto; el precio se toma del
-catálogo controlado (`tienda.views.PRODUCTOS`) y nunca de datos del navegador.
+catálogo controlado (`tienda.catalog.PRODUCTOS`) y nunca de datos del navegador.
 
 La regla de ajuste por talla/peso/materiales NO está definida por el negocio,
 así que toda cotización es PROVISIONAL (precio base, sin ajuste).
@@ -10,7 +10,7 @@ así que toda cotización es PROVISIONAL (precio base, sin ajuste).
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from .models import Quote
-from .views import PRODUCTOS
+from .catalog import PRODUCTOS
 
 
 # Precio final máximo por producto indicado en la guía. Es solo un tope
@@ -215,6 +215,9 @@ def _check_rules(order, field, new_value):
     if field == "production_status" and new_value == "in_production":
         if order.payment_status != "paid":
             return "Payment must be verified before production can start."
+        readiness = order_readiness(order)
+        if not readiness["ready"]:
+            return "Cannot start production: " + "; ".join(readiness["blockers"]) + "."
     if field == "shipping_status" and new_value == "shipped":
         if order.production_status != "completed":
             return "Production must be completed before shipping."
@@ -390,6 +393,8 @@ def product_cost_summary(slug):
         "margin_pct": pct,
         "margin_negative": margin is not None and margin < 0,
         "has_reserve": any(l["is_reserve"] for l in lines),
+        # Sin mano de obra ni otros costos cargados, el margen está sobreestimado.
+        "incomplete": profile.labor_cost == 0 and profile.other_costs == 0,
         "is_validated": all_validated,
         "notes": profile.notes,
         "updated_at": profile.updated_at,
@@ -795,3 +800,215 @@ def update_payment_rules(post):
         rule, _ = ProductPaymentRule.objects.get_or_create(product_slug=slug)
         rule.bitcoin_discount_eligible = bool(post.get(f"btc_{slug}"))
         rule.save()
+
+
+# --- Order Copilot: preparación para fabricar, etapas y progreso --------------
+
+STAGES = ("review", "ready", "production", "finished", "shipped")
+STAGE_LABELS = {
+    "review": "To review (unpaid)",
+    "ready": "Paid / ready to make",
+    "production": "In production",
+    "finished": "Finished",
+    "shipped": "Shipped",
+}
+
+
+def order_readiness(order):
+    """Indicadores verificables de un pedido, separados entre sí.
+
+    - saved: el pedido existe.
+    - payment: pago registrado con un método verificable (no demo).
+    - info: entrega completa, medidas completas y talla clara o confirmada.
+    - ready: pago + información validada + pedido no cancelado.
+    Nada aquí inventa datos: solo comprueba lo guardado.
+    """
+    snap = order.snapshot or {}
+    dog = snap.get("dog") or {}
+    required = snap.get("required_measurements") or {}
+    size = snap.get("size_reference") or {}
+
+    paid = order.payment_status == "paid" and order.payment_method not in DEMO_METHODS
+    missing_delivery = [
+        label
+        for label, value in (
+            ("name", order.customer_name),
+            ("email", order.customer_email),
+            ("phone", order.customer_phone),
+            ("country", order.country),
+            ("city", order.city),
+            ("address", order.address),
+        )
+        if not (value or "").strip()
+    ]
+    missing_measures = [
+        label
+        for key, label in (
+            ("weight_kg", "weight"),
+            ("back_length_cm", "back length"),
+            ("chest_girth_cm", "chest girth"),
+        )
+        if not dog.get(key)
+    ]
+    if required.get("neck_girth") and not dog.get("neck_girth_cm"):
+        missing_measures.append("neck girth")
+    size_status = size.get("status")
+    size_ok = size_status == "matched" or bool((order.size_confirmed or "").strip())
+
+    checks = [
+        {"key": "saved", "ok": True, "label": "Order saved", "detail": ""},
+        {
+            "key": "payment",
+            "ok": paid,
+            "label": "Payment confirmed",
+            "detail": "" if paid else (
+                "Demo method cannot be paid"
+                if order.payment_method in DEMO_METHODS
+                else "No payment recorded"
+            ),
+        },
+        {
+            "key": "delivery",
+            "ok": not missing_delivery,
+            "label": "Delivery details complete",
+            "detail": ", ".join(missing_delivery),
+        },
+        {
+            "key": "measurements",
+            "ok": not missing_measures,
+            "label": "Measurements complete",
+            "detail": ", ".join(missing_measures),
+        },
+        {
+            "key": "size",
+            "ok": size_ok,
+            "label": "Size clear or confirmed by staff",
+            "detail": "" if size_ok else (
+                "Reference size is " + ("ambiguous" if size_status == "ambiguous" else "outside the table")
+                + " — staff must confirm the size"
+            ),
+        },
+    ]
+    info_valid = not missing_delivery and not missing_measures and size_ok
+    cancelled = order.status == "cancelled"
+    ready = paid and info_valid and not cancelled
+    blockers = []
+    if cancelled:
+        blockers.append("order is cancelled")
+    for c in checks:
+        if not c["ok"]:
+            blockers.append(f"{c['label'].lower()}" + (f" ({c['detail']})" if c["detail"] else ""))
+    return {
+        "checks": checks,
+        "saved": True,
+        "payment_confirmed": paid,
+        "info_validated": info_valid,
+        "ready": ready,
+        "blockers": blockers,
+    }
+
+
+def progress_steps(order):
+    """Línea de progreso del pedido (saved → ... → delivered)."""
+    r = order_readiness(order)
+    steps = [
+        ("Order saved", True),
+        ("Payment verified", r["payment_confirmed"]),
+        ("In production", order.production_status in ("in_production", "completed")),
+        ("Production completed", order.production_status == "completed"),
+        ("Shipped", order.shipping_status in ("shipped", "delivered")),
+        ("Delivered", order.shipping_status == "delivered"),
+    ]
+    result, current_set = [], False
+    for label, done in steps:
+        current = (not done) and not current_set
+        if current:
+            current_set = True
+        result.append({"label": label, "done": done, "current": current})
+    return result
+
+
+def stage_filter(stage):
+    """Q para una etapa operativa; None si la etapa no existe."""
+    from django.db.models import Q
+
+    active = ~Q(status="cancelled")
+    if stage == "review":
+        return active & Q(payment_status="unpaid")
+    if stage == "ready":
+        return active & Q(payment_status="paid", production_status="not_started")
+    if stage == "production":
+        return active & Q(production_status="in_production")
+    if stage == "finished":
+        return active & Q(production_status="completed", shipping_status="not_shipped")
+    if stage == "shipped":
+        return active & Q(shipping_status__in=["shipped", "delivered"])
+    if stage == "attention":
+        return (
+            stage_filter("review") | stage_filter("ready") | stage_filter("finished")
+        )
+    return None
+
+
+def stage_counts():
+    from .models import Order
+
+    return [
+        {"key": s, "label": STAGE_LABELS[s], "count": Order.objects.filter(stage_filter(s)).count()}
+        for s in STAGES
+    ]
+
+
+def confirm_size(order, label, user=None):
+    """El personal confirma la talla (cuando la de referencia no es concluyente)."""
+    from django.db import transaction
+
+    from .models import Order, OrderEvent
+
+    label = (label or "").strip()
+    if not label:
+        raise TransitionError("Enter the confirmed size.")
+    if len(label) > 40:
+        raise TransitionError("The size label is too long.")
+    with transaction.atomic():
+        order = Order.objects.select_for_update().get(pk=order.pk)
+        if order.status == "cancelled":
+            raise TransitionError("Cancelled orders cannot change state.")
+        if order.production_status != "not_started":
+            raise TransitionError("The size cannot change once production has started.")
+        old = order.size_confirmed
+        order.size_confirmed = label
+        order.save(update_fields=["size_confirmed"])
+        OrderEvent.objects.create(
+            order=order, field="size_confirmed", from_value=old[:20], to_value=label[:20],
+            note=label, by=user if getattr(user, "pk", None) else None,
+        )
+    return order
+
+
+def set_tracking(order, number, carrier="", user=None):
+    """Registra el número de seguimiento (opcional) del envío."""
+    from django.db import transaction
+
+    from .models import Order, OrderEvent
+
+    number = (number or "").strip()
+    carrier = (carrier or "").strip()
+    if len(number) > 60 or len(carrier) > 60:
+        raise TransitionError("Tracking number and carrier must be at most 60 characters.")
+    if any(c in number + carrier for c in "<>"):
+        raise TransitionError("Tracking details contain invalid characters.")
+    with transaction.atomic():
+        order = Order.objects.select_for_update().get(pk=order.pk)
+        if order.status == "cancelled":
+            raise TransitionError("Cancelled orders cannot change state.")
+        old = order.tracking_number
+        order.tracking_number = number
+        order.tracking_carrier = carrier
+        order.save(update_fields=["tracking_number", "tracking_carrier"])
+        if old != number:
+            OrderEvent.objects.create(
+                order=order, field="tracking_number", from_value=old[:20], to_value=number[:20],
+                note=carrier, by=user if getattr(user, "pk", None) else None,
+            )
+    return order

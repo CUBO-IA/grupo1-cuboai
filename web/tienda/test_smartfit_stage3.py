@@ -37,7 +37,7 @@ class OptionalNameTests(TestCase):
 
     def test_unnamed_dog_through_quote_checkout_and_order(self):
         dog = make_dog(name="")
-        quote = services.create_quote(dog, "dog-sweater")
+        quote = services.create_quote(dog, "cable-knit-jumper")
         self.assertContains(
             self.client.get(reverse("smart_quote", args=[quote.public_id])), "for Unnamed dog"
         )
@@ -97,7 +97,7 @@ class EditAndReuseTests(TestCase):
         self.assertEqual(dog.weight_kg, Decimal("4.54"))
 
     def test_order_keeps_original_measurements_after_edit(self):
-        order = make_order(slug="dog-sweater")
+        order = make_order(slug="cable-knit-jumper")
         dog = order.quote.dog
         self.client.post(
             reverse("smart_fit_editar", args=[dog.public_id]),
@@ -142,7 +142,10 @@ class EditAndReuseTests(TestCase):
 class RequirementTests(TestCase):
     def test_default_no_garment_requires_neck(self):
         self.assertEqual(
-            set(ProductMeasurement.objects.values_list("product_slug", "requires_neck")),
+            set(
+                ProductMeasurement.objects.filter(product_slug__in=list(services.PRODUCTOS))
+                .values_list("product_slug", "requires_neck")
+            ),
             {(slug, False) for slug in services.PRODUCTOS},
         )
         dog = make_dog()
@@ -168,7 +171,7 @@ class RequirementTests(TestCase):
         self._require_neck("wedding-dog")
         dog = make_dog()
         r = self.client.post(
-            reverse("smart_quote_crear", args=[dog.public_id]), {"producto": "dog-sweater"}
+            reverse("smart_quote_crear", args=[dog.public_id]), {"producto": "cable-knit-jumper"}
         )
         self.assertEqual(Quote.objects.count(), 1)
         self.assertEqual(r.status_code, 302)
@@ -268,7 +271,7 @@ class SizeReferenceTests(TestCase):
             self.assertEqual(q.base_price, Decimal("650.00"))
 
     def test_order_snapshot_has_size_reference(self):
-        order = make_order(slug="dog-sweater")
+        order = make_order(slug="cable-knit-jumper")
         ref = order.snapshot["size_reference"]
         self.assertIn(ref["status"], {"matched", "ambiguous", "outside"})
         self.assertFalse(ref["validated"])
@@ -307,7 +310,7 @@ class PanelMeasurementsTests(TestCase):
             self.url,
             self._post(**{
                 f"chest_max_{row.pk}": "36.5",
-                "neck_dog-sweater": "on", "valid_dog-sweater": "on",
+                "neck_cable-knit-jumper": "on", "valid_cable-knit-jumper": "on",
                 f"svalid_{row.pk}": "on",
             }),
         )
@@ -315,7 +318,7 @@ class PanelMeasurementsTests(TestCase):
         row.refresh_from_db()
         self.assertEqual(row.chest_max, Decimal("36.5"))
         self.assertTrue(row.is_validated)
-        pm = ProductMeasurement.objects.get(product_slug="dog-sweater")
+        pm = ProductMeasurement.objects.get(product_slug="cable-knit-jumper")
         self.assertTrue(pm.requires_neck and pm.is_validated)
         self.assertFalse(ProductMeasurement.objects.get(product_slug="wedding-dog").requires_neck)
 

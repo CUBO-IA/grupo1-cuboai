@@ -23,6 +23,9 @@
             </dd>
             <dt>Production</dt><dd>{{ order.get_production_status_display }}</dd>
             <dt>Shipping</dt><dd>{{ order.get_shipping_status_display }}</dd>
+            {% if order.tracking_number %}
+            <dt>Tracking number</dt><dd>{{ order.tracking_number }}{% if order.tracking_carrier %} ({{ order.tracking_carrier }}){% endif %}</dd>
+            {% endif %}
         </dl>
         <p class="fit-help">
             What the states mean: <em>Pending</em> — we received your order and have not confirmed it yet.

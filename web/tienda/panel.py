@@ -39,6 +39,12 @@ def orders(request):
         if digits.isdigit():
             cond |= Q(pk=int(digits))
         qs = qs.filter(cond)
+    stage = request.GET.get("stage", "")
+    stage_q = services.stage_filter(stage) if stage else None
+    if stage_q is not None:
+        qs = qs.filter(stage_q)
+    else:
+        stage = ""
     filters = {}
     for field, choices in (
         ("status", Order.Status),
@@ -50,19 +56,43 @@ def orders(request):
         if value in choices.values:
             qs = qs.filter(**{field: value})
             filters[field] = value
+    rows = list(qs[:PAGE_SIZE])
+    for row in rows:
+        row.ready_flag = services.order_readiness(row)["ready"]
     return render(
         request,
         "tienda/panel_orders.html",
         {
-            "orders": qs[:PAGE_SIZE],
+            "orders": rows,
             "total_count": qs.count(),
             "page_size": PAGE_SIZE,
+            "stages": services.stage_counts(),
+            "stage": stage,
             "q": q,
             "filters": filters,
             "status_choices": Order.Status.choices,
             "payment_choices": Order.PaymentStatus.choices,
             "production_choices": Order.ProductionStatus.choices,
             "shipping_choices": Order.ShippingStatus.choices,
+        },
+    )
+
+
+@staff_required
+def order_sheet(request, public_id):
+    """Ficha de taller: datos confirmados del pedido (solo personal)."""
+    order = get_object_or_404(Order, public_id=public_id)
+    snap = order.snapshot or {}
+    return render(
+        request,
+        "tienda/panel_order_sheet.html",
+        {
+            "order": order,
+            "snap": snap,
+            "cost_lines": (snap.get("cost_estimate") or {}).get("lines", []),
+            "cost": services.cost_summary(order),
+            "readiness": services.order_readiness(order),
+            "events": order.events.select_related("by"),
         },
     )
 
@@ -167,6 +197,24 @@ def order(request, public_id):
             )
             return redirect("panel_order", public_id=order.public_id)
         order.refresh_from_db()
+    elif request.method == "POST" and request.POST.get("form") in ("size", "tracking"):
+        try:
+            if request.POST["form"] == "size":
+                services.confirm_size(
+                    order, request.POST.get("size_confirmed", ""), user=request.user
+                )
+            else:
+                services.set_tracking(
+                    order,
+                    request.POST.get("tracking_number", ""),
+                    request.POST.get("tracking_carrier", ""),
+                    user=request.user,
+                )
+        except services.TransitionError as exc:
+            error = str(exc)
+            order.refresh_from_db()
+        else:
+            return redirect("panel_order", public_id=order.public_id)
     elif request.method == "POST" and request.POST.get("form") == "payment_method":
         try:
             services.set_payment_method(
@@ -201,6 +249,8 @@ def order(request, public_id):
             "allowed": services.allowed_transitions(order),
             "cost": services.cost_summary(order),
             "cost_form": cost_form,
+            "readiness": services.order_readiness(order),
+            "progress": services.progress_steps(order),
             "settable_methods": [
                 ("unspecified", "To be arranged"),
                 ("bitcoin", "Bitcoin"),

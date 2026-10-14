@@ -27,7 +27,7 @@
                     {% if p.margin_negative %}<strong class="fit-error">-${{ p.margin|cut:"-" }} — cost exceeds price</strong>
                     {% else %}${{ p.margin }}{% if p.margin_pct is not None %} ({{ p.margin_pct }}%){% endif %}{% endif %}
                 </td>
-                <td>{% if p.is_validated %}Validated{% else %}ESTIMATE — not verified{% endif %}{% if p.has_reserve %} · provisional reserve{% endif %}</td>
+                <td>{% if p.is_validated %}Validated{% else %}ESTIMATE — not verified{% endif %}{% if p.has_reserve %} · provisional reserve{% endif %}{% if p.incomplete %} · <strong>labor/other not set</strong>{% endif %}</td>
                 <td><a href="{% url 'panel_product_cost' p.slug %}">View / edit</a></td>
             </tr>
         {% empty %}

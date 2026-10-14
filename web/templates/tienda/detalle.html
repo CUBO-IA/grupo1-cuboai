@@ -4,11 +4,21 @@
 {% block content %}
 <section class="detail">
 {% if producto %}
-    <img class="detail-image" src="{% static producto.imagen %}" alt="{{ producto.nombre }}">
+    <div class="detail-media">
+        <img class="detail-image" src="{% static producto.imagen %}" alt="{{ producto.nombre }}">
+        {% if producto.imagenes|length > 1 %}
+        <div class="detail-thumbs">
+            {% for img in producto.imagenes %}
+            <img src="{% static img %}" alt="{{ producto.nombre }} — view {{ forloop.counter }}">
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
     <div class="detail-content">
         <p class="eyebrow">WEINER KINGDOM</p>
         <h1>{{ producto.nombre }}</h1>
         <p class="detail-price">{{ producto.precio }}</p>
+        <p class="fit-help">Base price for small dogs. The final price is confirmed by our team after your measurements.</p>
 
         <section class="wk-description" aria-label="Product description">
             <p class="wk-collection">WEINER KINGDOM · SIGNATURE COLLECTION</p>
@@ -30,7 +40,22 @@
             <div class="wk-footer">YOUR WEINER. YOUR STYLE. EVERY SPECIAL MOMENT.</div>
         </section>
 
-        <a class="button" href="{% url 'productos' %}">Back to Products</a>
+        <section class="wk-materials" aria-label="Materiales del traje">
+            <h2 class="wk-title">Materiales del traje</h2>
+            <ul class="wk-materials-list">
+                {% for m in producto.materiales %}
+                <li>
+                    <strong>{{ m.nombre }}</strong>
+                    <span>{{ m.funcion }}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </section>
+
+        <p>
+            <a class="button" href="{% url 'smart_fit' %}?producto={{ slug }}">Get my fit and quote</a>
+            <a class="button" href="{% url 'productos' %}">Back to Products</a>
+        </p>
     </div>
 {% else %}
     <h1>Product not found</h1>

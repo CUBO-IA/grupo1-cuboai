@@ -16,6 +16,18 @@ CUSTOMER = {
 }
 
 
+
+class BtcTestCase(TestCase):
+    """TestCase base: el descuento Bitcoin es opt-in por producto (pendiente de
+    confirmar por el negocio); estas pruebas lo habilitan explícitamente."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from .models import ProductPaymentRule
+
+        ProductPaymentRule.objects.update(bitcoin_discount_eligible=True)
+
+
 def make_dog():
     return DogProfile.objects.create(
         name="Rex", breed="Dachshund", weight_kg=Decimal("7.50"),
@@ -33,16 +45,16 @@ def staff():
     return User.objects.create_user("staff", password="x", is_staff=True)
 
 
-class DemoMethodTests(TestCase):
+class DemoMethodTests(BtcTestCase):
     def test_options_present_and_marked_demo(self):
-        quote = services.create_quote(make_dog(), "dog-sweater")
+        quote = services.create_quote(make_dog(), "cable-knit-jumper")
         page = self.client.get(reverse("checkout", args=[quote.public_id]))
         self.assertContains(page, "PayPal — DEMO, not available")
         self.assertContains(page, "Card — DEMO, not available")
         self.assertContains(page, "no payment is processed")
 
     def test_no_card_data_is_collected(self):
-        quote = services.create_quote(make_dog(), "dog-sweater")
+        quote = services.create_quote(make_dog(), "cable-knit-jumper")
         page = self.client.get(reverse("checkout", args=[quote.public_id])).content.decode().lower()
         for word in ("card number", "cvv", "cvc", "expiry", "expiration", "cardnumber"):
             self.assertNotIn(word, page)
@@ -67,7 +79,7 @@ class DemoMethodTests(TestCase):
             self.assertEqual(order.amount_due, Decimal("650.00"))
 
     def test_review_page_flags_demo(self):
-        quote = services.create_quote(make_dog(), "dog-sweater")
+        quote = services.create_quote(make_dog(), "cable-knit-jumper")
         r = self.client.post(
             reverse("checkout", args=[quote.public_id]),
             {**CUSTOMER, "payment_method": "paypal_demo", "step": "review"},
@@ -77,7 +89,7 @@ class DemoMethodTests(TestCase):
         self.assertEqual(Order.objects.count(), 0)
 
     def test_customer_page_explains_demo_and_never_shows_paid(self):
-        order = make_order("dog-sweater", "card_demo")
+        order = make_order("cable-knit-jumper", "card_demo")
         page = self.client.get(reverse("order_detail", args=[order.public_id]))
         self.assertContains(page, "Card (demo - not available)")
         self.assertContains(page, "Demonstration option")
@@ -85,7 +97,7 @@ class DemoMethodTests(TestCase):
         self.assertNotContains(page, "Paid</dd>")
 
     def test_demo_cannot_be_recorded_as_paid(self):
-        order = make_order("dog-sweater", "paypal_demo")
+        order = make_order("cable-knit-jumper", "paypal_demo")
         with self.assertRaises(services.TransitionError) as ctx:
             services.apply_transition(order, "payment_status", "paid", note="REF")
         self.assertIn("Demo payment methods", str(ctx.exception))
@@ -99,7 +111,7 @@ class DemoMethodTests(TestCase):
             services.apply_transition(order, "production_status", "in_production")
 
     def test_demo_paid_blocked_through_panel(self):
-        order = make_order("dog-sweater", "card_demo")
+        order = make_order("cable-knit-jumper", "card_demo")
         self.client.force_login(staff())
         url = reverse("panel_order", args=[order.public_id])
         r = self.client.post(url, {"field": "payment_status", "value": "paid", "note": "x"})
@@ -108,39 +120,50 @@ class DemoMethodTests(TestCase):
         self.assertEqual(order.payment_status, "unpaid")
 
     def test_unknown_method_falls_back(self):
-        order = make_order("dog-sweater", "wire_transfer")
+        order = make_order("cable-knit-jumper", "wire_transfer")
         self.assertEqual(order.payment_method, "unspecified")
 
 
 class EligibilityTests(TestCase):
-    def test_all_products_eligible_by_default(self):
-        self.assertEqual(
-            set(ProductPaymentRule.objects.values_list("product_slug", "bitcoin_discount_eligible")),
-            {(slug, True) for slug in services.PRODUCTOS},
+    ELIGIBLE = {"cable-knit-jumper", "bamboo-drying-robe"}
+
+    def test_only_products_with_btc_price_in_listing_are_eligible(self):
+        # El listado comercial muestra precio con BTC solo para el jumper y la bata.
+        rules = dict(
+            ProductPaymentRule.objects.filter(product_slug__in=list(services.PRODUCTOS))
+            .values_list("product_slug", "bitcoin_discount_eligible")
         )
+        self.assertEqual({s for s, ok in rules.items() if ok}, self.ELIGIBLE)
+        self.assertEqual(set(rules), set(services.PRODUCTOS))
 
     def test_ineligible_product_gets_no_discount(self):
-        ProductPaymentRule.objects.filter(product_slug="dog-sweater").update(
-            bitcoin_discount_eligible=False
-        )
-        order = make_order("dog-sweater", "bitcoin", quantity=2)
+        order = make_order("tactical-dog", "bitcoin", quantity=2)
         self.assertEqual(order.discount_status, "none")
         self.assertEqual(order.discount_amount, Decimal("0.00"))
-        self.assertEqual(order.total, Decimal("250.00"))
-        # otro producto sigue elegible
-        other = make_order("tactical-dog", "bitcoin")
+        self.assertEqual(order.total, Decimal("600.00"))
+        # un producto elegible sí recibe el 15 % sobre su subtotal
+        other = make_order("cable-knit-jumper", "bitcoin", quantity=2)
+        self.assertEqual(other.total, Decimal("300.00"))
         self.assertEqual(other.discount_amount, Decimal("45.00"))
+        robe = make_order("bamboo-drying-robe", "bitcoin")
+        self.assertEqual(robe.discount_amount, Decimal("13.20"))
 
     def test_checkout_and_review_say_so(self):
-        ProductPaymentRule.objects.filter(product_slug="dog-sweater").update(
-            bitcoin_discount_eligible=False
-        )
-        quote = services.create_quote(make_dog(), "dog-sweater")
+        quote = services.create_quote(make_dog(), "tactical-dog")
         url = reverse("checkout", args=[quote.public_id])
         self.assertContains(self.client.get(url), "does not apply to this product")
         r = self.client.post(url, {**CUSTOMER, "payment_method": "bitcoin", "step": "review"})
         self.assertContains(r, "does not apply to this product")
         self.assertNotContains(r, "Bitcoin discount (15%)")
+
+    def test_checkout_offers_discount_for_eligible_product(self):
+        quote = services.create_quote(make_dog(), "bamboo-drying-robe")
+        r = self.client.post(
+            reverse("checkout", args=[quote.public_id]),
+            {**CUSTOMER, "payment_method": "bitcoin", "step": "review"},
+        )
+        self.assertContains(r, "Bitcoin discount (15%)")
+        self.assertContains(r, "-$13.20")
 
     def test_panel_payments_page_and_update(self):
         url = reverse("panel_payments")
@@ -154,9 +177,10 @@ class EligibilityTests(TestCase):
         self.assertContains(page, "Pending definition")
         r = self.client.post(url, {"btc_wedding-dog": "on", "btc_tactical-dog": "on"})
         self.assertRedirects(r, url)
-        self.assertFalse(services.discount_eligible("dog-sweater"))
+        self.assertFalse(services.discount_eligible("cable-knit-jumper"))
         self.assertFalse(services.discount_eligible("christmas-dog"))
         self.assertTrue(services.discount_eligible("wedding-dog"))
+        self.assertTrue(services.discount_eligible("tactical-dog"))
 
     def test_csrf_on_payments(self):
         c = Client(enforce_csrf_checks=True)
@@ -164,7 +188,7 @@ class EligibilityTests(TestCase):
         self.assertEqual(c.post(reverse("panel_payments"), {}).status_code, 403)
 
 
-class ChangeMethodTests(TestCase):
+class ChangeMethodTests(BtcTestCase):
     def test_switch_recalculates_discount(self):
         order = make_order("wedding-dog", "unspecified")
         s = staff()
@@ -201,7 +225,7 @@ class ChangeMethodTests(TestCase):
         order.refresh_from_db()
         with self.assertRaises(services.TransitionError):
             services.set_payment_method(order, "unspecified")
-        other = make_order("dog-sweater", "unspecified")
+        other = make_order("cable-knit-jumper", "unspecified")
         services.apply_transition(other, "status", "cancelled")
         other.refresh_from_db()
         with self.assertRaises(services.TransitionError):

@@ -7,7 +7,19 @@
 </section>
 
 <section class="panel-wrap">
+    <div class="stage-cards">
+        {% for s in stages %}
+        <a class="stage-card {% if stage == s.key %}active{% endif %}" href="?stage={{ s.key }}">
+            <span class="stage-count">{{ s.count }}</span>
+            <span>{{ s.label }}</span>
+        </a>
+        {% endfor %}
+        <a class="stage-card {% if stage == 'attention' %}active{% endif %}" href="?stage=attention"><span>Needs attention</span></a>
+        <a class="stage-card" href="{% url 'panel_orders' %}"><span>All orders</span></a>
+    </div>
+
     <form method="get" class="panel-filters">
+        {% if stage %}<input type="hidden" name="stage" value="{{ stage }}">{% endif %}
         <input type="search" name="q" value="{{ q }}" placeholder="Order no., name, email or product">
         <select name="status">
             <option value="">Order status</option>
@@ -33,7 +45,7 @@
     <div class="panel-table-wrap">
     <table class="panel-table">
         <thead>
-            <tr><th>Order</th><th>Customer</th><th>Product</th><th>Total</th><th>Status</th><th>Payment</th><th>Production</th><th>Shipping</th><th>Created</th></tr>
+            <tr><th>Order</th><th>Customer</th><th>Product</th><th>Total</th><th>Status</th><th>Payment</th><th>Production</th><th>Shipping</th><th>Ready to make</th><th>Created</th></tr>
         </thead>
         <tbody>
         {% for o in orders %}
@@ -46,10 +58,11 @@
                 <td>{{ o.get_payment_status_display }}</td>
                 <td>{{ o.get_production_status_display }}</td>
                 <td>{{ o.get_shipping_status_display }}</td>
+                <td>{% if o.ready_flag %}Yes{% else %}No{% endif %}</td>
                 <td>{{ o.created_at|date:"Y-m-d H:i" }}</td>
             </tr>
         {% empty %}
-            <tr><td colspan="9">No orders found.</td></tr>
+            <tr><td colspan="10">No orders found.</td></tr>
         {% endfor %}
         </tbody>
     </table>

@@ -19,6 +19,9 @@
     {% else %}
     <p class="fit-alert" role="status">ESTIMATE — not verified. These are prototype assumptions, not supplier quotes.</p>
     {% endif %}
+    {% if cost.incomplete %}
+    <p class="fit-alert" role="alert">Labor and other production costs have not been entered for this product, so the margin shown is overstated. Only materials are estimated.</p>
+    {% endif %}
     {% if cost.margin_negative %}
     <p class="fit-alert" role="alert">Warning: manufacturing cost (${{ cost.total_cost }}) exceeds the sale price (${{ cost.sale_price }}). Estimated gross margin is negative.</p>
     {% endif %}
