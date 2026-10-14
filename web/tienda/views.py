@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 
 from .forms import CheckoutForm, SmartFitForm
 from .models import DogProfile, Order, Quote
@@ -71,21 +72,97 @@ def detalle(request, producto):
     return render(request, "tienda/detalle.html", {"producto": item})
 
 
+SESSION_DOGS = "dogs"
+
+
+def _remember_dog(request, dog):
+    """Recuerda hasta 5 perfiles en la sesión para reutilizarlos."""
+    ids = [i for i in request.session.get(SESSION_DOGS, []) if i != str(dog.public_id)]
+    request.session[SESSION_DOGS] = ([str(dog.public_id)] + ids)[:5]
+
+
+def _saved_dogs(request):
+    ids = request.session.get(SESSION_DOGS, [])
+    found = {str(d.public_id): d for d in DogProfile.objects.filter(public_id__in=ids)}
+    return [found[i] for i in ids if i in found]
+
+
+def _requested_product(request):
+    slug = request.GET.get("producto", "")
+    return slug if slug in PRODUCTOS else ""
+
+
 def smart_fit(request):
+    from . import services
+
+    producto = _requested_product(request)
+    require_neck = bool(producto) and services.measurement_requirements(producto)["neck_girth"]
     if request.method == "POST":
-        form = SmartFitForm(request.POST)
+        form = SmartFitForm(request.POST, require_neck=require_neck)
         if form.is_valid():
             dog = form.save()
-            return redirect("smart_fit_resultado", public_id=dog.public_id)
+            _remember_dog(request, dog)
+            url = reverse("smart_fit_resultado", args=[dog.public_id])
+            return redirect(url + (f"?producto={producto}" if producto else ""))
     else:
-        form = SmartFitForm(initial={"weight_unit": "kg", "length_unit": "cm"})
-    return render(request, "tienda/smartfit.html", {"form": form})
+        form = SmartFitForm(
+            initial={"weight_unit": "kg", "length_unit": "cm"}, require_neck=require_neck
+        )
+    return render(
+        request,
+        "tienda/smartfit.html",
+        {
+            "form": form,
+            "saved_dogs": _saved_dogs(request),
+            "producto": PRODUCTOS.get(producto),
+            "editing": False,
+        },
+    )
+
+
+def smart_fit_editar(request, public_id):
+    from . import services
+
+    dog = get_object_or_404(DogProfile, public_id=public_id)
+    producto = _requested_product(request)
+    require_neck = bool(producto) and services.measurement_requirements(producto)["neck_girth"]
+    if request.method == "POST":
+        form = SmartFitForm(request.POST, require_neck=require_neck)
+        if form.is_valid():
+            form.save(instance=dog)
+            _remember_dog(request, dog)
+            url = reverse("smart_fit_resultado", args=[dog.public_id])
+            return redirect(url + (f"?producto={producto}" if producto else ""))
+    else:
+        form = SmartFitForm(initial=SmartFitForm.initial_from(dog), require_neck=require_neck)
+    return render(
+        request,
+        "tienda/smartfit.html",
+        {
+            "form": form,
+            "saved_dogs": [],
+            "producto": PRODUCTOS.get(producto),
+            "editing": True,
+            "dog": dog,
+        },
+    )
 
 
 def smart_fit_resultado(request, public_id):
+    from . import services
+
     dog = get_object_or_404(DogProfile, public_id=public_id)
+    _remember_dog(request, dog)
+    size = services.classify_size(dog) if request.GET.get("calcular") else None
     return render(
-        request, "tienda/smartfit_resultado.html", {"dog": dog, "productos": PRODUCTOS}
+        request,
+        "tienda/smartfit_resultado.html",
+        {
+            "dog": dog,
+            "productos": PRODUCTOS,
+            "preselect": _requested_product(request),
+            "size": size,
+        },
     )
 
 
@@ -98,6 +175,10 @@ def smart_quote_crear(request, public_id):
         return redirect("smart_fit_resultado", public_id=dog.public_id)
     # Solo se lee la clave del producto; cualquier precio enviado se ignora.
     slug = request.POST.get("producto", "")
+    if slug in PRODUCTOS and services.missing_measurements(dog, slug):
+        # La prenda exige una medida que falta: se pide antes de cotizar.
+        url = reverse("smart_fit_editar", args=[dog.public_id])
+        return redirect(f"{url}?producto={slug}")
     try:
         quote = services.create_quote(dog, slug)
     except services.UnknownProduct:

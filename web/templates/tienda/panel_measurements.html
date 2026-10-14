@@ -1,0 +1,64 @@
+{% extends "tienda/base.html" %}
+{% block title %}Weiner Kingdom | Measurement settings{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <p class="eyebrow">STAFF PANEL · PRIVATE</p>
+    <h1>Measurement settings</h1>
+</section>
+
+<section class="panel-wrap">
+    {% if errors %}
+    <div class="fit-alert" role="alert">
+        <p>Nothing was saved. Please fix:</p>
+        <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+    <p class="fit-alert" role="status">Not validated with tailoring. The size table is a reference taken from the project guide; it does not change prices.</p>
+
+    <form method="post">
+        {% csrf_token %}
+        <h2>Measurements required per garment</h2>
+        <div class="panel-table-wrap">
+        <table class="panel-table">
+            <thead><tr><th>Product</th><th>Requires neck girth</th><th>Validated with tailoring</th></tr></thead>
+            <tbody>
+            {% for p in products %}
+                <tr>
+                    <td>{{ p.name }}</td>
+                    <td><input type="checkbox" name="neck_{{ p.slug }}" {% if p.requires_neck %}checked{% endif %}></td>
+                    <td><input type="checkbox" name="valid_{{ p.slug }}" {% if p.is_validated %}checked{% endif %}></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+
+        <h2>Reference size table (cm)</h2>
+        <div class="panel-table-wrap">
+        <table class="panel-table">
+            <thead>
+                <tr><th>Group</th><th>Size</th><th>Neck min</th><th>Neck max</th><th>Chest min</th><th>Chest max</th><th>Back min</th><th>Back max</th><th>Validated</th></tr>
+            </thead>
+            <tbody>
+            {% for s in sizes %}
+                <tr>
+                    <td>{{ s.get_group_display }}</td>
+                    <td>{{ s.label }}</td>
+                    <td><input type="number" step="0.1" min="0" name="neck_min_{{ s.pk }}" value="{{ s.neck_min }}"></td>
+                    <td><input type="number" step="0.1" min="0" name="neck_max_{{ s.pk }}" value="{{ s.neck_max }}"></td>
+                    <td><input type="number" step="0.1" min="0" name="chest_min_{{ s.pk }}" value="{{ s.chest_min }}"></td>
+                    <td><input type="number" step="0.1" min="0" name="chest_max_{{ s.pk }}" value="{{ s.chest_max }}"></td>
+                    <td><input type="number" step="0.1" min="0" name="back_min_{{ s.pk }}" value="{{ s.back_min }}"></td>
+                    <td><input type="number" step="0.1" min="0" name="back_max_{{ s.pk }}" value="{{ s.back_max }}"></td>
+                    <td><input type="checkbox" name="svalid_{{ s.pk }}" {% if s.is_validated %}checked{% endif %}></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        <p class="fit-help">Rows overlap in some ranges; when a dog fits several rows the customer sees "between sizes" and the team confirms manually.</p>
+        <button class="button" type="submit">Save settings</button>
+        <a class="button" href="{% url 'panel_orders' %}">Back to orders</a>
+    </form>
+</section>
+{% endblock %}

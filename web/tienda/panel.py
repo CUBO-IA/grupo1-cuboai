@@ -68,6 +68,37 @@ def orders(request):
 
 
 @staff_required
+def measurements(request):
+    from .models import ProductMeasurement, SizeRange
+
+    errors = []
+    status = 200
+    if request.method == "POST":
+        try:
+            services.update_measurement_config(request.POST, user=request.user)
+        except services.CostError as exc:
+            errors, status = exc.messages, 400
+        else:
+            return redirect("panel_measurements")
+    flags = {m.product_slug: m for m in ProductMeasurement.objects.all()}
+    products = [
+        {
+            "slug": slug,
+            "name": item["nombre"],
+            "requires_neck": getattr(flags.get(slug), "requires_neck", False),
+            "is_validated": getattr(flags.get(slug), "is_validated", False),
+        }
+        for slug, item in services.PRODUCTOS.items()
+    ]
+    return render(
+        request,
+        "tienda/panel_measurements.html",
+        {"products": products, "sizes": SizeRange.objects.all(), "errors": errors},
+        status=status,
+    )
+
+
+@staff_required
 def costs(request):
     return render(request, "tienda/panel_costs.html", {"products": services.all_product_costs()})
 

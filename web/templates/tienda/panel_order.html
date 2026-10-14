@@ -49,7 +49,7 @@
         <h2>Product and measurements (snapshot)</h2>
         <dl class="fit-summary">
             <dt>Product</dt><dd>{{ snap.product.name }}</dd>
-            <dt>Dog</dt><dd>{{ snap.dog.name }} ({{ snap.dog.breed }})</dd>
+            <dt>Dog</dt><dd>{{ snap.dog.name|default:"Unnamed dog" }} ({{ snap.dog.breed }})</dd>
             <dt>Weight</dt><dd>{{ snap.dog.weight_kg }} kg</dd>
             <dt>Back length</dt><dd>{{ snap.dog.back_length_cm }} cm</dd>
             <dt>Chest girth</dt><dd>{{ snap.dog.chest_girth_cm }} cm</dd>

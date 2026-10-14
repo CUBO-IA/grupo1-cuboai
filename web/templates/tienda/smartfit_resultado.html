@@ -8,7 +8,7 @@
 
 <section class="fit-layout fit-layout-single">
     <div class="fit-form">
-        <h2>{{ dog.name }}</h2>
+        <h2>{{ dog.display_name }}</h2>
         <dl class="fit-summary">
             <dt>Breed</dt><dd>{{ dog.breed }}</dd>
             <dt>Weight</dt><dd>{{ dog.weight_kg }} kg</dd>
@@ -16,14 +16,39 @@
             <dt>Chest girth</dt><dd>{{ dog.chest_girth_cm }} cm</dd>
             <dt>Neck girth</dt><dd>{% if dog.neck_girth_cm %}{{ dog.neck_girth_cm }} cm{% else %}Not provided{% endif %}</dd>
         </dl>
-        <p class="fit-help">Measurements are stored in kg and cm. No size has been calculated yet.</p>
+        <p class="fit-help">Measurements are stored in kg and cm. Orders keep their own copy of the measurements used.</p>
+        <p>
+            <a class="button" href="{% url 'smart_fit_editar' dog.public_id %}{% if preselect %}?producto={{ preselect }}{% endif %}">Edit measurements</a>
+        </p>
+
+        <h3>Reference size</h3>
+        {% if size %}
+            {% if size.status == "matched" %}
+            <p><strong>{{ size.candidates.0.text }}</strong></p>
+            {% elif size.status == "ambiguous" %}
+            <p><strong>Between sizes:</strong>
+                {% for c in size.candidates %}{{ c.text }}{% if not forloop.last %}, {% endif %}{% endfor %}.</p>
+            <p class="fit-help">Your measurements fit more than one row of the table. Our team will confirm the size manually.</p>
+            {% else %}
+            <p><strong>Outside the reference table.</strong></p>
+            <p class="fit-help">Our team will review your measurements manually.</p>
+            {% endif %}
+            <p class="fit-alert" role="status">Reference only — the size table is not validated yet and no price depends on it. {% if not size.used_neck %}Neck girth was not used.{% endif %}</p>
+        {% else %}
+        <form method="get">
+            <input type="hidden" name="calcular" value="1">
+            {% if preselect %}<input type="hidden" name="producto" value="{{ preselect }}">{% endif %}
+            <button class="button" type="submit">Calculate reference size</button>
+        </form>
+        <p class="fit-help">The size is calculated from your measurements, never from the breed.</p>
+        {% endif %}
 
         <form method="post" action="{% url 'smart_quote_crear' dog.public_id %}" class="fit-field">
             {% csrf_token %}
             <label for="producto">Get a quote for</label>
             <select id="producto" name="producto" required>
                 {% for key, item in productos.items %}
-                <option value="{{ key }}">{{ item.nombre }}</option>
+                <option value="{{ key }}" {% if key == preselect %}selected{% endif %}>{{ item.nombre }}</option>
                 {% endfor %}
             </select>
             {% if quote_error %}<p class="fit-error">{{ quote_error }}</p>{% endif %}

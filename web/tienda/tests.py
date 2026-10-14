@@ -111,8 +111,10 @@ class SmartFitTests(TestCase):
     def test_empty_required_fields(self):
         r = self.client.post(self.url, {})
         self.assertEqual(r.status_code, 200)
-        for field in ("name", "breed", "weight", "back_length", "chest_girth"):
+        for field in ("breed", "weight", "back_length", "chest_girth"):
             self.assertIn(field, r.context["form"].errors)
+        # El nombre y el cuello son opcionales.
+        self.assertNotIn("name", r.context["form"].errors)
         self.assertNotIn("neck_girth", r.context["form"].errors)
         self.assertEqual(DogProfile.objects.count(), 0)
 
@@ -128,13 +130,13 @@ class SmartFitTests(TestCase):
             {"neck_girth": "999"},
             {"weight_unit": "stone"},
             {"length_unit": "ft"},
-            {"name": "   "},
+            {"breed": "   "},
         ):
             r = self.client.post(self.url, _valid_post(**{"name": "Kept", **override}))
             self.assertEqual(r.status_code, 200, override)
             self.assertTrue(r.context["form"].errors, override)
             self.assertEqual(DogProfile.objects.count(), 0, override)
-            if "name" not in override:
+            if "breed" not in override:
                 self.assertContains(r, 'value="Kept"')
 
     def test_unit_aware_range(self):

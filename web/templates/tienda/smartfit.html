@@ -3,12 +3,30 @@
 {% block content %}
 <section class="page-heading">
     <p class="eyebrow">SMART FIT</p>
-    <h1>Your dog's measurements</h1>
+    <h1>{% if editing %}Edit measurements{% else %}Your dog's measurements{% endif %}</h1>
 </section>
 
 <section class="fit-layout">
+    <div>
+    {% if saved_dogs %}
+    <div class="fit-form" style="margin-bottom:20px">
+        <h2>Saved dogs</h2>
+        <ul class="panel-events">
+        {% for d in saved_dogs %}
+            <li>{{ d.display_name }} ({{ d.breed }}) —
+                <a href="{% url 'smart_fit_resultado' d.public_id %}">use</a> ·
+                <a href="{% url 'smart_fit_editar' d.public_id %}">edit</a>
+            </li>
+        {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
     <form class="fit-form" method="post" novalidate>
         {% csrf_token %}
+        {% if producto %}
+        <p class="fit-help">Measurements for: <strong>{{ producto.nombre }}</strong></p>
+        {% endif %}
         {% if form.errors %}
         <p class="fit-alert" role="alert">Please review the highlighted fields.</p>
         {% endif %}
@@ -21,6 +39,7 @@
         <div class="fit-field">
             <label for="{{ form.breed.id_for_label }}">{{ form.breed.label }}</label>
             {{ form.breed }}
+            <p class="fit-help">The breed is only a reference; your dog's size comes from the measurements below.</p>
             {% for e in form.breed.errors %}<p class="fit-error">{{ e }}</p>{% endfor %}
         </div>
 
@@ -44,7 +63,7 @@
         <div class="fit-field">
             <label for="{{ form.back_length.id_for_label }}">{{ form.back_length.label }}</label>
             {{ form.back_length }}
-            <p class="fit-help">From the base of the neck to the base of the tail, with your dog standing.</p>
+            <p class="fit-help">From the base of the neck to the base of the tail, measured on your dog while standing.</p>
             {% for e in form.back_length.errors %}<p class="fit-error">{{ e }}</p>{% endfor %}
         </div>
         <div class="fit-field">
@@ -56,20 +75,25 @@
         <div class="fit-field">
             <label for="{{ form.neck_girth.id_for_label }}">{{ form.neck_girth.label }}</label>
             {{ form.neck_girth }}
-            <p class="fit-help">Where a collar normally sits; leave room for two fingers. You can skip this for now.</p>
+            <p class="fit-help">Where a collar normally sits; leave room for two fingers. We only require it for garments that need it.</p>
             {% for e in form.neck_girth.errors %}<p class="fit-error">{{ e }}</p>{% endfor %}
         </div>
 
-        <button class="button" type="submit">Save measurements</button>
+        <button class="button" type="submit">{% if editing %}Update measurements{% else %}Save measurements{% endif %}</button>
+        {% if editing %}<a class="button" href="{% url 'smart_fit_resultado' dog.public_id %}">Cancel</a>{% endif %}
     </form>
+    </div>
 
     <aside class="fit-tips">
         <h2>How to measure</h2>
         <ol>
             <li>Use a soft tape measure and keep your dog standing and relaxed.</li>
-            <li>Keep the tape snug but not tight.</li>
+            <li>Measure directly on your dog and do not pull the tape tight.</li>
+            <li><strong>Back length:</strong> base of the neck to the base of the tail.</li>
+            <li><strong>Chest girth:</strong> widest part of the chest, behind the front legs.</li>
+            <li><strong>Neck girth:</strong> where the collar sits (only when the garment needs it).</li>
             <li>Measure twice and use the larger value if they differ.</li>
-            <li>Choose your unit once; the same unit applies to all lengths.</li>
+            <li>Choose your unit once; it applies to all lengths. You can correct your measurements at any time before ordering.</li>
         </ol>
     </aside>
 </section>

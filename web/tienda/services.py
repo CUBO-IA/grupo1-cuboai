@@ -479,6 +479,7 @@ def create_order(quote, customer):
         dog = quote.dog
         rate, discount_amount = compute_discount(total, payment_method)
         cost = product_cost_summary(quote.product_slug)
+        size = classify_size(dog)
         snapshot = {
             "currency": "USD",
             "product": {"slug": quote.product_slug, "name": product["nombre"]},
@@ -494,6 +495,13 @@ def create_order(quote, customer):
                 "neck_girth_cm": _dec(dog.neck_girth_cm),
             },
             "quote_public_id": str(quote.public_id),
+            "size_reference": {
+                "status": size["status"],
+                "candidates": [c["text"] for c in size["candidates"]],
+                "validated": size["validated"],
+                "note": "Reference only; size table not validated with tailoring.",
+            },
+            "required_measurements": measurement_requirements(quote.product_slug),
             "cost_estimate": None if cost is None else {
                 "status": "estimate_not_verified",
                 "materials_total": _dec(cost["materials_total"]),
@@ -537,3 +545,98 @@ def create_order(quote, customer):
         quote.status = Quote.Status.ACCEPTED
         quote.save(update_fields=["base_price", "status"])
         return order, True
+
+
+# --- Medidas y talla de referencia (Smart Fit) --------------------------------
+
+def measurement_requirements(slug):
+    """Medidas extra que exige la prenda (configurable en el panel)."""
+    from .models import ProductMeasurement
+
+    pm = ProductMeasurement.objects.filter(product_slug=slug).first()
+    return {
+        "neck_girth": bool(pm and pm.requires_neck),
+        "validated": bool(pm and pm.is_validated),
+    }
+
+
+def missing_measurements(dog, slug):
+    """Campos que la prenda exige y el perfil aún no tiene."""
+    missing = []
+    if measurement_requirements(slug)["neck_girth"] and dog.neck_girth_cm is None:
+        missing.append("neck_girth")
+    return missing
+
+
+def classify_size(dog):
+    """Talla de referencia a partir de las MEDIDAS (nunca por raza).
+
+    Resultado informativo y no validado: no cambia precios ni cotizaciones.
+    Estados: matched (una fila), ambiguous (varias) u outside (ninguna).
+    """
+    from .models import SizeRange
+
+    def inside(value, low, high):
+        return low <= value <= high
+
+    candidates = []
+    for row in SizeRange.objects.all():
+        if not inside(dog.chest_girth_cm, row.chest_min, row.chest_max):
+            continue
+        if not inside(dog.back_length_cm, row.back_min, row.back_max):
+            continue
+        if dog.neck_girth_cm is not None and not inside(
+            dog.neck_girth_cm, row.neck_min, row.neck_max
+        ):
+            continue
+        candidates.append(row)
+    status = "matched" if len(candidates) == 1 else "ambiguous" if candidates else "outside"
+    return {
+        "status": status,
+        "candidates": [
+            {"label": r.label, "group": r.group, "text": r.display} for r in candidates
+        ],
+        "validated": bool(candidates) and all(r.is_validated for r in candidates),
+        "used_neck": dog.neck_girth_cm is not None,
+    }
+
+
+def update_measurement_config(post, user=None):
+    """Guarda requisitos por prenda y tabla de tallas (todo o nada)."""
+    from django.db import transaction
+
+    from .models import ProductMeasurement, SizeRange
+
+    errors = []
+    rows = list(SizeRange.objects.all())
+    parsed = {}
+    for row in rows:
+        values = {}
+        for field in ("neck_min", "neck_max", "chest_min", "chest_max", "back_min", "back_max"):
+            raw = (post.get(f"{field}_{row.pk}") or "").strip()
+            try:
+                v = Decimal(raw)
+            except InvalidOperation:
+                errors.append(f"{row.display} — {field}: enter a number.")
+                continue
+            if not v.is_finite() or v <= 0 or v > Decimal("300"):
+                errors.append(f"{row.display} — {field}: must be between 0 and 300.")
+                continue
+            values[field] = v
+        for lo, hi in (("neck_min", "neck_max"), ("chest_min", "chest_max"), ("back_min", "back_max")):
+            if lo in values and hi in values and values[lo] > values[hi]:
+                errors.append(f"{row.display}: {lo} is greater than {hi}.")
+        parsed[row.pk] = values
+    if errors:
+        raise CostError(errors)
+    with transaction.atomic():
+        for row in rows:
+            for field, value in parsed[row.pk].items():
+                setattr(row, field, value)
+            row.is_validated = bool(post.get(f"svalid_{row.pk}"))
+            row.save()
+        for slug in PRODUCTOS:
+            pm, _ = ProductMeasurement.objects.get_or_create(product_slug=slug)
+            pm.requires_neck = bool(post.get(f"neck_{slug}"))
+            pm.is_validated = bool(post.get(f"valid_{slug}"))
+            pm.save()

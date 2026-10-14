@@ -23,7 +23,7 @@ def _quantize(value, places):
 
 
 class SmartFitForm(forms.Form):
-    name = forms.CharField(label="Dog's name", max_length=80)
+    name = forms.CharField(label="Dog's name (optional)", max_length=80, required=False)
     breed = forms.CharField(label="Breed", max_length=80)
     weight = forms.DecimalField(
         label="Weight", max_digits=6, decimal_places=2, min_value=Decimal("0.01")
@@ -43,6 +43,27 @@ class SmartFitForm(forms.Form):
         min_value=Decimal("0.01"),
         required=False,
     )
+
+    def __init__(self, *args, require_neck=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        if require_neck:
+            # Esta prenda exige el contorno del cuello.
+            self.fields["neck_girth"].required = True
+            self.fields["neck_girth"].label = "Neck girth (required for this garment)"
+
+    @staticmethod
+    def initial_from(dog):
+        """Valores iniciales de un perfil guardado, en kg y cm."""
+        return {
+            "name": dog.name,
+            "breed": dog.breed,
+            "weight": dog.weight_kg,
+            "weight_unit": "kg",
+            "length_unit": "cm",
+            "back_length": dog.back_length_cm,
+            "chest_girth": dog.chest_girth_cm,
+            "neck_girth": dog.neck_girth_cm,
+        }
 
     def clean(self):
         data = super().clean()
@@ -85,16 +106,22 @@ class SmartFitForm(forms.Form):
         )
         return None
 
-    def save(self):
+    def save(self, instance=None):
         d = self.cleaned_data
-        return DogProfile.objects.create(
-            name=d["name"],
-            breed=d["breed"],
-            weight_kg=d["weight_kg"],
-            back_length_cm=d["back_length_cm"],
-            chest_girth_cm=d["chest_girth_cm"],
-            neck_girth_cm=d.get("neck_girth_cm"),
-        )
+        values = {
+            "name": d.get("name", ""),
+            "breed": d["breed"],
+            "weight_kg": d["weight_kg"],
+            "back_length_cm": d["back_length_cm"],
+            "chest_girth_cm": d["chest_girth_cm"],
+            "neck_girth_cm": d.get("neck_girth_cm"),
+        }
+        if instance is None:
+            return DogProfile.objects.create(**values)
+        for key, value in values.items():
+            setattr(instance, key, value)
+        instance.save()
+        return instance
 
 
 class CheckoutForm(forms.Form):

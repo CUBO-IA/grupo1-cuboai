@@ -8,7 +8,8 @@ class DogProfile(models.Model):
 
     # Identificador público no secuencial para las URLs.
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
-    name = models.CharField(max_length=80)
+    # El nombre es opcional.
+    name = models.CharField(max_length=80, blank=True)
     breed = models.CharField(max_length=80)
     weight_kg = models.DecimalField(max_digits=5, decimal_places=2)
     back_length_cm = models.DecimalField(max_digits=5, decimal_places=1)
@@ -18,8 +19,12 @@ class DogProfile(models.Model):
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
+    @property
+    def display_name(self):
+        return self.name or "Unnamed dog"
+
     def __str__(self):
-        return f"{self.name} ({self.breed})"
+        return f"{self.display_name} ({self.breed})"
 
 
 class Quote(models.Model):
@@ -253,3 +258,50 @@ class MaterialLine(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.product_cost.product_slug})"
+
+
+class ProductMeasurement(models.Model):
+    """Medidas que exige cada prenda (configurable; a validar con confección)."""
+
+    product_slug = models.CharField(max_length=50, unique=True)
+    requires_neck = models.BooleanField(default=False)
+    is_validated = models.BooleanField(default=False)
+    notes = models.CharField(max_length=200, blank=True)
+
+    def __str__(self):
+        return f"Measurements for {self.product_slug}"
+
+
+class SizeRange(models.Model):
+    """Fila de la tabla de tallas de referencia (cm).
+
+    Configuración editable, NO validada con confección. Se usa solo para
+    sugerir una talla de referencia desde las medidas; nunca por raza ni
+    para cambiar precios.
+    """
+
+    class Group(models.TextChoices):
+        SMALL = "small", "Small dogs"
+        MEDIUM = "medium", "Medium dogs"
+        LARGE = "large", "Large dogs"
+
+    group = models.CharField(max_length=10, choices=Group.choices)
+    label = models.CharField(max_length=10)
+    position = models.PositiveSmallIntegerField(default=0)
+    neck_min = models.DecimalField(max_digits=5, decimal_places=1)
+    neck_max = models.DecimalField(max_digits=5, decimal_places=1)
+    chest_min = models.DecimalField(max_digits=5, decimal_places=1)
+    chest_max = models.DecimalField(max_digits=5, decimal_places=1)
+    back_min = models.DecimalField(max_digits=5, decimal_places=1)
+    back_max = models.DecimalField(max_digits=5, decimal_places=1)
+    is_validated = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["position", "pk"]
+
+    @property
+    def display(self):
+        return f"{self.label} ({self.get_group_display().lower()})"
+
+    def __str__(self):
+        return self.display

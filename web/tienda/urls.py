@@ -10,6 +10,7 @@ urlpatterns = [
     path("smart-fit/", views.smart_fit, name="smart_fit"),
     path("guide/", views.assistant, name="assistant"),
     path("smart-fit/<uuid:public_id>/", views.smart_fit_resultado, name="smart_fit_resultado"),
+    path("smart-fit/<uuid:public_id>/editar/", views.smart_fit_editar, name="smart_fit_editar"),
     path("smart-fit/<uuid:public_id>/cotizar/", views.smart_quote_crear, name="smart_quote_crear"),
     path("quote/<uuid:public_id>/", views.smart_quote, name="smart_quote"),
     path("quote/<uuid:public_id>/checkout/", views.checkout, name="checkout"),
@@ -22,6 +23,7 @@ urlpatterns = [
     path("panel/logout/", auth_views.LogoutView.as_view(), name="panel_logout"),
     path("panel/", panel.orders, name="panel_orders"),
     path("panel/orders/<uuid:public_id>/", panel.order, name="panel_order"),
+    path("panel/measurements/", panel.measurements, name="panel_measurements"),
     path("panel/costs/", panel.costs, name="panel_costs"),
     path("panel/costs/<slug:slug>/", panel.product_cost, name="panel_product_cost"),
 ]
