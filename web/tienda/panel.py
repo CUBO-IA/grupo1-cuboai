@@ -2,7 +2,7 @@ from functools import wraps
 
 from django.contrib.auth.views import redirect_to_login
 from django.db.models import Q
-from django.http import HttpResponseForbidden
+from django.http import Http404, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
 
 from . import services
@@ -64,6 +64,34 @@ def orders(request):
             "production_choices": Order.ProductionStatus.choices,
             "shipping_choices": Order.ShippingStatus.choices,
         },
+    )
+
+
+@staff_required
+def costs(request):
+    return render(request, "tienda/panel_costs.html", {"products": services.all_product_costs()})
+
+
+@staff_required
+def product_cost(request, slug):
+    summary = services.product_cost_summary(slug)
+    if summary is None:
+        raise Http404
+    errors = []
+    status = 200
+    if request.method == "POST":
+        try:
+            services.update_product_cost(slug, request.POST, user=request.user)
+        except services.CostError as exc:
+            errors = exc.messages
+            status = 400
+        else:
+            return redirect("panel_product_cost", slug=slug)
+    return render(
+        request,
+        "tienda/panel_cost_product.html",
+        {"cost": summary, "errors": errors, "posted": request.POST if errors else None},
+        status=status,
     )
 
 

@@ -83,9 +83,10 @@ class CostTests(TestCase):
         self.staff = User.objects.create_user("staff", password="x", is_staff=True)
         self.url = reverse("panel_order", args=[self.order.public_id])
 
-    def test_default_is_target_estimate(self):
+    def test_default_is_product_estimate(self):
         s = services.cost_summary(self.order)
-        self.assertEqual(s["cost_source"], "target")
+        self.assertEqual(s["cost_source"], "product_estimate")
+        self.assertEqual(s["cost"], Decimal("175.00"))  # Tactical Dog: 100 + 60 + 15
         self.assertFalse(s["is_actual"])
 
     def test_components_sum_and_priority(self):

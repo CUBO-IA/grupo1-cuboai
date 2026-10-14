@@ -81,11 +81,16 @@
             <dt>Amount due</dt><dd>${{ cost.revenue }}{% if cost.discount_pending %} (Bitcoin discount ${{ cost.discount_amount }} pending verification){% endif %}</dd>
             <dt>Cost used</dt>
             <dd>${{ cost.cost }}
-                {% if cost.cost_source == "actual" %}(actual){% elif cost.cost_source == "estimated" %}(estimate entered by staff){% else %}(target, not a proven cost){% endif %}
+                {% if cost.cost_source == "actual" %}(actual){% elif cost.cost_source == "estimated" %}(estimate entered by staff){% elif cost.cost_source == "product_estimate" %}(product cost estimate — not verified){% else %}(target, not a proven cost){% endif %}
             </dd>
             <dt>{% if cost.is_actual %}Margin{% else %}Estimated margin{% endif %}</dt>
             <dd>${{ cost.margin }}{% if cost.margin_pct is not None %} ({{ cost.margin_pct }}%){% endif %}</dd>
         </dl>
+
+        {% if cost.margin_negative %}
+        <p class="fit-alert" role="alert">Warning: cost exceeds revenue for this order.</p>
+        {% endif %}
+        <p class="fit-help"><a href="{% url 'panel_costs' %}">Product cost tables</a></p>
 
         <h3>Edit costs</h3>
         <form method="post">

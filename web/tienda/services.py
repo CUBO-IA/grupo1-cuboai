@@ -89,6 +89,7 @@ def build_breakdown(quote):
 # secuenciales, sin retrocesos, y no enviar antes de terminar la producción.
 
 TARGET_MANUFACTURING_COST = Decimal("175.00")  # objetivo, NO costo comprobado
+CENT = Decimal("0.01")
 BITCOIN_DISCOUNT_RATE = Decimal("0.15")  # sobre el subtotal de productos, sin envío
 
 TRANSITIONS = {
@@ -198,7 +199,16 @@ def cost_summary(order):
     elif order.estimated_cost is not None:
         cost, source = order.estimated_cost, "estimated"
     else:
-        cost, source = TARGET_MANUFACTURING_COST, "target"
+        frozen = (order.snapshot or {}).get("cost_estimate")
+        live = None if frozen else product_cost_summary(
+            (order.snapshot or {}).get("product", {}).get("slug", "")
+        )
+        if frozen:
+            cost, source = Decimal(frozen["total_cost"]), "product_estimate"
+        elif live:
+            cost, source = live["total_cost"], "product_estimate"
+        else:
+            cost, source = TARGET_MANUFACTURING_COST, "target"
     revenue = order.amount_due
     margin = revenue - cost
     pct = (margin / revenue * 100).quantize(Decimal("0.1")) if revenue else None
@@ -213,8 +223,163 @@ def cost_summary(order):
         "is_actual": source == "actual",
         "margin": margin,
         "margin_pct": pct,
+        "margin_negative": margin < 0,
         "target_cost": TARGET_MANUFACTURING_COST,
     }
+
+
+
+class CostError(Exception):
+    def __init__(self, messages):
+        super().__init__("; ".join(messages))
+        self.messages = messages
+
+
+def _money(value):
+    return value.quantize(CENT, rounding=ROUND_HALF_UP)
+
+
+def product_cost_summary(slug):
+    """Presupuesto interno de un producto: partidas, totales y margen bruto.
+
+    El total de materiales se deriva de las partidas (consumo × precio
+    unitario); nunca se guarda como constante. Devuelve None si no hay perfil.
+    """
+    from .models import ProductCost
+
+    profile = ProductCost.objects.filter(product_slug=slug).first()
+    if profile is None:
+        return None
+    lines = []
+    for line in profile.lines.all():
+        lines.append(
+            {
+                "id": line.pk,
+                "name": line.name,
+                "unit": line.unit,
+                "quantity": line.quantity,
+                "unit_price": line.unit_price,
+                "subtotal": line.subtotal,
+                "is_reserve": line.is_provisional_reserve,
+                "is_validated": line.is_validated,
+            }
+        )
+    materials = _money(sum((l["subtotal"] for l in lines), Decimal("0")))
+    total_cost = _money(materials + profile.labor_cost + profile.other_costs)
+    try:
+        sale_price = get_base_price(slug)
+    except (UnknownProduct, InvalidCatalogPrice):
+        sale_price = None
+    margin = None if sale_price is None else _money(sale_price - total_cost)
+    pct = None
+    if margin is not None and sale_price:
+        pct = (margin / sale_price * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+    all_validated = profile.is_validated and all(l["is_validated"] for l in lines)
+    return {
+        "slug": slug,
+        "name": PRODUCTOS.get(slug, {}).get("nombre", slug),
+        "lines": lines,
+        "materials_total": materials,
+        "labor_cost": profile.labor_cost,
+        "other_costs": profile.other_costs,
+        "total_cost": total_cost,
+        "sale_price": sale_price,
+        "margin": margin,
+        "margin_pct": pct,
+        "margin_negative": margin is not None and margin < 0,
+        "has_reserve": any(l["is_reserve"] for l in lines),
+        "is_validated": all_validated,
+        "notes": profile.notes,
+        "updated_at": profile.updated_at,
+    }
+
+
+def all_product_costs():
+    return [s for s in (product_cost_summary(slug) for slug in PRODUCTOS) if s]
+
+
+def _dec_field(raw, label, errors, minimum=Decimal("0"), required=True):
+    raw = (raw or "").strip()
+    if raw == "":
+        if required:
+            errors.append(f"{label}: a value is required.")
+        return None
+    try:
+        value = Decimal(raw)
+    except InvalidOperation:
+        errors.append(f"{label}: enter a valid number.")
+        return None
+    if not value.is_finite() or value < minimum:
+        errors.append(f"{label}: must be {minimum} or more.")
+        return None
+    return value
+
+
+def update_product_cost(slug, data, user=None):
+    """Aplica ediciones del formulario interno (todo o nada).
+
+    `data` es un dict tipo POST. Campos: labor_cost, other_costs, notes,
+    is_validated, qty_<id>, price_<id>, validated_<id>, delete_<id> y una
+    partida nueva (new_name, new_unit, new_qty, new_price).
+    """
+    from django.db import transaction
+
+    from .models import MaterialLine, ProductCost
+
+    errors = []
+    with transaction.atomic():
+        profile = ProductCost.objects.select_for_update().filter(product_slug=slug).first()
+        if profile is None:
+            raise CostError(["Unknown product cost profile."])
+        labor = _dec_field(data.get("labor_cost"), "Labor cost", errors)
+        other = _dec_field(data.get("other_costs"), "Other production costs", errors)
+        edits = []
+        for line in profile.lines.all():
+            if data.get(f"delete_{line.pk}"):
+                edits.append((line, None, None, None, True))
+                continue
+            qty = _dec_field(data.get(f"qty_{line.pk}"), f"{line.name} — consumption", errors)
+            price = _dec_field(data.get(f"price_{line.pk}"), f"{line.name} — unit price", errors)
+            edits.append((line, qty, price, bool(data.get(f"validated_{line.pk}")), False))
+
+        new_line = None
+        new_name = (data.get("new_name") or "").strip()
+        if new_name or (data.get("new_qty") or "").strip() or (data.get("new_price") or "").strip():
+            qty = _dec_field(data.get("new_qty"), "New line — consumption", errors)
+            price = _dec_field(data.get("new_price"), "New line — unit price", errors)
+            if not new_name:
+                errors.append("New line: a name is required.")
+            unit = (data.get("new_unit") or "").strip()[:20] or "unidad"
+            new_line = (new_name[:120], unit, qty, price)
+
+        if errors:
+            raise CostError(errors)
+
+        profile.labor_cost = labor
+        profile.other_costs = other
+        profile.is_validated = bool(data.get("is_validated"))
+        profile.notes = (data.get("notes") or "").strip()[:300]
+        profile.updated_by = user if getattr(user, "pk", None) else None
+        profile.save()
+        for line, qty, price, validated, delete in edits:
+            if delete:
+                line.delete()
+                continue
+            line.quantity = qty
+            line.unit_price = price
+            line.is_validated = validated
+            line.save()
+        if new_line:
+            last = profile.lines.order_by("-position").first()
+            MaterialLine.objects.create(
+                product_cost=profile,
+                position=(last.position + 1) if last else 1,
+                name=new_line[0],
+                unit=new_line[1],
+                quantity=new_line[2],
+                unit_price=new_line[3],
+            )
+    return product_cost_summary(slug)
 
 
 def _sum_parts(*parts):
@@ -313,6 +478,7 @@ def create_order(quote, customer):
         product = get_product(quote.product_slug)
         dog = quote.dog
         rate, discount_amount = compute_discount(total, payment_method)
+        cost = product_cost_summary(quote.product_slug)
         snapshot = {
             "currency": "USD",
             "product": {"slug": quote.product_slug, "name": product["nombre"]},
@@ -328,6 +494,23 @@ def create_order(quote, customer):
                 "neck_girth_cm": _dec(dog.neck_girth_cm),
             },
             "quote_public_id": str(quote.public_id),
+            "cost_estimate": None if cost is None else {
+                "status": "estimate_not_verified",
+                "materials_total": _dec(cost["materials_total"]),
+                "labor_cost": _dec(cost["labor_cost"]),
+                "other_costs": _dec(cost["other_costs"]),
+                "total_cost": _dec(cost["total_cost"]),
+                "lines": [
+                    {
+                        "name": l["name"],
+                        "unit": l["unit"],
+                        "quantity": _dec(l["quantity"]),
+                        "unit_price": _dec(l["unit_price"]),
+                        "subtotal": _dec(l["subtotal"]),
+                    }
+                    for l in cost["lines"]
+                ],
+            },
             "payment_method": payment_method,
             "discount": {
                 "rate": _dec(rate),

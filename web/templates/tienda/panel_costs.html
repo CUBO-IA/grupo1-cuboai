@@ -1,0 +1,42 @@
+{% extends "tienda/base.html" %}
+{% block title %}Weiner Kingdom | Manufacturing costs{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <p class="eyebrow">STAFF PANEL · PRIVATE</p>
+    <h1>Manufacturing costs</h1>
+</section>
+
+<section class="panel-wrap">
+    <p class="fit-alert" role="status">Internal use only. Figures are ESTIMATE — not verified unless marked as validated. Gross margin is not net profit.</p>
+
+    <div class="panel-table-wrap">
+    <table class="panel-table">
+        <thead>
+            <tr><th>Product</th><th>Sale price</th><th>Materials</th><th>Labor</th><th>Other</th><th>Total cost</th><th>Gross margin</th><th>Status</th><th></th></tr>
+        </thead>
+        <tbody>
+        {% for p in products %}
+            <tr>
+                <td>{{ p.name }}</td>
+                <td>${{ p.sale_price }}</td>
+                <td>${{ p.materials_total }}</td>
+                <td>${{ p.labor_cost }}</td>
+                <td>${{ p.other_costs }}</td>
+                <td><strong>${{ p.total_cost }}</strong></td>
+                <td>
+                    {% if p.margin_negative %}<strong class="fit-error">-${{ p.margin|cut:"-" }} — cost exceeds price</strong>
+                    {% else %}${{ p.margin }}{% if p.margin_pct is not None %} ({{ p.margin_pct }}%){% endif %}{% endif %}
+                </td>
+                <td>{% if p.is_validated %}Validated{% else %}ESTIMATE — not verified{% endif %}{% if p.has_reserve %} · provisional reserve{% endif %}</td>
+                <td><a href="{% url 'panel_product_cost' p.slug %}">View / edit</a></td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="9">No cost profiles found.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+
+    <p><a class="button" href="{% url 'panel_orders' %}">Back to orders</a></p>
+</section>
+{% endblock %}

@@ -55,6 +55,8 @@
     </table>
     </div>
 
+    <p><a class="button" href="{% url 'panel_costs' %}">Manufacturing costs</a></p>
+
     <form method="post" action="{% url 'panel_logout' %}">
         {% csrf_token %}
         <button class="button" type="submit">Sign out</button>

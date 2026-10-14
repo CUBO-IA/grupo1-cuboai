@@ -202,3 +202,54 @@ class OrderEvent(models.Model):
 
     class Meta:
         ordering = ["-created_at", "-pk"]
+
+
+class ProductCost(models.Model):
+    """Presupuesto interno de fabricación de un producto del catálogo.
+
+    PRIVADO: nunca se muestra en páginas públicas. Todos los valores son
+    supuestos editables hasta que `is_validated` sea verdadero.
+    """
+
+    product_slug = models.CharField(max_length=50, unique=True)
+    labor_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    other_costs = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    is_validated = models.BooleanField(default=False)
+    notes = models.CharField(max_length=300, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        "auth.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+
+    def __str__(self):
+        return f"Cost profile {self.product_slug}"
+
+
+class MaterialLine(models.Model):
+    """Partida de materiales: consumo × precio unitario = subtotal."""
+
+    product_cost = models.ForeignKey(
+        ProductCost, on_delete=models.CASCADE, related_name="lines"
+    )
+    position = models.PositiveSmallIntegerField(default=0)
+    name = models.CharField(max_length=120)
+    unit = models.CharField(max_length=20)
+    quantity = models.DecimalField(max_digits=8, decimal_places=3)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    # Reservas sin desglose confirmado de insumos.
+    is_provisional_reserve = models.BooleanField(default=False)
+    is_validated = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["position", "pk"]
+
+    @property
+    def subtotal(self):
+        from decimal import ROUND_HALF_UP, Decimal
+
+        return (self.quantity * self.unit_price).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+
+    def __str__(self):
+        return f"{self.name} ({self.product_cost.product_slug})"

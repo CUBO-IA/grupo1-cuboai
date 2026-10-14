@@ -1,0 +1,92 @@
+{% extends "tienda/base.html" %}
+{% block title %}Weiner Kingdom | {{ cost.name }} costs{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <p class="eyebrow">STAFF PANEL · PRIVATE</p>
+    <h1>{{ cost.name }} — costs</h1>
+</section>
+
+<section class="panel-wrap">
+    {% if errors %}
+    <div class="fit-alert" role="alert">
+        <p>Nothing was saved. Please fix:</p>
+        <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+
+    {% if cost.is_validated %}
+    <p class="fit-help"><strong>Values marked as validated.</strong></p>
+    {% else %}
+    <p class="fit-alert" role="status">ESTIMATE — not verified. These are prototype assumptions, not supplier quotes.</p>
+    {% endif %}
+    {% if cost.margin_negative %}
+    <p class="fit-alert" role="alert">Warning: manufacturing cost (${{ cost.total_cost }}) exceeds the sale price (${{ cost.sale_price }}). Estimated gross margin is negative.</p>
+    {% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="panel-table-wrap">
+        <table class="panel-table">
+            <thead>
+                <tr><th>Material</th><th>Unit</th><th>Consumption</th><th>Unit price (USD)</th><th>Subtotal</th><th>Validated</th><th>Remove</th></tr>
+            </thead>
+            <tbody>
+            {% for l in cost.lines %}
+                <tr>
+                    <td>{{ l.name }}{% if l.is_reserve %} <span class="fit-help">(provisional reserve)</span>{% endif %}</td>
+                    <td>{{ l.unit }}</td>
+                    <td><input type="number" step="0.001" min="0" name="qty_{{ l.id }}" value="{{ l.quantity }}"></td>
+                    <td><input type="number" step="0.01" min="0" name="price_{{ l.id }}" value="{{ l.unit_price }}"></td>
+                    <td>${{ l.subtotal }}</td>
+                    <td><input type="checkbox" name="validated_{{ l.id }}" {% if l.is_validated %}checked{% endif %}></td>
+                    <td><input type="checkbox" name="delete_{{ l.id }}"></td>
+                </tr>
+            {% endfor %}
+                <tr>
+                    <td><input type="text" name="new_name" maxlength="120" placeholder="New material (optional)"></td>
+                    <td><input type="text" name="new_unit" maxlength="20" placeholder="unit"></td>
+                    <td><input type="number" step="0.001" min="0" name="new_qty" placeholder="0"></td>
+                    <td><input type="number" step="0.01" min="0" name="new_price" placeholder="0.00"></td>
+                    <td></td><td></td><td></td>
+                </tr>
+                <tr>
+                    <td colspan="4"><strong>Total materials (sum of lines)</strong></td>
+                    <td colspan="3"><strong>${{ cost.materials_total }}</strong></td>
+                </tr>
+            </tbody>
+        </table>
+        </div>
+
+        <div class="fit-form" style="margin-top:20px">
+            <div class="fit-field">
+                <label for="labor_cost">Specialized labor (USD)</label>
+                <input id="labor_cost" type="number" step="0.01" min="0" name="labor_cost" value="{{ cost.labor_cost }}">
+            </div>
+            <div class="fit-field">
+                <label for="other_costs">Other production costs (USD)</label>
+                <input id="other_costs" type="number" step="0.01" min="0" name="other_costs" value="{{ cost.other_costs }}">
+            </div>
+            <div class="fit-field">
+                <label for="notes">Notes</label>
+                <input id="notes" type="text" maxlength="300" name="notes" value="{{ cost.notes }}">
+            </div>
+            <div class="fit-field">
+                <label><input type="checkbox" name="is_validated" {% if cost.is_validated %}checked{% endif %}> Labor and other costs validated</label>
+            </div>
+
+            <dl class="fit-summary">
+                <dt>Materials</dt><dd>${{ cost.materials_total }}</dd>
+                <dt>Labor</dt><dd>${{ cost.labor_cost }}</dd>
+                <dt>Other</dt><dd>${{ cost.other_costs }}</dd>
+                <dt>Total manufacturing cost</dt><dd><strong>${{ cost.total_cost }}</strong></dd>
+                <dt>Sale price (base)</dt><dd>${{ cost.sale_price }}</dd>
+                <dt>Estimated gross margin</dt>
+                <dd><strong>${{ cost.margin }}</strong>{% if cost.margin_pct is not None %} ({{ cost.margin_pct }}%){% endif %}</dd>
+            </dl>
+            <p class="fit-help">Gross margin = sale price − manufacturing cost. It is not net profit (commissions, taxes, marketing and returns are not included). Consumption is a reference size; size-based variation is pending definition.</p>
+            <button class="button" type="submit">Save costs</button>
+            <a class="button" href="{% url 'panel_costs' %}">Back to costs</a>
+        </div>
+    </form>
+</section>
+{% endblock %}

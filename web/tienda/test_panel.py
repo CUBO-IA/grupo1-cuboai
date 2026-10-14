@@ -214,12 +214,12 @@ class TransitionTests(TestCase):
 
     def test_cost_estimate_labelled_and_decimal(self):
         est = services.cost_summary(self.order)
-        self.assertEqual(est["cost_source"], "target")
+        self.assertEqual(est["cost_source"], "product_estimate")
         self.assertEqual(est["cost"], Decimal("175.00"))
         self.assertEqual(est["margin"], Decimal("125.00"))
         self.assertEqual(est["margin_pct"], Decimal("41.7"))
         self.client.force_login(self.staff)
         r = self.client.get(reverse("panel_order", args=[self.order.public_id]))
         self.assertContains(r, "ESTIMATE")
-        self.assertContains(r, "target, not a proven cost")
+        self.assertContains(r, "product cost estimate")
         self.assertContains(r, "(provisional)")
