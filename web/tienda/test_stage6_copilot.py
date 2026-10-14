@@ -77,18 +77,20 @@ class ReadinessTests(TestCase):
 
     def test_missing_measurements_block(self):
         order = pay(make_order())
-        order.snapshot["dog"]["chest_girth_cm"] = None
-        order.save()
+        line = order.lines.get()
+        line.dog_snapshot["chest_girth_cm"] = None
+        line.save()
         self.assertIn("chest girth", self.check(order, "measurements")["detail"])
         self.assertFalse(services.order_readiness(order)["ready"])
 
     def test_required_neck_missing_blocks(self):
         order = pay(make_order())
-        order.snapshot["required_measurements"] = {"neck_girth": True, "validated": False}
-        order.save()
+        line = order.lines.get()
+        line.required_measurements = {"neck_girth": True, "validated": False}
+        line.save()
         self.assertIn("neck girth", self.check(order, "measurements")["detail"])
-        order.snapshot["dog"]["neck_girth_cm"] = "25.0"
-        order.save()
+        line.dog_snapshot["neck_girth_cm"] = "25.0"
+        line.save()
         self.assertTrue(self.check(order, "measurements")["ok"])
 
     def test_ambiguous_or_outside_size_needs_staff_confirmation(self):
@@ -319,8 +321,13 @@ class SheetAndPermissionsTests(TestCase):
         self.client.force_login(staff())
         page = self.client.get(reverse("panel_order", args=[order.public_id]))
         for text in ("Readiness", "Payment confirmed", "Order saved", "Workshop sheet",
-                     "Confirm size", "Save tracking", "Not ready to make"):
+                     "Save tracking", "Not ready to make"):
             self.assertContains(page, text)
+        # La talla solo se pide confirmar cuando la referencia no es concluyente.
+        self.assertNotContains(page, "Confirm size")
+        ambiguous = ambiguous_order()
+        page = self.client.get(reverse("panel_order", args=[ambiguous.public_id]))
+        self.assertContains(page, "Confirm size")
 
     def test_tracking_is_escaped_in_panel(self):
         order = make_order()

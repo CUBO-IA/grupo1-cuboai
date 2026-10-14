@@ -27,8 +27,24 @@ class DogProfile(models.Model):
         return f"{self.display_name} ({self.breed})"
 
 
+class Cart(models.Model):
+    """Carrito multiproducto. Cada línea es una cotización (Quote) con su
+    propio perfil de perro, producto, cantidad y talla."""
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Open"
+        ORDERED = "ordered", "Ordered"
+
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Cart {self.pk}"
+
+
 class Quote(models.Model):
-    """Cotización de un producto del catálogo para un perro."""
+    """Cotización de un producto del catálogo para un perro (línea de carrito)."""
 
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
@@ -43,6 +59,11 @@ class Quote(models.Model):
     product_slug = models.CharField(max_length=50)
     base_price = models.DecimalField(max_digits=10, decimal_places=2)  # precio unitario
     quantity = models.PositiveSmallIntegerField(default=1)
+    cart = models.ForeignKey(
+        Cart, null=True, blank=True, on_delete=models.SET_NULL, related_name="quotes"
+    )
+    # Talla elegida por el cliente para esta línea (texto de la tabla de referencia).
+    size_label = models.CharField(max_length=40, blank=True)
     # Nulo hasta que exista una regla comercial de precio por talla.
     total_price = models.DecimalField(
         max_digits=10, decimal_places=2, null=True, blank=True
@@ -104,10 +125,15 @@ class Order(models.Model):
         DELIVERED = "delivered", "Delivered"
 
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    # Pedido de una sola cotización (flujo directo) o, si se creó desde un
+    # carrito con varias líneas, nulo: ver `lines` y `cart`.
     quote = models.OneToOneField(
-        Quote, on_delete=models.PROTECT, related_name="order"
+        Quote, null=True, blank=True, on_delete=models.PROTECT, related_name="order"
     )
-    # Subtotal de productos = precio unitario × cantidad (sin envío).
+    cart = models.OneToOneField(
+        Cart, null=True, blank=True, on_delete=models.PROTECT, related_name="order"
+    )
+    # Subtotal de productos = suma de los subtotales de las líneas (sin envío).
     total = models.DecimalField(max_digits=10, decimal_places=2)
     quantity = models.PositiveSmallIntegerField(default=1)
     # True mientras no exista regla de precio por talla aprobada.
@@ -327,3 +353,55 @@ class ProductPaymentRule(models.Model):
 
     def __str__(self):
         return f"Payment rules {self.product_slug}"
+
+
+class OrderLine(models.Model):
+    """Línea de un pedido: un producto con su cantidad, talla, medidas y
+    estado de confección propios. Guarda copias históricas (snapshots)."""
+
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="lines")
+    quote = models.OneToOneField(
+        Quote, null=True, blank=True, on_delete=models.SET_NULL, related_name="order_line"
+    )
+    position = models.PositiveSmallIntegerField(default=0)
+    product_slug = models.CharField(max_length=50)
+    product_name = models.CharField(max_length=160)
+    quantity = models.PositiveSmallIntegerField(default=1)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
+    subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+    price_is_provisional = models.BooleanField(default=True)
+    discount_eligible = models.BooleanField(default=False)
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    size_selected = models.CharField(max_length=40, blank=True)  # elegida por el cliente
+    size_confirmed = models.CharField(max_length=40, blank=True)  # confirmada por el personal
+
+    dog_snapshot = models.JSONField(default=dict)
+    size_reference = models.JSONField(default=dict)
+    required_measurements = models.JSONField(default=dict)
+    cost_estimate = models.JSONField(null=True, blank=True)
+
+    production_status = models.CharField(
+        max_length=20,
+        choices=Order.ProductionStatus.choices,
+        default=Order.ProductionStatus.NOT_STARTED,
+    )
+
+    class Meta:
+        ordering = ["position", "pk"]
+
+    @property
+    def size_display(self):
+        """Talla a mostrar: confirmada por el personal, elegida o de referencia."""
+        if self.size_confirmed:
+            return self.size_confirmed
+        if self.size_selected:
+            return self.size_selected
+        ref = self.size_reference or {}
+        candidates = ref.get("candidates") or []
+        if ref.get("status") == "matched" and candidates:
+            return f"{candidates[0]} (reference)"
+        return "To be confirmed"
+
+    def __str__(self):
+        return f"{self.order.number} · {self.product_name} × {self.quantity}"

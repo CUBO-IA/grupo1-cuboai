@@ -50,7 +50,12 @@
         </form>
 
         <p class="fit-help">Prices are calculated by Weiner Kingdom on our server. Size-based adjustments will be added once approved. Shipping is confirmed separately and is not included.</p>
-        <a class="button" href="{% url 'checkout' quote.public_id %}">Continue to checkout</a>
+        {% if quote.size_label %}<p class="fit-help">Size chosen: <strong>{{ quote.size_label }}</strong></p>{% endif %}
+        <form method="post" action="{% url 'quote_to_cart' quote.public_id %}" style="display:inline">
+            {% csrf_token %}
+            <button class="button" type="submit">Add to cart</button>
+        </form>
+        <a class="button" href="{% url 'checkout' quote.public_id %}">Checkout this item only</a>
     </div>
 
     <aside class="fit-tips">

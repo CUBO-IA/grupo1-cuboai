@@ -72,13 +72,7 @@
         </form>
         {% endif %}
 
-        <h2>Size and tracking</h2>
-        <form method="post" class="panel-action">
-            {% csrf_token %}
-            <input type="hidden" name="form" value="size">
-            <input type="text" name="size_confirmed" maxlength="40" value="{{ order.size_confirmed }}" placeholder="Confirmed size (e.g. M)">
-            <button class="button" type="submit">Confirm size</button>
-        </form>
+        <h2>Tracking</h2>
         <form method="post" class="panel-action">
             {% csrf_token %}
             <input type="hidden" name="form" value="tracking">
@@ -95,16 +89,54 @@
             <dt>Address</dt><dd>{{ order.address }}, {{ order.city }}, {{ order.country }}</dd>
         </dl>
 
-        <h2>Product and measurements (snapshot)</h2>
-        <dl class="fit-summary">
-            <dt>Product</dt><dd>{{ snap.product.name }}{% if order.quantity > 1 %} × {{ order.quantity }}{% endif %}</dd>
-            <dt>Dog</dt><dd>{{ snap.dog.name|default:"Unnamed dog" }} ({{ snap.dog.breed }})</dd>
-            <dt>Weight</dt><dd>{{ snap.dog.weight_kg }} kg</dd>
-            <dt>Back length</dt><dd>{{ snap.dog.back_length_cm }} cm</dd>
-            <dt>Chest girth</dt><dd>{{ snap.dog.chest_girth_cm }} cm</dd>
-            <dt>Neck girth</dt><dd>{% if snap.dog.neck_girth_cm %}{{ snap.dog.neck_girth_cm }} cm{% else %}Not provided{% endif %}</dd>
-            <dt>Created</dt><dd>{{ order.created_at|date:"Y-m-d H:i" }}</dd>
-        </dl>
+        <h2>Products, measurements and confection</h2>
+        <p class="fit-help">Created {{ order.created_at|date:"Y-m-d H:i" }} · {{ order.quantity }} unit{{ order.quantity|pluralize }}</p>
+        {% for item in readiness.lines %}
+        {% with l=item.line %}
+        <div class="line-card">
+            <h3>{{ l.product_name }} × {{ l.quantity }}</h3>
+            <dl class="fit-summary">
+                <dt>Dog</dt><dd>{{ l.dog_snapshot.name|default:"Unnamed dog" }} ({{ l.dog_snapshot.breed }})</dd>
+                <dt>Weight</dt><dd>{{ l.dog_snapshot.weight_kg }} kg</dd>
+                <dt>Back length</dt><dd>{{ l.dog_snapshot.back_length_cm }} cm</dd>
+                <dt>Chest girth</dt><dd>{{ l.dog_snapshot.chest_girth_cm }} cm</dd>
+                <dt>Neck girth</dt><dd>{% if l.dog_snapshot.neck_girth_cm %}{{ l.dog_snapshot.neck_girth_cm }} cm{% else %}Not provided{% endif %}</dd>
+                <dt>Size</dt><dd>{{ l.size_display }}{% if l.size_selected %} <span class="fit-help">(chosen by customer)</span>{% endif %}</dd>
+                <dt>Line subtotal</dt><dd>${{ l.subtotal }}</dd>
+                <dt>Confection</dt><dd>{{ l.get_production_status_display }}</dd>
+                <dt>Ready</dt><dd>{% if item.ready %}Yes{% else %}No{% if item.blockers %} — {{ item.blockers|join:"; " }}{% endif %}{% endif %}</dd>
+            </dl>
+            {% if l.pk %}
+            {% if not item.size_ok %}
+            <form method="post" class="panel-action">
+                {% csrf_token %}
+                <input type="hidden" name="form" value="size">
+                <input type="hidden" name="line" value="{{ l.pk }}">
+                <input type="text" name="size_confirmed" maxlength="40" placeholder="Confirmed size for this product">
+                <button class="button" type="submit">Confirm size</button>
+            </form>
+            {% endif %}
+            {% if l.production_status == "not_started" %}
+            <form method="post" class="panel-action">
+                {% csrf_token %}
+                <input type="hidden" name="form" value="line_production">
+                <input type="hidden" name="line" value="{{ l.pk }}">
+                <input type="hidden" name="value" value="in_production">
+                <button class="button" type="submit">Start confection</button>
+            </form>
+            {% elif l.production_status == "in_production" %}
+            <form method="post" class="panel-action">
+                {% csrf_token %}
+                <input type="hidden" name="form" value="line_production">
+                <input type="hidden" name="line" value="{{ l.pk }}">
+                <input type="hidden" name="value" value="completed">
+                <button class="button" type="submit">Mark confection completed</button>
+            </form>
+            {% endif %}
+            {% endif %}
+        </div>
+        {% endwith %}
+        {% endfor %}
 
         <h2>History</h2>
         <ul class="panel-events">

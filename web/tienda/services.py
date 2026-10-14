@@ -75,16 +75,21 @@ def normalize_quantity(raw):
     return qty
 
 
-def create_quote(dog, slug, quantity=1):
-    """Crea (o reutiliza) la cotización provisional borrador de un perro/producto."""
+def create_quote(dog, slug, quantity=1, size_label=""):
+    """Crea (o reutiliza) la cotización provisional borrador de un perro/producto.
+
+    Solo se reutilizan borradores que no estén ya en un carrito.
+    """
     base_price = get_base_price(slug)
     quantity = normalize_quantity(quantity)
+    size_label = (size_label or "").strip()
     existing = (
         Quote.objects.filter(
             dog=dog,
             product_slug=slug,
             status=Quote.Status.DRAFT,
             pricing=Quote.Pricing.PROVISIONAL,
+            cart__isnull=True,
         )
         .order_by("-pk")
         .first()
@@ -98,11 +103,15 @@ def create_quote(dog, slug, quantity=1):
         if existing.quantity != quantity:
             existing.quantity = quantity
             changed.append("quantity")
+        if existing.size_label != size_label:
+            existing.size_label = size_label
+            changed.append("size_label")
         if changed:
             existing.save(update_fields=changed)
         return existing
     return Quote.objects.create(
-        dog=dog, product_slug=slug, base_price=base_price, quantity=quantity
+        dog=dog, product_slug=slug, base_price=base_price, quantity=quantity,
+        size_label=size_label,
     )
 
 
@@ -261,6 +270,9 @@ def apply_transition(order, field, new_value, user=None, note=""):
                 )
             order.payment_reference = note[:120]
         setattr(order, field, new_value)
+        if field == "production_status":
+            # La producción de todo el pedido se refleja en cada línea.
+            order.lines.update(production_status=new_value)
         discount_event = None
         if (
             field == "payment_status"
@@ -291,6 +303,39 @@ def apply_transition(order, field, new_value, user=None, note=""):
     return order
 
 
+def _estimated_cost_from_lines(order):
+    """Costo estimado = suma del presupuesto de cada línea × su cantidad.
+
+    Usa la copia del presupuesto guardada al confirmar; si falta, el
+    presupuesto vigente; y como último recurso el objetivo provisional.
+    """
+    lines = list(order.lines.all())
+    if not lines:
+        snap = order.snapshot or {}
+        frozen = snap.get("cost_estimate")
+        live = None if frozen else product_cost_summary((snap.get("product") or {}).get("slug", ""))
+        if frozen:
+            return Decimal(frozen["total_cost"]) * order.quantity, "product_estimate"
+        if live:
+            return live["total_cost"] * order.quantity, "product_estimate"
+        return TARGET_MANUFACTURING_COST, "target"
+    total, known = Decimal("0"), 0
+    for line in lines:
+        unit = None
+        if line.cost_estimate:
+            unit = Decimal(line.cost_estimate["total_cost"])
+        else:
+            live = product_cost_summary(line.product_slug)
+            if live:
+                unit = live["total_cost"]
+        if unit is None:
+            unit = TARGET_MANUFACTURING_COST
+        else:
+            known += 1
+        total += unit * line.quantity
+    return total, ("product_estimate" if known else "target")
+
+
 def cost_summary(order):
     """Costo y margen internos, indicando de dónde sale cada valor.
 
@@ -303,17 +348,7 @@ def cost_summary(order):
     elif order.estimated_cost is not None:
         cost, source = order.estimated_cost, "estimated"
     else:
-        frozen = (order.snapshot or {}).get("cost_estimate")
-        live = None if frozen else product_cost_summary(
-            (order.snapshot or {}).get("product", {}).get("slug", "")
-        )
-        if frozen:
-            cost = Decimal(frozen["total_cost"]) * order.quantity
-            source = "product_estimate"
-        elif live:
-            cost, source = live["total_cost"] * order.quantity, "product_estimate"
-        else:
-            cost, source = TARGET_MANUFACTURING_COST, "target"
+        cost, source = _estimated_cost_from_lines(order)
     revenue = order.amount_due
     margin = revenue - cost
     pct = (margin / revenue * 100).quantize(Decimal("0.1")) if revenue else None
@@ -556,15 +591,145 @@ def compute_discount(subtotal, payment_method, eligible=True):
     return Decimal("0"), Decimal("0.00")
 
 
-def create_order(quote, customer):
-    """Crea el pedido de una cotización; idempotente por cotización.
+class CartError(Exception):
+    def __init__(self, messages):
+        if isinstance(messages, str):
+            messages = [messages]
+        super().__init__("; ".join(messages))
+        self.messages = list(messages)
 
-    El total se recalcula aquí desde el catálogo; nada del navegador influye.
-    Si la cotización ya tiene pedido, devuelve (pedido_existente, False).
+
+def size_options():
+    """Tallas que el cliente puede elegir (tabla de referencia, no validada)."""
+    from .models import SizeRange
+
+    seen, out = set(), []
+    for row in SizeRange.objects.all():
+        if row.display not in seen:
+            seen.add(row.display)
+            out.append(row.display)
+    return out
+
+
+def _dog_snapshot(dog):
+    return {
+        "name": dog.name,
+        "breed": dog.breed,
+        "weight_kg": _dec(dog.weight_kg),
+        "back_length_cm": _dec(dog.back_length_cm),
+        "chest_girth_cm": _dec(dog.chest_girth_cm),
+        "neck_girth_cm": _dec(dog.neck_girth_cm),
+    }
+
+
+def _cost_snapshot(cost):
+    if cost is None:
+        return None
+    return {
+        "status": "estimate_not_verified",
+        "materials_total": _dec(cost["materials_total"]),
+        "labor_cost": _dec(cost["labor_cost"]),
+        "other_costs": _dec(cost["other_costs"]),
+        "total_cost": _dec(cost["total_cost"]),
+        "lines": [
+            {
+                "name": l["name"],
+                "unit": l["unit"],
+                "quantity": _dec(l["quantity"]),
+                "unit_price": _dec(l["unit_price"]),
+                "subtotal": _dec(l["subtotal"]),
+            }
+            for l in cost["lines"]
+        ],
+    }
+
+
+def _line_payload(quote, totals, position):
+    """Datos de una línea de pedido: copia histórica de la cotización aceptada."""
+    size = classify_size(quote.dog)
+    product = get_product(quote.product_slug)
+    return {
+        "quote": quote,
+        "position": position,
+        "product_slug": quote.product_slug,
+        "product_name": product["nombre"],
+        "quantity": quote.quantity,
+        "unit_price": totals["unit_price"],
+        "subtotal": totals["subtotal"],
+        "price_is_provisional": not totals["is_final"],
+        "discount_eligible": totals["discount_eligible"],
+        "discount_amount": totals["discount_amount"],
+        "size_selected": quote.size_label,
+        "dog_snapshot": _dog_snapshot(quote.dog),
+        "size_reference": {
+            "status": size["status"],
+            "candidates": [c["text"] for c in size["candidates"]],
+            "validated": size["validated"],
+            "note": "Reference only; size table not validated with tailoring.",
+        },
+        "required_measurements": measurement_requirements(quote.product_slug),
+        "cost_estimate": _cost_snapshot(product_cost_summary(quote.product_slug)),
+    }
+
+
+def _order_snapshot(payloads, totals_list, quotes, payment_method, rate, discount_total, subtotal):
+    """Snapshot del pedido. Los campos de primer nivel reflejan la primera
+    línea (compatibilidad); la fuente de verdad por producto es `lines`."""
+    first = payloads[0]
+    lines = []
+    for p, t, q in zip(payloads, totals_list, quotes):
+        lines.append(
+            {
+                "product": {"slug": p["product_slug"], "name": p["product_name"]},
+                "quantity": p["quantity"],
+                "unit_price": _dec(p["unit_price"]),
+                "subtotal": _dec(p["subtotal"]),
+                "base_price": _dec(t["unit_base_price"]),
+                "pricing": "provisional" if p["price_is_provisional"] else "final",
+                "size_selected": p["size_selected"],
+                "dog": p["dog_snapshot"],
+                "size_reference": p["size_reference"],
+                "required_measurements": p["required_measurements"],
+                "cost_estimate": p["cost_estimate"],
+                "discount_eligible": p["discount_eligible"],
+                "discount_amount": _dec(p["discount_amount"]),
+                "quote_public_id": str(q.public_id),
+            }
+        )
+    return {
+        "currency": "USD",
+        "product": {"slug": first["product_slug"], "name": first["product_name"]},
+        "base_price": _dec(totals_list[0]["unit_base_price"]),
+        "total": _dec(subtotal),
+        "pricing": "provisional" if any(p["price_is_provisional"] for p in payloads) else "final",
+        "quantity": first["quantity"],
+        "unit_price": _dec(first["unit_price"]),
+        "subtotal": _dec(subtotal),
+        "shipping": {"status": "pending", "amount": None},
+        "dog": first["dog_snapshot"],
+        "quote_public_id": str(quotes[0].public_id),
+        "size_reference": first["size_reference"],
+        "required_measurements": first["required_measurements"],
+        "cost_estimate": first["cost_estimate"],
+        "payment_method": payment_method,
+        "discount": {
+            "rate": _dec(rate),
+            "amount": _dec(discount_total),
+            "status": "pending_verification" if discount_total > 0 else "none",
+        },
+        "lines": lines,
+    }
+
+
+def _create_order(quotes, customer, cart=None):
+    """Crea un pedido con una línea por cotización; idempotente.
+
+    Todos los importes se recalculan aquí desde el catálogo; nada del
+    navegador influye. Devuelve (pedido, creado).
     """
     from django.db import IntegrityError, transaction
 
-    from .models import Order
+    from .models import Cart, Order, OrderLine
 
     customer = dict(customer)
     payment_method = customer.pop("payment_method", "unspecified")
@@ -572,92 +737,165 @@ def create_order(quote, customer):
         payment_method = "unspecified"
 
     with transaction.atomic():
-        quote = Quote.objects.select_for_update().select_related("dog").get(pk=quote.pk)
-        existing = Order.objects.filter(quote=quote).first()
+        ids = [q.pk for q in quotes]
+        locked = list(
+            Quote.objects.select_for_update().select_related("dog").filter(pk__in=ids).order_by("pk")
+        )
+        if len(locked) != len(ids) or not locked:
+            raise QuoteNotOrderable("missing")
+        if cart is not None:
+            cart = Cart.objects.select_for_update().get(pk=cart.pk)
+            existing = Order.objects.filter(cart=cart).first()
+        else:
+            existing = Order.objects.filter(quote=locked[0]).first()
         if existing:
             return existing, False
-        if quote.status == Quote.Status.CANCELLED:
-            raise QuoteNotOrderable("cancelled")
 
-        totals = compute_totals(quote, payment_method)
-        base_price = totals["unit_base_price"]
-        is_final = totals["is_final"]
-        total = totals["subtotal"]
-        product = get_product(quote.product_slug)
-        dog = quote.dog
-        rate, discount_amount = totals["discount_rate"], totals["discount_amount"]
-        cost = product_cost_summary(quote.product_slug)
-        size = classify_size(dog)
-        snapshot = {
-            "currency": "USD",
-            "product": {"slug": quote.product_slug, "name": product["nombre"]},
-            "base_price": _dec(base_price),
-            "total": _dec(total),
-            "pricing": "final" if is_final else "provisional",
-            "quantity": quote.quantity,
-            "unit_price": _dec(totals["unit_price"]),
-            "subtotal": _dec(total),
-            "shipping": {"status": "pending", "amount": None},
-            "dog": {
-                "name": dog.name,
-                "breed": dog.breed,
-                "weight_kg": _dec(dog.weight_kg),
-                "back_length_cm": _dec(dog.back_length_cm),
-                "chest_girth_cm": _dec(dog.chest_girth_cm),
-                "neck_girth_cm": _dec(dog.neck_girth_cm),
-            },
-            "quote_public_id": str(quote.public_id),
-            "size_reference": {
-                "status": size["status"],
-                "candidates": [c["text"] for c in size["candidates"]],
-                "validated": size["validated"],
-                "note": "Reference only; size table not validated with tailoring.",
-            },
-            "required_measurements": measurement_requirements(quote.product_slug),
-            "cost_estimate": None if cost is None else {
-                "status": "estimate_not_verified",
-                "materials_total": _dec(cost["materials_total"]),
-                "labor_cost": _dec(cost["labor_cost"]),
-                "other_costs": _dec(cost["other_costs"]),
-                "total_cost": _dec(cost["total_cost"]),
-                "lines": [
-                    {
-                        "name": l["name"],
-                        "unit": l["unit"],
-                        "quantity": _dec(l["quantity"]),
-                        "unit_price": _dec(l["unit_price"]),
-                        "subtotal": _dec(l["subtotal"]),
-                    }
-                    for l in cost["lines"]
-                ],
-            },
-            "payment_method": payment_method,
-            "discount": {
-                "rate": _dec(rate),
-                "amount": _dec(discount_amount),
-                "status": "pending_verification" if rate else "none",
-            },
-        }
+        for q in locked:
+            if q.status == Quote.Status.CANCELLED:
+                raise QuoteNotOrderable("cancelled")
+            if q.status == Quote.Status.ACCEPTED:
+                raise QuoteNotOrderable("already ordered")
+            if q.product_slug not in PRODUCTOS:
+                raise QuoteNotOrderable("unavailable")
+            missing = missing_measurements(q.dog, q.product_slug)
+            if missing:
+                raise QuoteNotOrderable("missing measurements")
+
+        totals_list = [compute_totals(q, payment_method) for q in locked]
+        payloads = [_line_payload(q, t, i) for i, (q, t) in enumerate(zip(locked, totals_list), 1)]
+        subtotal = sum((t["subtotal"] for t in totals_list), Decimal("0"))
+        discount_total = sum((t["discount_amount"] for t in totals_list), Decimal("0"))
+        rate = max((t["discount_rate"] for t in totals_list), default=Decimal("0"))
+        if discount_total <= 0:
+            rate = Decimal("0")
+        snapshot = _order_snapshot(
+            payloads, totals_list, locked, payment_method, rate, discount_total, subtotal
+        )
         try:
             with transaction.atomic():
                 order = Order.objects.create(
-                    quote=quote,
-                    total=total,
-                    quantity=quote.quantity,
-                    price_is_provisional=not is_final,
+                    quote=locked[0] if len(locked) == 1 else None,
+                    cart=cart,
+                    total=subtotal,
+                    quantity=sum(q.quantity for q in locked),
+                    price_is_provisional=any(p["price_is_provisional"] for p in payloads),
                     snapshot=snapshot,
                     payment_method=payment_method,
                     discount_rate=rate,
-                    discount_amount=discount_amount,
-                    discount_status="pending_verification" if rate else "none",
+                    discount_amount=discount_total,
+                    discount_status="pending_verification" if discount_total > 0 else "none",
+                    size_confirmed="",
                     **customer,
                 )
         except IntegrityError:
-            return Order.objects.get(quote=quote), False
-        quote.base_price = base_price
-        quote.status = Quote.Status.ACCEPTED
-        quote.save(update_fields=["base_price", "status"])
+            if cart is not None:
+                return Order.objects.get(cart=cart), False
+            return Order.objects.get(quote=locked[0]), False
+        for payload in payloads:
+            OrderLine.objects.create(order=order, **payload)
+        for q, t in zip(locked, totals_list):
+            q.base_price = t["unit_base_price"]
+            q.status = Quote.Status.ACCEPTED
+            q.save(update_fields=["base_price", "status"])
+        if cart is not None:
+            cart.status = Cart.Status.ORDERED
+            cart.save(update_fields=["status"])
         return order, True
+
+
+def create_order(quote, customer):
+    """Pedido de una sola cotización (flujo directo)."""
+    return _create_order([quote], customer)
+
+
+def create_order_from_cart(cart, customer):
+    """Un solo checkout para todas las líneas del carrito."""
+    from .models import Order
+
+    existing = Order.objects.filter(cart=cart).first()
+    if existing:
+        return existing, False
+    quotes = list(cart.quotes.filter(status=Quote.Status.DRAFT).order_by("pk"))
+    if not quotes:
+        raise CartError("Your cart is empty.")
+    return _create_order(quotes, customer, cart=cart)
+
+
+# --- Carrito ------------------------------------------------------------------
+
+def get_open_cart(public_id):
+    from .models import Cart
+
+    if not public_id:
+        return None
+    try:
+        return Cart.objects.filter(public_id=public_id, status=Cart.Status.OPEN).first()
+    except (ValueError, TypeError):
+        return None
+
+
+def add_to_cart(cart, dog, slug, quantity=1, size_label=""):
+    """Añade (o suma a) una línea del carrito. El precio sale del catálogo."""
+    get_base_price(slug)  # lanza UnknownProduct / InvalidCatalogPrice
+    quantity = normalize_quantity(quantity)
+    size_label = (size_label or "").strip()
+    if size_label and size_label not in size_options():
+        raise CartError("Choose a size from the list.")
+    missing = missing_measurements(dog, slug)
+    if missing:
+        raise CartError("This garment needs: " + ", ".join(m.replace("_", " ") for m in missing) + ".")
+    existing = cart.quotes.filter(
+        dog=dog, product_slug=slug, size_label=size_label, status=Quote.Status.DRAFT
+    ).first()
+    if existing:
+        existing.quantity = normalize_quantity(existing.quantity + quantity)
+        existing.base_price = get_base_price(slug)
+        existing.save(update_fields=["quantity", "base_price"])
+        return existing
+    return Quote.objects.create(
+        dog=dog, product_slug=slug, base_price=get_base_price(slug),
+        quantity=quantity, cart=cart, size_label=size_label,
+    )
+
+
+def cart_lines(cart):
+    return list(cart.quotes.filter(status=Quote.Status.DRAFT).select_related("dog").order_by("pk"))
+
+
+def cart_summary(cart, payment_method="unspecified"):
+    """Líneas y totales del carrito, calculados en el servidor."""
+    lines, subtotal, discount, units = [], Decimal("0"), Decimal("0"), 0
+    provisional = False
+    for quote in cart_lines(cart):
+        if quote.product_slug not in PRODUCTOS:
+            continue
+        t = compute_totals(quote, payment_method)
+        product = get_product(quote.product_slug)
+        size = classify_size(quote.dog)
+        lines.append(
+            {
+                "quote": quote,
+                "product": product,
+                "totals": t,
+                "size": size,
+                "missing": missing_measurements(quote.dog, quote.product_slug),
+            }
+        )
+        subtotal += t["subtotal"]
+        discount += t["discount_amount"]
+        units += quote.quantity
+        provisional = provisional or not t["is_final"]
+    return {
+        "lines": lines,
+        "units": units,
+        "subtotal": _money(subtotal),
+        "discount_amount": _money(discount),
+        "total_if_discount": _money(subtotal - discount),
+        "is_provisional": provisional,
+        "shipping": None,
+        "has_missing": any(l["missing"] for l in lines),
+    }
 
 
 # --- Medidas y talla de referencia (Smart Fit) --------------------------------
@@ -758,7 +996,8 @@ def update_measurement_config(post, user=None):
 # --- Métodos de pago (panel) ---------------------------------------------------
 
 def set_payment_method(order, method, user=None):
-    """Cambia el método de pago de un pedido SIN pagar y recalcula el descuento."""
+    """Cambia el método de pago de un pedido SIN pagar y recalcula el descuento
+    de cada línea."""
     from django.db import transaction
 
     from .models import Order, OrderEvent
@@ -774,11 +1013,25 @@ def set_payment_method(order, method, user=None):
         old = order.payment_method
         if old == method:
             return order
-        slug = (order.snapshot or {}).get("product", {}).get("slug", "")
-        rate, amount = compute_discount(order.total, method, discount_eligible(slug))
+        lines = list(order.lines.all())
+        total_discount, rate = Decimal("0"), Decimal("0")
+        if lines:
+            for line in lines:
+                eligible = discount_eligible(line.product_slug)
+                r, amount = compute_discount(line.subtotal, method, eligible)
+                line.discount_eligible = eligible
+                line.discount_amount = amount
+                line.save(update_fields=["discount_eligible", "discount_amount"])
+                total_discount += amount
+                rate = max(rate, r)
+        else:
+            slug = (order.snapshot or {}).get("product", {}).get("slug", "")
+            rate, total_discount = compute_discount(order.total, method, discount_eligible(slug))
+        if total_discount <= 0:
+            rate = Decimal("0")
         order.payment_method = method
         order.discount_rate = rate
-        order.discount_amount = amount
+        order.discount_amount = total_discount
         order.discount_status = "pending_verification" if rate else "none"
         order.save()
         OrderEvent.objects.create(
@@ -814,19 +1067,75 @@ STAGE_LABELS = {
 }
 
 
+def _legacy_line(order):
+    """Pedido sin líneas (datos antiguos): línea virtual desde el snapshot."""
+    from types import SimpleNamespace
+
+    snap = order.snapshot or {}
+    return SimpleNamespace(
+        pk=None,
+        product_name=(snap.get("product") or {}).get("name", ""),
+        quantity=order.quantity,
+        dog_snapshot=snap.get("dog") or {},
+        size_reference=snap.get("size_reference") or {},
+        required_measurements=snap.get("required_measurements") or {},
+        size_selected="",
+        size_confirmed=order.size_confirmed,
+        production_status=order.production_status,
+    )
+
+
+def _line_checks(line):
+    """Medidas y talla de UNA línea. Devuelve (medidas_ok, detalle, talla_ok, detalle)."""
+    dog = line.dog_snapshot or {}
+    required = line.required_measurements or {}
+    missing = [
+        label
+        for key, label in (
+            ("weight_kg", "weight"),
+            ("back_length_cm", "back length"),
+            ("chest_girth_cm", "chest girth"),
+        )
+        if not dog.get(key)
+    ]
+    if required.get("neck_girth") and not dog.get("neck_girth_cm"):
+        missing.append("neck girth")
+
+    ref = line.size_reference or {}
+    status = ref.get("status")
+    candidates = ref.get("candidates") or []
+    selected = (line.size_selected or "").strip()
+    confirmed = (line.size_confirmed or "").strip()
+    if confirmed:
+        size_ok, size_detail = True, ""
+    elif selected:
+        size_ok = selected in candidates
+        size_detail = "" if size_ok else (
+            f"customer chose {selected}; measurements suggest "
+            + (", ".join(candidates) if candidates else "a size outside the table")
+            + " — staff must confirm the size"
+        )
+    else:
+        size_ok = status == "matched"
+        size_detail = "" if size_ok else (
+            "reference size is " + ("ambiguous" if status == "ambiguous" else "outside the table")
+            + " — staff must confirm the size"
+        )
+    return not missing, ", ".join(missing), size_ok, size_detail
+
+
 def order_readiness(order):
     """Indicadores verificables de un pedido, separados entre sí.
 
     - saved: el pedido existe.
     - payment: pago registrado con un método verificable (no demo).
-    - info: entrega completa, medidas completas y talla clara o confirmada.
+    - info: entrega completa y, en CADA línea, medidas completas y talla clara
+      o confirmada.
     - ready: pago + información validada + pedido no cancelado.
-    Nada aquí inventa datos: solo comprueba lo guardado.
+    `lines` detalla la preparación de cada producto. Nada aquí inventa datos.
     """
-    snap = order.snapshot or {}
-    dog = snap.get("dog") or {}
-    required = snap.get("required_measurements") or {}
-    size = snap.get("size_reference") or {}
+    lines = list(order.lines.all()) or [_legacy_line(order)]
+    multi = len(lines) > 1
 
     paid = order.payment_status == "paid" and order.payment_method not in DEMO_METHODS
     missing_delivery = [
@@ -841,19 +1150,33 @@ def order_readiness(order):
         )
         if not (value or "").strip()
     ]
-    missing_measures = [
-        label
-        for key, label in (
-            ("weight_kg", "weight"),
-            ("back_length_cm", "back length"),
-            ("chest_girth_cm", "chest girth"),
+    cancelled = order.status == "cancelled"
+
+    line_results, meas_details, size_details = [], [], []
+    for line in lines:
+        m_ok, m_detail, s_ok, s_detail = _line_checks(line)
+        prefix = f"{line.product_name}: " if multi else ""
+        if m_detail:
+            meas_details.append(prefix + m_detail)
+        if s_detail:
+            size_details.append(prefix + s_detail)
+        blockers = []
+        if not m_ok:
+            blockers.append(f"missing {m_detail}")
+        if not s_ok:
+            blockers.append(s_detail)
+        line_results.append(
+            {
+                "line": line,
+                "measurements_ok": m_ok,
+                "size_ok": s_ok,
+                "info_ok": m_ok and s_ok,
+                "blockers": blockers,
+                "ready": paid and not missing_delivery and m_ok and s_ok and not cancelled,
+            }
         )
-        if not dog.get(key)
-    ]
-    if required.get("neck_girth") and not dog.get("neck_girth_cm"):
-        missing_measures.append("neck girth")
-    size_status = size.get("status")
-    size_ok = size_status == "matched" or bool((order.size_confirmed or "").strip())
+    meas_ok = all(r["measurements_ok"] for r in line_results)
+    size_ok = all(r["size_ok"] for r in line_results)
 
     checks = [
         {"key": "saved", "ok": True, "label": "Order saved", "detail": ""},
@@ -875,22 +1198,18 @@ def order_readiness(order):
         },
         {
             "key": "measurements",
-            "ok": not missing_measures,
+            "ok": meas_ok,
             "label": "Measurements complete",
-            "detail": ", ".join(missing_measures),
+            "detail": "; ".join(meas_details),
         },
         {
             "key": "size",
             "ok": size_ok,
             "label": "Size clear or confirmed by staff",
-            "detail": "" if size_ok else (
-                "Reference size is " + ("ambiguous" if size_status == "ambiguous" else "outside the table")
-                + " — staff must confirm the size"
-            ),
+            "detail": "; ".join(size_details),
         },
     ]
-    info_valid = not missing_delivery and not missing_measures and size_ok
-    cancelled = order.status == "cancelled"
+    info_valid = not missing_delivery and meas_ok and size_ok
     ready = paid and info_valid and not cancelled
     blockers = []
     if cancelled:
@@ -905,6 +1224,7 @@ def order_readiness(order):
         "info_validated": info_valid,
         "ready": ready,
         "blockers": blockers,
+        "lines": line_results,
     }
 
 
@@ -959,11 +1279,12 @@ def stage_counts():
     ]
 
 
-def confirm_size(order, label, user=None):
-    """El personal confirma la talla (cuando la de referencia no es concluyente)."""
+def confirm_size(order, label, user=None, line=None):
+    """El personal confirma la talla de una línea (cuando la de referencia o la
+    elegida por el cliente no es concluyente)."""
     from django.db import transaction
 
-    from .models import Order, OrderEvent
+    from .models import Order, OrderEvent, OrderLine
 
     label = (label or "").strip()
     if not label:
@@ -974,14 +1295,34 @@ def confirm_size(order, label, user=None):
         order = Order.objects.select_for_update().get(pk=order.pk)
         if order.status == "cancelled":
             raise TransitionError("Cancelled orders cannot change state.")
-        if order.production_status != "not_started":
+        lines = list(order.lines.select_for_update().all())
+        if line is not None:
+            target = next((l for l in lines if l.pk == getattr(line, "pk", line)), None)
+            if target is None:
+                raise TransitionError("That line does not belong to this order.")
+        elif len(lines) == 1:
+            target = lines[0]
+        elif not lines:
+            target = None
+        else:
+            raise TransitionError("Choose which product the size applies to.")
+        if target is not None:
+            if target.production_status != "not_started":
+                raise TransitionError("The size cannot change once production has started.")
+            old = target.size_confirmed
+            target.size_confirmed = label
+            target.save(update_fields=["size_confirmed"])
+        elif order.production_status != "not_started":
             raise TransitionError("The size cannot change once production has started.")
-        old = order.size_confirmed
-        order.size_confirmed = label
-        order.save(update_fields=["size_confirmed"])
+        else:
+            old = order.size_confirmed
+        if len(lines) <= 1:
+            order.size_confirmed = label  # espejo del pedido de una sola línea
+            order.save(update_fields=["size_confirmed"])
         OrderEvent.objects.create(
-            order=order, field="size_confirmed", from_value=old[:20], to_value=label[:20],
-            note=label, by=user if getattr(user, "pk", None) else None,
+            order=order, field="size_confirmed", from_value=(old or "")[:20], to_value=label[:20],
+            note=(f"{target.product_name}: " if target is not None and len(lines) > 1 else "") + label,
+            by=user if getattr(user, "pk", None) else None,
         )
     return order
 
@@ -1012,3 +1353,66 @@ def set_tracking(order, number, carrier="", user=None):
                 note=carrier, by=user if getattr(user, "pk", None) else None,
             )
     return order
+
+
+# --- Producción por línea -------------------------------------------------------
+
+LINE_PRODUCTION_FLOW = {
+    "not_started": ["in_production"],
+    "in_production": ["completed"],
+}
+
+
+def aggregate_production(statuses):
+    statuses = list(statuses)
+    if statuses and all(x == "completed" for x in statuses):
+        return "completed"
+    if not statuses or all(x == "not_started" for x in statuses):
+        return "not_started"
+    return "in_production"
+
+
+def apply_line_transition(line, new_value, user=None, note=""):
+    """Cambia la producción de UNA línea (mismas reglas que el pedido completo)."""
+    from django.db import transaction
+
+    from .models import Order, OrderEvent, OrderLine
+
+    note = (note or "").strip()
+    with transaction.atomic():
+        line = OrderLine.objects.select_for_update().get(pk=line.pk)
+        order = Order.objects.select_for_update().get(pk=line.order_id)
+        current = line.production_status
+        if new_value not in LINE_PRODUCTION_FLOW.get(current, []):
+            raise TransitionError(f"Cannot change production from {current} to {new_value}.")
+        if order.status == "cancelled":
+            raise TransitionError("Cancelled orders cannot change state.")
+        if new_value == "in_production":
+            if order.payment_status != "paid":
+                raise TransitionError("Payment must be verified before production can start.")
+            readiness = order_readiness(order)
+            result = next((r for r in readiness["lines"] if r["line"].pk == line.pk), None)
+            problems = []
+            delivery = next((c for c in readiness["checks"] if c["key"] == "delivery"), None)
+            if delivery and not delivery["ok"]:
+                problems.append(f"delivery details incomplete ({delivery['detail']})")
+            if result is not None:
+                problems.extend(result["blockers"])
+            if problems:
+                raise TransitionError("Cannot start production: " + "; ".join(problems) + ".")
+        line.production_status = new_value
+        line.save(update_fields=["production_status"])
+        new_order_status = aggregate_production(order.lines.values_list("production_status", flat=True))
+        previous_order_status = order.production_status
+        if new_order_status != previous_order_status:
+            order.production_status = new_order_status
+            order.save(update_fields=["production_status"])
+        OrderEvent.objects.create(
+            order=order,
+            field="line_production",
+            from_value=current,
+            to_value=new_value,
+            note=(f"{line.product_name}" + (f" — {note}" if note else ""))[:200],
+            by=user if getattr(user, "pk", None) else None,
+        )
+    return line

@@ -1,0 +1,89 @@
+{% extends "tienda/base.html" %}
+{% load static %}
+{% block title %}Weiner Kingdom | Cart{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <p class="eyebrow">YOUR CART</p>
+    <h1>Cart</h1>
+</section>
+
+<section class="panel-wrap">
+{% if not summary or not summary.lines %}
+    <div class="fit-form">
+        <p>Your cart is empty.</p>
+        <a class="button" href="{% url 'productos' %}">Browse products</a>
+        <a class="button" href="{% url 'smart_fit' %}">Start Smart Fit</a>
+    </div>
+{% else %}
+    <p class="fit-help">Each product keeps its own measurements and size. Prices are calculated on our server.</p>
+
+    <div class="cart-lines">
+    {% for l in summary.lines %}
+        <article class="cart-line">
+            <img src="{% static l.product.imagen %}" alt="{{ l.product.nombre }}">
+            <div class="cart-line-body">
+                <h2>{{ l.product.nombre }}</h2>
+                <p class="fit-help">
+                    For {{ l.quote.dog.display_name }} ({{ l.quote.dog.breed }}) —
+                    back {{ l.quote.dog.back_length_cm }} cm, chest {{ l.quote.dog.chest_girth_cm }} cm{% if l.quote.dog.neck_girth_cm %}, neck {{ l.quote.dog.neck_girth_cm }} cm{% endif %}.
+                    <a href="{% url 'smart_fit_editar' l.quote.dog.public_id %}?producto={{ l.quote.product_slug }}&amp;next=cart">Edit measurements</a>
+                </p>
+                {% if l.missing %}
+                <p class="fit-alert" role="alert">This garment needs: {{ l.missing|join:", " }}. <a href="{% url 'smart_fit_editar' l.quote.dog.public_id %}?producto={{ l.quote.product_slug }}&amp;next=cart">Add it</a></p>
+                {% endif %}
+                <p class="fit-help">
+                    Reference size:
+                    {% if l.size.status == "matched" %}{{ l.size.candidates.0.text }}
+                    {% elif l.size.status == "ambiguous" %}between sizes — team confirms
+                    {% else %}outside the table — team confirms{% endif %}
+                </p>
+                <form method="post" action="{% url 'cart_line_update' l.quote.public_id %}" class="cart-line-form">
+                    {% csrf_token %}
+                    <label>Size
+                        <select name="size">
+                            <option value="">Reference size</option>
+                            {% for opt in size_options %}<option value="{{ opt }}" {% if opt == l.quote.size_label %}selected{% endif %}>{{ opt }}</option>{% endfor %}
+                        </select>
+                    </label>
+                    <label>Qty
+                        <select name="quantity">
+                            {% for n in quantities %}<option value="{{ n }}" {% if n == l.quote.quantity %}selected{% endif %}>{{ n }}</option>{% endfor %}
+                        </select>
+                    </label>
+                    <button class="button" type="submit">Update</button>
+                </form>
+                {% if line_error and line_error.id == l.quote.public_id|stringformat:"s" %}<p class="fit-error">{{ line_error.message }}</p>{% endif %}
+                <form method="post" action="{% url 'cart_line_remove' l.quote.public_id %}">
+                    {% csrf_token %}
+                    <button class="link-button" type="submit">Remove</button>
+                </form>
+            </div>
+            <div class="cart-line-price">
+                <span class="fit-help">${{ l.totals.unit_price }} × {{ l.quote.quantity }}</span>
+                <strong>${{ l.totals.subtotal }}</strong>
+            </div>
+        </article>
+    {% endfor %}
+    </div>
+
+    <div class="fit-form cart-totals">
+        <dl class="fit-summary">
+            <dt>Products subtotal{% if summary.is_provisional %} (provisional){% endif %}</dt><dd><strong>${{ summary.subtotal }}</strong></dd>
+            {% if summary.discount_amount %}
+            <dt>Bitcoin discount (15%)</dt><dd>-${{ summary.discount_amount }} <span class="fit-help">only if you pay with Bitcoin; applied once payment is verified</span></dd>
+            {% endif %}
+            <dt>Shipping</dt><dd>To be confirmed</dd>
+        </dl>
+        {% if summary.is_provisional %}
+        <p class="fit-alert" role="status">Provisional prices: size-based adjustments are not applied yet. Our team will review your order and confirm final prices before any payment.</p>
+        {% endif %}
+        {% if summary.has_missing %}
+        <p class="fit-alert" role="alert">Complete the missing measurements before checkout.</p>
+        {% else %}
+        <a class="button" href="{% url 'cart_checkout' %}">Checkout ({{ summary.units }} item{{ summary.units|pluralize }})</a>
+        {% endif %}
+        <a class="button" href="{% url 'productos' %}">Add more products</a>
+    </div>
+{% endif %}
+</section>
+{% endblock %}

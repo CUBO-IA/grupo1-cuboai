@@ -15,6 +15,7 @@
         <a href="{% url 'productos' %}">Products</a>
         <a href="{% url 'smart_fit' %}">Smart Fit</a>
         <a href="{% url 'assistant' %}">Guide</a>
+        <a href="{% url 'cart' %}">Cart{% if cart_units %} ({{ cart_units }}){% endif %}</a>
     </nav>
 </header>
 

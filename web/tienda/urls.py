@@ -15,6 +15,12 @@ urlpatterns = [
     path("quote/<uuid:public_id>/", views.smart_quote, name="smart_quote"),
     path("quote/<uuid:public_id>/cantidad/", views.smart_quote_cantidad, name="smart_quote_cantidad"),
     path("quote/<uuid:public_id>/checkout/", views.checkout, name="checkout"),
+    path("cart/", views.cart_view, name="cart"),
+    path("cart/add/", views.cart_add, name="cart_add"),
+    path("cart/checkout/", views.cart_checkout, name="cart_checkout"),
+    path("cart/line/<uuid:public_id>/", views.cart_line_update, name="cart_line_update"),
+    path("cart/line/<uuid:public_id>/remove/", views.cart_line_remove, name="cart_line_remove"),
+    path("quote/<uuid:public_id>/to-cart/", views.quote_to_cart, name="quote_to_cart"),
     path("order/<uuid:public_id>/", views.order_detail, name="order_detail"),
     path(
         "panel/login/",

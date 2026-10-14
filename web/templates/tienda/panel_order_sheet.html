@@ -15,32 +15,9 @@
         <dt>Number</dt><dd>{{ order.number }}</dd>
         <dt>Date</dt><dd>{{ order.created_at|date:"Y-m-d H:i" }}</dd>
         <dt>Order status</dt><dd>{{ order.get_status_display }}</dd>
+        <dt>Items</dt><dd>{{ lines|length }} product{{ lines|length|pluralize }} · {{ order.quantity }} unit{{ order.quantity|pluralize }}</dd>
         <dt>Ready to make</dt><dd>{% if readiness.ready %}Yes{% else %}No — {{ readiness.blockers|join:"; " }}{% endif %}</dd>
-    </dl>
-
-    <h2>Product</h2>
-    <dl class="fit-summary">
-        <dt>Product</dt><dd>{{ snap.product.name }}</dd>
-        <dt>Quantity</dt><dd>{{ order.quantity }}</dd>
-        <dt>Personalization</dt><dd>None recorded</dd>
         <dt>Pricing status</dt><dd>{% if order.price_is_provisional %}Provisional — final price to be confirmed{% else %}Final{% endif %}</dd>
-    </dl>
-
-    <h2>Dog and confirmed measurements</h2>
-    <dl class="fit-summary">
-        <dt>Dog</dt><dd>{{ snap.dog.name|default:"Unnamed dog" }} ({{ snap.dog.breed }})</dd>
-        <dt>Weight</dt><dd>{{ snap.dog.weight_kg }} kg</dd>
-        <dt>Back length</dt><dd>{{ snap.dog.back_length_cm }} cm</dd>
-        <dt>Chest girth</dt><dd>{{ snap.dog.chest_girth_cm }} cm</dd>
-        <dt>Neck girth</dt><dd>{% if snap.dog.neck_girth_cm %}{{ snap.dog.neck_girth_cm }} cm{% else %}Not provided{% endif %}</dd>
-        <dt>Reference size</dt>
-        <dd>
-            {% if snap.size_reference.status == "matched" %}{{ snap.size_reference.candidates.0 }}
-            {% elif snap.size_reference.status == "ambiguous" %}Ambiguous: {{ snap.size_reference.candidates|join:", " }}
-            {% else %}Outside the reference table{% endif %}
-            <span class="fit-help">Reference table not validated with tailoring.</span>
-        </dd>
-        <dt>Size confirmed by staff</dt><dd>{% if order.size_confirmed %}{{ order.size_confirmed }}{% else %}—{% endif %}</dd>
     </dl>
 
     <h2>Delivery</h2>
@@ -52,9 +29,56 @@
         <dt>Tracking</dt><dd>{% if order.tracking_number %}{{ order.tracking_number }}{% if order.tracking_carrier %} ({{ order.tracking_carrier }}){% endif %}{% else %}—{% endif %}</dd>
     </dl>
 
+    {% for item in lines %}
+    {% with l=item.line %}
+    <section class="sheet-line">
+        <h2>{{ forloop.counter }}. {{ l.product_name }} × {{ l.quantity }}</h2>
+        <dl class="fit-summary">
+            <dt>Quantity</dt><dd>{{ l.quantity }}</dd>
+            <dt>Confection status</dt><dd>{{ l.get_production_status_display }}</dd>
+            <dt>Personalization</dt><dd>None recorded</dd>
+            <dt>Dog</dt><dd>{{ l.dog_snapshot.name|default:"Unnamed dog" }} ({{ l.dog_snapshot.breed }})</dd>
+            <dt>Weight</dt><dd>{{ l.dog_snapshot.weight_kg }} kg</dd>
+            <dt>Back length</dt><dd>{{ l.dog_snapshot.back_length_cm }} cm</dd>
+            <dt>Chest girth</dt><dd>{{ l.dog_snapshot.chest_girth_cm }} cm</dd>
+            <dt>Neck girth</dt><dd>{% if l.dog_snapshot.neck_girth_cm %}{{ l.dog_snapshot.neck_girth_cm }} cm{% else %}Not provided{% endif %}</dd>
+            <dt>Size chosen by customer</dt><dd>{% if l.size_selected %}{{ l.size_selected }}{% else %}—{% endif %}</dd>
+            <dt>Reference size</dt>
+            <dd>
+                {% if l.size_reference.status == "matched" %}{{ l.size_reference.candidates.0 }}
+                {% elif l.size_reference.status == "ambiguous" %}Ambiguous: {{ l.size_reference.candidates|join:", " }}
+                {% else %}Outside the reference table{% endif %}
+                <span class="fit-help">Reference table not validated with tailoring.</span>
+            </dd>
+            <dt>Size confirmed by staff</dt><dd>{% if l.size_confirmed %}{{ l.size_confirmed }}{% else %}—{% endif %}</dd>
+            <dt>Unit price</dt><dd>${{ l.unit_price }}</dd>
+            <dt>Line subtotal</dt><dd>${{ l.subtotal }}</dd>
+            <dt>Line ready</dt><dd>{% if item.ready %}Yes{% else %}No{% if item.blockers %} — {{ item.blockers|join:"; " }}{% endif %}{% endif %}</dd>
+        </dl>
+
+        <h3>Materials (estimate, per unit — internal)</h3>
+        <p class="fit-alert no-print" role="status">ESTIMATE — not verified. Costs are internal and never shown to the customer.</p>
+        {% if l.cost_estimate %}
+        <div class="panel-table-wrap">
+        <table class="panel-table">
+            <thead><tr><th>Material</th><th>Unit</th><th>Consumption</th><th>Unit price</th><th>Subtotal</th></tr></thead>
+            <tbody>
+            {% for m in l.cost_estimate.lines %}
+                <tr><td>{{ m.name }}</td><td>{{ m.unit }}</td><td>{{ m.quantity }}</td><td>${{ m.unit_price }}</td><td>${{ m.subtotal }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        <p class="fit-help">Needed for {{ l.quantity }} unit{{ l.quantity|pluralize }}: multiply each consumption by {{ l.quantity }}.</p>
+        {% else %}
+        <p class="fit-help">No cost estimate was stored for this line.</p>
+        {% endif %}
+    </section>
+    {% endwith %}
+    {% endfor %}
+
     <h2>Agreed price and payment</h2>
     <dl class="fit-summary">
-        <dt>Unit price</dt><dd>${{ snap.unit_price }}</dd>
         <dt>Products subtotal</dt><dd>${{ order.total }}</dd>
         <dt>Bitcoin discount</dt><dd>{% if order.discount_status == "none" %}None{% else %}${{ order.discount_amount }} — {{ order.get_discount_status_display }}{% endif %}</dd>
         <dt>Shipping</dt><dd>Not calculated yet</dd>
@@ -65,24 +89,9 @@
         <dt>Shipping status</dt><dd>{{ order.get_shipping_status_display }}</dd>
     </dl>
 
-    <h2>Materials (estimate, per unit — internal)</h2>
-    <p class="fit-alert no-print" role="status">ESTIMATE — not verified. Costs are internal and never shown to the customer.</p>
-    {% if cost_lines %}
-    <div class="panel-table-wrap">
-    <table class="panel-table">
-        <thead><tr><th>Material</th><th>Unit</th><th>Consumption</th><th>Unit price</th><th>Subtotal</th></tr></thead>
-        <tbody>
-        {% for l in cost_lines %}
-            <tr><td>{{ l.name }}</td><td>{{ l.unit }}</td><td>{{ l.quantity }}</td><td>${{ l.unit_price }}</td><td>${{ l.subtotal }}</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    </div>
-    {% else %}
-    <p class="fit-help">No cost estimate was stored for this order.</p>
-    {% endif %}
+    <h2>Internal cost</h2>
     <dl class="fit-summary">
-        <dt>Cost used (× {{ order.quantity }})</dt><dd>${{ cost.cost }}</dd>
+        <dt>Cost used (all lines)</dt><dd>${{ cost.cost }}</dd>
         <dt>Estimated margin</dt><dd>${{ cost.margin }}</dd>
     </dl>
 

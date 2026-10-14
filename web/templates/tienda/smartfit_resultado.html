@@ -55,8 +55,16 @@
             <select id="quantity" name="quantity">
                 {% for n in "1234567890" %}{% if forloop.counter <= max_quantity %}<option value="{{ forloop.counter }}">{{ forloop.counter }}</option>{% endif %}{% endfor %}
             </select>
+            <label for="size">Size</label>
+            <select id="size" name="size">
+                <option value="">Use my measurements (reference size)</option>
+                {% for opt in size_options %}<option value="{{ opt }}">{{ opt }}</option>{% endfor %}
+            </select>
+            <p class="fit-help">The size table is a reference and is not validated yet; our team confirms the final size.</p>
+            <input type="hidden" name="dog" value="{{ dog.public_id }}">
             {% if quote_error %}<p class="fit-error">{{ quote_error }}</p>{% endif %}
             <button class="button" type="submit">Get quote</button>
+            <button class="button" type="submit" formaction="{% url 'cart_add' %}">Add to cart</button>
         </form>
 
         <a class="button" href="{% url 'productos' %}">Back to Products</a>

@@ -35,15 +35,37 @@
         </p>
 
         <h2>Summary</h2>
+        <div class="panel-table-wrap">
+        <table class="order-lines">
+            <thead>
+                <tr><th>Product</th><th>Quantity</th><th>Size</th><th>Unit price</th><th>Subtotal</th><th>Production</th></tr>
+            </thead>
+            <tbody>
+            {% for l in order.lines.all %}
+                <tr>
+                    <td>
+                        <strong>{{ l.product_name }}</strong><br>
+                        <span class="fit-help">
+                            {{ l.dog_snapshot.name|default:"Unnamed dog" }} ({{ l.dog_snapshot.breed }}) —
+                            weight {{ l.dog_snapshot.weight_kg }} kg,
+                            back length {{ l.dog_snapshot.back_length_cm }} cm,
+                            chest girth {{ l.dog_snapshot.chest_girth_cm }} cm,
+                            neck girth {% if l.dog_snapshot.neck_girth_cm %}{{ l.dog_snapshot.neck_girth_cm }} cm{% else %}not provided{% endif %}
+                        </span>
+                    </td>
+                    <td>{{ l.quantity }}</td>
+                    <td>{{ l.size_display }}</td>
+                    <td>${{ l.unit_price }}</td>
+                    <td>${{ l.subtotal }}</td>
+                    <td>{{ l.get_production_status_display }}</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="6">{{ snap.product.name }}</td></tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
         <dl class="fit-summary">
-            <dt>Product</dt><dd>{{ snap.product.name }}</dd>
-            <dt>Dog</dt><dd>{{ snap.dog.name|default:"Unnamed dog" }} ({{ snap.dog.breed }})</dd>
-            <dt>Weight</dt><dd>{{ snap.dog.weight_kg }} kg</dd>
-            <dt>Back length</dt><dd>{{ snap.dog.back_length_cm }} cm</dd>
-            <dt>Chest girth</dt><dd>{{ snap.dog.chest_girth_cm }} cm</dd>
-            <dt>Neck girth</dt><dd>{% if snap.dog.neck_girth_cm %}{{ snap.dog.neck_girth_cm }} cm{% else %}Not provided{% endif %}</dd>
-            <dt>Quantity</dt><dd>{{ order.quantity }}</dd>
-            <dt>Unit price</dt><dd>${{ snap.unit_price }}</dd>
             <dt>Products subtotal{% if order.price_is_provisional %} (provisional){% endif %}</dt>
             <dd>${{ order.total }}</dd>
             <dt>Shipping cost</dt><dd>Not calculated yet</dd>

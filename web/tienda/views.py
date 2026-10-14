@@ -2,7 +2,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from .forms import CheckoutForm, SmartFitForm
-from .models import DogProfile, Order, Quote
+from .models import Cart, DogProfile, Order, Quote
 
 # El catálogo vive en tienda/catalog.py (fuente de verdad).
 from .catalog import PRODUCTOS  # noqa: E402,F401
@@ -92,6 +92,8 @@ def smart_fit_editar(request, public_id):
         if form.is_valid():
             form.save(instance=dog)
             _remember_dog(request, dog)
+            if request.GET.get("next") == "cart":
+                return redirect("cart")
             if back_quote:
                 return redirect("smart_quote", public_id=back_quote.public_id)
             url = reverse("smart_fit_resultado", args=[dog.public_id])
@@ -126,6 +128,7 @@ def smart_fit_resultado(request, public_id):
             "preselect": _requested_product(request),
             "size": size,
             "max_quantity": services.MAX_QUANTITY,
+            "size_options": services.size_options(),
         },
     )
 
@@ -149,7 +152,8 @@ def smart_quote_crear(request, public_id):
             request,
             "tienda/smartfit_resultado.html",
             {"dog": dog, "productos": PRODUCTOS, "quote_error": message,
-             "max_quantity": services.MAX_QUANTITY, "preselect": slug if slug in PRODUCTOS else ""},
+             "max_quantity": services.MAX_QUANTITY, "size_options": services.size_options(),
+             "preselect": slug if slug in PRODUCTOS else ""},
             status=400,
         )
 
@@ -157,8 +161,11 @@ def smart_quote_crear(request, public_id):
         quantity = services.normalize_quantity(request.POST.get("quantity", "1"))
     except services.QuantityError as exc:
         return _error(str(exc))
+    size = request.POST.get("size", "").strip()
+    if size and size not in services.size_options():
+        return _error("Choose a size from the list.")
     try:
-        quote = services.create_quote(dog, slug, quantity)
+        quote = services.create_quote(dog, slug, quantity, size)
     except services.UnknownProduct:
         return _error("Please choose a product.")
     return redirect("smart_quote", public_id=quote.public_id)
@@ -177,6 +184,7 @@ def _quote_context(quote, payment_method="unspecified"):
         "discount_eligible": services.discount_eligible(quote.product_slug),
         "max_quantity": services.MAX_QUANTITY,
         "quantities": range(1, services.MAX_QUANTITY + 1),
+        "size_options": services.size_options(),
     }
 
 
@@ -246,6 +254,173 @@ def checkout(request, public_id):
     context = _quote_context(quote)
     context["form"] = form
     return render(request, "tienda/checkout.html", context)
+
+
+CART_SESSION = "cart"
+
+
+def _session_cart(request, create=False):
+    """Carrito abierto de la sesión (opcionalmente lo crea)."""
+    from . import services
+
+    try:
+        cart = services.get_open_cart(request.session.get(CART_SESSION))
+    except Exception:
+        cart = None
+    if cart is None and create:
+        cart = Cart.objects.create()
+        request.session[CART_SESSION] = str(cart.public_id)
+    return cart
+
+
+def _cart_context(cart, payment_method="unspecified"):
+    from . import services
+
+    return {
+        "cart": cart,
+        "summary": services.cart_summary(cart, payment_method) if cart else None,
+        "size_options": services.size_options(),
+        "quantities": range(1, services.MAX_QUANTITY + 1),
+    }
+
+
+def cart_view(request):
+    cart = _session_cart(request)
+    return render(request, "tienda/cart.html", _cart_context(cart))
+
+
+def cart_add(request):
+    """Añade un producto al carrito. Solo se leen perfil, producto, cantidad y
+    talla; el precio sale del catálogo."""
+    from . import services
+
+    if request.method != "POST":
+        return redirect("cart")
+    dog = DogProfile.objects.filter(public_id=_uuid_or_none(request.POST.get("dog"))).first()
+    if dog is None:
+        return redirect("smart_fit")
+    slug = request.POST.get("producto", "")
+
+    def _error(message):
+        return render(
+            request,
+            "tienda/smartfit_resultado.html",
+            {"dog": dog, "productos": PRODUCTOS, "quote_error": message,
+             "max_quantity": services.MAX_QUANTITY, "size_options": services.size_options(),
+             "preselect": slug if slug in PRODUCTOS else ""},
+            status=400,
+        )
+
+    if slug not in PRODUCTOS:
+        return _error("Please choose a product.")
+    if services.missing_measurements(dog, slug):
+        url = reverse("smart_fit_editar", args=[dog.public_id])
+        return redirect(f"{url}?producto={slug}")
+    try:
+        quantity = services.normalize_quantity(request.POST.get("quantity", "1"))
+        services.add_to_cart(
+            _session_cart(request, create=True), dog, slug, quantity,
+            request.POST.get("size", ""),
+        )
+    except (services.QuantityError, services.CartError, services.UnknownProduct,
+            services.InvalidCatalogPrice) as exc:
+        return _error(str(exc) or "That product cannot be added.")
+    return redirect("cart")
+
+
+def _cart_quote(request, public_id):
+    cart = _session_cart(request)
+    if cart is None:
+        return None, None
+    quote = Quote.objects.filter(
+        public_id=public_id, cart=cart, status=Quote.Status.DRAFT
+    ).first()
+    return cart, quote
+
+
+def cart_line_update(request, public_id):
+    from . import services
+
+    cart, quote = _cart_quote(request, public_id)
+    if quote is None:
+        return redirect("cart")
+    if request.method == "POST":
+        error = None
+        quantity = quote.quantity
+        try:
+            quantity = services.normalize_quantity(request.POST.get("quantity", ""))
+        except services.QuantityError as exc:
+            error = str(exc)
+        size = request.POST.get("size", "").strip()
+        if error is None and size and size not in services.size_options():
+            error = "Choose a size from the list."
+        if error:
+            context = _cart_context(cart)
+            context["line_error"] = {"id": str(quote.public_id), "message": error}
+            return render(request, "tienda/cart.html", context, status=400)
+        quote.quantity = quantity
+        quote.size_label = size
+        quote.save(update_fields=["quantity", "size_label"])
+    return redirect("cart")
+
+
+def cart_line_remove(request, public_id):
+    cart, quote = _cart_quote(request, public_id)
+    if quote is not None and request.method == "POST":
+        quote.delete()
+    return redirect("cart")
+
+
+def quote_to_cart(request, public_id):
+    """Pasa una cotización existente al carrito de la sesión."""
+    quote = get_object_or_404(Quote.objects.select_related("dog"), public_id=public_id)
+    if request.method != "POST":
+        return redirect("smart_quote", public_id=quote.public_id)
+    if quote.product_slug not in PRODUCTOS or quote.status != Quote.Status.DRAFT:
+        return _unavailable(request)
+    cart = _session_cart(request, create=True)
+    if quote.cart_id not in (None, cart.pk):
+        return _unavailable(request)
+    quote.cart = cart
+    quote.save(update_fields=["cart"])
+    return redirect("cart")
+
+
+def cart_checkout(request):
+    from . import services
+
+    cart = _session_cart(request)
+    if cart is None or not services.cart_lines(cart):
+        return redirect("cart")
+    summary = services.cart_summary(cart)
+    if summary["has_missing"] or not summary["lines"]:
+        return redirect("cart")
+
+    if request.method == "POST":
+        form = CheckoutForm(request.POST)
+        if form.is_valid():
+            if request.POST.get("step") == "review":
+                method = form.cleaned_data["payment_method"]
+                context = _cart_context(cart, method)
+                context.update(
+                    {
+                        "data": form.cleaned_data,
+                        "payment_label": dict(form.fields["payment_method"].choices)[method],
+                        "method": method,
+                        "is_demo": method in services.DEMO_METHODS,
+                    }
+                )
+                return render(request, "tienda/cart_checkout_review.html", context)
+            try:
+                order, _ = services.create_order_from_cart(cart, form.cleaned_data)
+            except (services.QuoteNotOrderable, services.CartError):
+                return redirect("cart")
+            return redirect("order_detail", public_id=order.public_id)
+    else:
+        form = CheckoutForm()
+    context = _cart_context(cart)
+    context["form"] = form
+    return render(request, "tienda/cart_checkout.html", context)
 
 
 def order_detail(request, public_id):

@@ -1,0 +1,76 @@
+{% extends "tienda/base.html" %}
+{% load static %}
+{% block title %}Weiner Kingdom | Review your order{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <p class="eyebrow">CHECKOUT</p>
+    <h1>Review your order</h1>
+</section>
+
+<section class="fit-layout">
+    <div class="fit-form">
+        <h2>Items</h2>
+        {% for l in summary.lines %}
+        <div class="quote-product">
+            <img src="{% static l.product.imagen %}" alt="{{ l.product.nombre }}">
+            <div>
+                <strong>{{ l.product.nombre }}</strong><br>
+                <span class="fit-help">
+                    ×{{ l.quote.quantity }} at ${{ l.totals.unit_price }} ·
+                    {{ l.quote.dog.display_name }} ({{ l.quote.dog.breed }}) ·
+                    back {{ l.quote.dog.back_length_cm }} cm, chest {{ l.quote.dog.chest_girth_cm }} cm{% if l.quote.dog.neck_girth_cm %}, neck {{ l.quote.dog.neck_girth_cm }} cm{% endif %} ·
+                    size: {% if l.quote.size_label %}{{ l.quote.size_label }}{% else %}reference (team confirms){% endif %}
+                </span><br>
+                <span>Line subtotal: <strong>${{ l.totals.subtotal }}</strong>{% if l.totals.discount_amount %} · Bitcoin discount: -${{ l.totals.discount_amount }}{% endif %}</span>
+            </div>
+        </div>
+        {% endfor %}
+
+        <h2>Amounts</h2>
+        <dl class="fit-summary">
+            <dt>Size adjustment</dt><dd>Not calculated yet <span class="fit-help">The sizing rule is pending business approval.</span></dd>
+            <dt>Products subtotal{% if summary.is_provisional %} (provisional){% endif %}</dt><dd>${{ summary.subtotal }}</dd>
+            {% if summary.discount_amount %}
+            <dt>Bitcoin discount (15%)</dt>
+            <dd>-${{ summary.discount_amount }} <span class="fit-help">Not applied yet: it becomes final once your payment is verified.</span></dd>
+            {% endif %}
+            <dt>Shipping</dt><dd>To be confirmed</dd>
+            <dt>Amount due now</dt><dd><strong>${{ summary.subtotal }}</strong> <span class="fit-help">before shipping</span></dd>
+            {% if summary.discount_amount %}
+            <dt>If Bitcoin payment is verified</dt><dd>${{ summary.total_if_discount }} <span class="fit-help">before shipping</span></dd>
+            {% endif %}
+            <dt>Payment method</dt><dd>{{ payment_label }}</dd>
+        </dl>
+        {% if summary.is_provisional %}
+        <p class="fit-alert" role="status">Provisional prices. Our team will review your order manually and confirm the final prices before any payment.</p>
+        {% endif %}
+        {% if is_demo %}
+        <p class="fit-alert" role="status">DEMO option: no payment is processed on this site and nothing is charged. Placing the order only records your preference; our team will contact you to arrange a payment method that can be verified.</p>
+        {% endif %}
+
+        <h2>Delivery</h2>
+        <dl class="fit-summary">
+            <dt>Name</dt><dd>{{ data.customer_name }}</dd>
+            <dt>Email</dt><dd>{{ data.customer_email }}</dd>
+            <dt>Phone</dt><dd>{{ data.customer_phone }}</dd>
+            <dt>Address</dt><dd>{{ data.address }}, {{ data.city }}, {{ data.country }}</dd>
+        </dl>
+
+        <form method="post" action="{% url 'cart_checkout' %}">
+            {% csrf_token %}
+            <input type="hidden" name="step" value="confirm">
+            <input type="hidden" name="customer_name" value="{{ data.customer_name }}">
+            <input type="hidden" name="customer_email" value="{{ data.customer_email }}">
+            <input type="hidden" name="customer_phone" value="{{ data.customer_phone }}">
+            <input type="hidden" name="country" value="{{ data.country }}">
+            <input type="hidden" name="city" value="{{ data.city }}">
+            <input type="hidden" name="address" value="{{ data.address }}">
+            <input type="hidden" name="payment_method" value="{{ data.payment_method }}">
+            <button class="button" type="submit">Confirm order</button>
+            <a class="button" href="{% url 'cart_checkout' %}">Edit details</a>
+            <a class="button" href="{% url 'cart' %}">Back to cart</a>
+        </form>
+        <p class="fit-help">Confirming creates your order. It does not charge you and does not confirm payment.</p>
+    </div>
+</section>
+{% endblock %}

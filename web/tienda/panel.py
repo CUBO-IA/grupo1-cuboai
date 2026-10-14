@@ -12,6 +12,13 @@ from .models import Order
 PAGE_SIZE = 25
 
 
+def _int_or_none(raw):
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 def staff_required(view):
     @wraps(view)
     def wrapper(request, *args, **kwargs):
@@ -34,6 +41,7 @@ def orders(request):
             Q(customer_name__icontains=q)
             | Q(customer_email__icontains=q)
             | Q(snapshot__product__name__icontains=q)
+            | Q(lines__product_name__icontains=q)
         )
         digits = q.upper().removeprefix("WK-").lstrip("0")
         if digits.isdigit():
@@ -56,15 +64,21 @@ def orders(request):
         if value in choices.values:
             qs = qs.filter(**{field: value})
             filters[field] = value
-    rows = list(qs[:PAGE_SIZE])
+    rows = list(qs.distinct()[:PAGE_SIZE])
     for row in rows:
         row.ready_flag = services.order_readiness(row)["ready"]
+        names = [l.product_name for l in row.lines.all()]
+        if not names:
+            names = [(row.snapshot or {}).get("product", {}).get("name", "")]
+        row.product_summary = names[0] + (f" + {len(names) - 1} more" if len(names) > 1 else "")
+        if row.quantity > 1 and len(names) == 1:
+            row.product_summary += f" × {row.quantity}"
     return render(
         request,
         "tienda/panel_orders.html",
         {
             "orders": rows,
-            "total_count": qs.count(),
+            "total_count": qs.distinct().count(),
             "page_size": PAGE_SIZE,
             "stages": services.stage_counts(),
             "stage": stage,
@@ -83,15 +97,16 @@ def order_sheet(request, public_id):
     """Ficha de taller: datos confirmados del pedido (solo personal)."""
     order = get_object_or_404(Order, public_id=public_id)
     snap = order.snapshot or {}
+    readiness = services.order_readiness(order)
     return render(
         request,
         "tienda/panel_order_sheet.html",
         {
             "order": order,
             "snap": snap,
-            "cost_lines": (snap.get("cost_estimate") or {}).get("lines", []),
             "cost": services.cost_summary(order),
-            "readiness": services.order_readiness(order),
+            "readiness": readiness,
+            "lines": readiness["lines"],
             "events": order.events.select_related("by"),
         },
     )
@@ -197,11 +212,29 @@ def order(request, public_id):
             )
             return redirect("panel_order", public_id=order.public_id)
         order.refresh_from_db()
+    elif request.method == "POST" and request.POST.get("form") == "line_production":
+        from .models import OrderLine
+
+        line = order.lines.filter(pk=_int_or_none(request.POST.get("line"))).first()
+        try:
+            if line is None:
+                raise services.TransitionError("That line does not belong to this order.")
+            services.apply_line_transition(
+                line, request.POST.get("value", ""), user=request.user,
+                note=request.POST.get("note", ""),
+            )
+        except services.TransitionError as exc:
+            error = str(exc)
+            order.refresh_from_db()
+        else:
+            return redirect("panel_order", public_id=order.public_id)
     elif request.method == "POST" and request.POST.get("form") in ("size", "tracking"):
         try:
             if request.POST["form"] == "size":
+                line_id = _int_or_none(request.POST.get("line"))
                 services.confirm_size(
-                    order, request.POST.get("size_confirmed", ""), user=request.user
+                    order, request.POST.get("size_confirmed", ""), user=request.user,
+                    line=line_id,
                 )
             else:
                 services.set_tracking(
