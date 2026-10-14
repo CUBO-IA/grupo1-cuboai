@@ -32,7 +32,12 @@
         {% endfor %}
         <button class="button" type="submit">Review order</button>
         <p class="fit-help">You will see the full breakdown before confirming. Placing the order does not charge you and does not confirm payment; production starts only after our team verifies your payment.</p>
+        {% if discount_eligible %}
         <p class="fit-help">Bitcoin: 15% discount on the products subtotal (shipping excluded). It is shown separately and becomes final only once your payment is verified.</p>
+        {% else %}
+        <p class="fit-help">The Bitcoin discount does not apply to this product.</p>
+        {% endif %}
+        <p class="fit-help">PayPal and card are demonstration options: no payment is processed on this site and nothing is charged. Our team will contact you to arrange a verifiable payment method.</p>
     </form>
 
     <aside class="fit-tips">

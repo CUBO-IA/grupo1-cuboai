@@ -47,6 +47,18 @@ def get_base_price(slug):
 
 MAX_QUANTITY = 10  # supuesto técnico, pendiente de aprobación del negocio
 
+PAYMENT_METHODS = ("unspecified", "bitcoin", "paypal_demo", "card_demo")
+DEMO_METHODS = ("paypal_demo", "card_demo")  # sin pasarela: nunca pagan
+SETTABLE_METHODS = ("unspecified", "bitcoin")  # el personal solo asigna métodos reales
+
+
+def discount_eligible(slug):
+    """Si el producto admite el descuento Bitcoin (por defecto sí)."""
+    from .models import ProductPaymentRule
+
+    rule = ProductPaymentRule.objects.filter(product_slug=slug).first()
+    return True if rule is None else rule.bitcoin_discount_eligible
+
 
 class QuantityError(Exception):
     pass
@@ -116,8 +128,11 @@ def compute_totals(quote, payment_method="unspecified"):
     is_final = quote.pricing == Quote.Pricing.FINAL and quote.total_price is not None
     unit = quote.total_price if is_final else unit_base
     subtotal = _money(unit * quote.quantity)
-    rate, discount = compute_discount(subtotal, payment_method)
+    eligible = discount_eligible(quote.product_slug)
+    rate, discount = compute_discount(subtotal, payment_method, eligible)
     return {
+        "discount_eligible": eligible,
+        "payment_method": payment_method,
         "unit_base_price": unit_base,
         "unit_price": unit,
         "quantity": quote.quantity,
@@ -191,6 +206,12 @@ def _check_rules(order, field, new_value):
     """Devuelve un mensaje de error o None si la transición es válida."""
     if order.status == "cancelled" and field != "status":
         return "Cancelled orders cannot change state."
+    if field == "payment_status" and new_value == "paid":
+        if order.payment_method in DEMO_METHODS:
+            return (
+                "Demo payment methods cannot be recorded as paid. "
+                "Change the order to a verified payment method first."
+            )
     if field == "production_status" and new_value == "in_production":
         if order.payment_status != "paid":
             return "Payment must be verified before production can start."
@@ -520,9 +541,9 @@ def _dec(value):
     return None if value is None else str(value)
 
 
-def compute_discount(subtotal, payment_method):
+def compute_discount(subtotal, payment_method, eligible=True):
     """(tasa, importe) del descuento; solo Bitcoin tiene descuento aprobado."""
-    if payment_method == "bitcoin":
+    if payment_method == "bitcoin" and eligible:
         amount = (subtotal * BITCOIN_DISCOUNT_RATE).quantize(
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
@@ -542,7 +563,7 @@ def create_order(quote, customer):
 
     customer = dict(customer)
     payment_method = customer.pop("payment_method", "unspecified")
-    if payment_method not in ("unspecified", "bitcoin"):
+    if payment_method not in PAYMENT_METHODS:
         payment_method = "unspecified"
 
     with transaction.atomic():
@@ -727,3 +748,50 @@ def update_measurement_config(post, user=None):
             pm.requires_neck = bool(post.get(f"neck_{slug}"))
             pm.is_validated = bool(post.get(f"valid_{slug}"))
             pm.save()
+
+
+# --- Métodos de pago (panel) ---------------------------------------------------
+
+def set_payment_method(order, method, user=None):
+    """Cambia el método de pago de un pedido SIN pagar y recalcula el descuento."""
+    from django.db import transaction
+
+    from .models import Order, OrderEvent
+
+    if method not in SETTABLE_METHODS:
+        raise TransitionError("Choose a payment method that can be verified.")
+    with transaction.atomic():
+        order = Order.objects.select_for_update().get(pk=order.pk)
+        if order.status == "cancelled":
+            raise TransitionError("Cancelled orders cannot change state.")
+        if order.payment_status != "unpaid":
+            raise TransitionError("The payment method cannot change after payment is recorded.")
+        old = order.payment_method
+        if old == method:
+            return order
+        slug = (order.snapshot or {}).get("product", {}).get("slug", "")
+        rate, amount = compute_discount(order.total, method, discount_eligible(slug))
+        order.payment_method = method
+        order.discount_rate = rate
+        order.discount_amount = amount
+        order.discount_status = "pending_verification" if rate else "none"
+        order.save()
+        OrderEvent.objects.create(
+            order=order,
+            field="payment_method",
+            from_value=old,
+            to_value=method,
+            note="",
+            by=user if getattr(user, "pk", None) else None,
+        )
+    return order
+
+
+def update_payment_rules(post):
+    """Guarda la elegibilidad del descuento Bitcoin por producto."""
+    from .models import ProductPaymentRule
+
+    for slug in PRODUCTOS:
+        rule, _ = ProductPaymentRule.objects.get_or_create(product_slug=slug)
+        rule.bitcoin_discount_eligible = bool(post.get(f"btc_{slug}"))
+        rule.save()

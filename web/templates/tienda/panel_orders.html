@@ -55,7 +55,7 @@
     </table>
     </div>
 
-    <p><a class="button" href="{% url 'panel_costs' %}">Manufacturing costs</a> <a class="button" href="{% url 'panel_measurements' %}">Measurement settings</a></p>
+    <p><a class="button" href="{% url 'panel_costs' %}">Manufacturing costs</a> <a class="button" href="{% url 'panel_measurements' %}">Measurement settings</a> <a class="button" href="{% url 'panel_payments' %}">Payment settings</a></p>
 
     <form method="post" action="{% url 'panel_logout' %}">
         {% csrf_token %}

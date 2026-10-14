@@ -90,6 +90,8 @@ class Order(models.Model):
     class PaymentMethod(models.TextChoices):
         UNSPECIFIED = "unspecified", "To be arranged"
         BITCOIN = "bitcoin", "Bitcoin"
+        PAYPAL_DEMO = "paypal_demo", "PayPal (demo - not available)"
+        CARD_DEMO = "card_demo", "Card (demo - not available)"
 
     class DiscountStatus(models.TextChoices):
         NONE = "none", "None"
@@ -308,3 +310,14 @@ class SizeRange(models.Model):
 
     def __str__(self):
         return self.display
+
+
+class ProductPaymentRule(models.Model):
+    """Reglas de pago por producto (configurables por el personal)."""
+
+    product_slug = models.CharField(max_length=50, unique=True)
+    # Si el producto admite el descuento por pago con Bitcoin.
+    bitcoin_discount_eligible = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"Payment rules {self.product_slug}"

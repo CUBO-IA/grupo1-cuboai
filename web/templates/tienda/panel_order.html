@@ -36,7 +36,19 @@
             </form>
             {% endfor %}
         {% endfor %}
-        <p class="fit-help">Marking an order as paid is a manual record; no payment provider is connected.</p>
+        <p class="fit-help">Marking an order as paid is a manual record; no payment provider is connected. Demo methods (PayPal, card) cannot be recorded as paid.</p>
+        {% if order.payment_status == "unpaid" and order.status != "cancelled" %}
+        <form method="post" class="panel-action">
+            {% csrf_token %}
+            <input type="hidden" name="form" value="payment_method">
+            <select name="payment_method">
+                {% for value, label in settable_methods %}
+                <option value="{{ value }}" {% if order.payment_method == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+            <button class="button" type="submit">Set payment method</button>
+        </form>
+        {% endif %}
 
         <h2>Customer</h2>
         <dl class="fit-summary">

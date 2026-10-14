@@ -11,6 +11,16 @@
         <dl class="fit-summary">
             <dt>Order status</dt><dd>{{ order.get_status_display }}</dd>
             <dt>Payment</dt><dd>{{ order.get_payment_status_display }}{% if order.payment_status == "unpaid" %} — no payment has been collected{% else %} — recorded by Weiner Kingdom{% endif %}</dd>
+            <dt>Payment method</dt>
+            <dd>{{ order.get_payment_method_display }}
+                {% if order.payment_method == "paypal_demo" or order.payment_method == "card_demo" %}
+                <span class="fit-help">Demonstration option: no payment is processed on this site. Our team will contact you to arrange a payment method that can be verified.</span>
+                {% elif order.payment_method == "bitcoin" %}
+                <span class="fit-help">Our team verifies the payment manually before production starts.</span>
+                {% else %}
+                <span class="fit-help">Our team will contact you to arrange payment.</span>
+                {% endif %}
+            </dd>
             <dt>Production</dt><dd>{{ order.get_production_status_display }}</dd>
             <dt>Shipping</dt><dd>{{ order.get_shipping_status_display }}</dd>
         </dl>

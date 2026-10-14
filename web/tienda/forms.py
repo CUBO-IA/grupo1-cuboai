@@ -138,6 +138,8 @@ class CheckoutForm(forms.Form):
         choices=[
             ("unspecified", "To be arranged with Weiner Kingdom"),
             ("bitcoin", "Bitcoin (15% off products; payment verified by our team)"),
+            ("paypal_demo", "PayPal — DEMO, not available (no payment is processed)"),
+            ("card_demo", "Card — DEMO, not available (no payment is processed)"),
         ],
         initial="unspecified",
     )

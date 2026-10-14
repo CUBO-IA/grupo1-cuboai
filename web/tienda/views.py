@@ -225,6 +225,7 @@ def _quote_context(quote, payment_method="unspecified"):
         "producto": producto,
         "breakdown": services.build_breakdown(quote, payment_method),
         "size": services.classify_size(quote.dog),
+        "discount_eligible": services.discount_eligible(quote.product_slug),
         "max_quantity": services.MAX_QUANTITY,
         "quantities": range(1, services.MAX_QUANTITY + 1),
     }
@@ -271,6 +272,8 @@ def checkout(request, public_id):
                     {
                         "data": form.cleaned_data,
                         "payment_label": dict(form.fields["payment_method"].choices)[method],
+                        "method": method,
+                        "is_demo": method in services.DEMO_METHODS,
                     }
                 )
                 return render(request, "tienda/checkout_review.html", context)

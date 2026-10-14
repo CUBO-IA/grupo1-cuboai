@@ -1,0 +1,46 @@
+{% extends "tienda/base.html" %}
+{% block title %}Weiner Kingdom | Payment settings{% endblock %}
+{% block content %}
+<section class="page-heading">
+    <p class="eyebrow">STAFF PANEL · PRIVATE</p>
+    <h1>Payment settings</h1>
+</section>
+
+<section class="panel-wrap">
+    <p class="fit-alert" role="status">No payment provider is connected. Payments are recorded manually by staff with a reference; PayPal and card options are demonstrations and cannot be recorded as paid.</p>
+
+    <h2>Payment methods</h2>
+    <div class="panel-table-wrap">
+    <table class="panel-table">
+        <thead><tr><th>Method</th><th>Status</th><th>Verification procedure</th></tr></thead>
+        <tbody>
+            <tr><td>To be arranged</td><td>Manual</td><td>Arranged by the team; payment recorded manually with a reference.</td></tr>
+            <tr><td>Bitcoin</td><td>Manual</td><td><strong>Pending definition</strong> — how to verify a transaction (wallet, network confirmations, who confirms).</td></tr>
+            <tr><td>PayPal</td><td>DEMO</td><td><strong>Pending definition</strong> — requires a provider account and credentials.</td></tr>
+            <tr><td>Card</td><td>DEMO</td><td><strong>Pending definition</strong> — requires a provider; no card data is collected on this site.</td></tr>
+        </tbody>
+    </table>
+    </div>
+
+    <h2>Bitcoin discount (15% of products subtotal, shipping excluded)</h2>
+    <form method="post">
+        {% csrf_token %}
+        <div class="panel-table-wrap">
+        <table class="panel-table">
+            <thead><tr><th>Product</th><th>Eligible for the Bitcoin discount</th></tr></thead>
+            <tbody>
+            {% for p in products %}
+                <tr>
+                    <td>{{ p.name }}</td>
+                    <td><input type="checkbox" name="btc_{{ p.slug }}" {% if p.eligible %}checked{% endif %}></td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        <p class="fit-help">Applies to new orders and quotes. Existing orders keep the discount they were created with unless their payment method is changed.</p>
+        <button class="button" type="submit">Save</button>
+        <a class="button" href="{% url 'panel_orders' %}">Back to orders</a>
+    </form>
+</section>
+{% endblock %}

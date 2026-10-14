@@ -24,6 +24,7 @@ urlpatterns = [
     path("panel/logout/", auth_views.LogoutView.as_view(), name="panel_logout"),
     path("panel/", panel.orders, name="panel_orders"),
     path("panel/orders/<uuid:public_id>/", panel.order, name="panel_order"),
+    path("panel/payments/", panel.payments, name="panel_payments"),
     path("panel/measurements/", panel.measurements, name="panel_measurements"),
     path("panel/costs/", panel.costs, name="panel_costs"),
     path("panel/costs/<slug:slug>/", panel.product_cost, name="panel_product_cost"),

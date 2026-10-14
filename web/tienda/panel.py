@@ -68,6 +68,21 @@ def orders(request):
 
 
 @staff_required
+def payments(request):
+    from .models import ProductPaymentRule
+
+    if request.method == "POST":
+        services.update_payment_rules(request.POST)
+        return redirect("panel_payments")
+    flags = {r.product_slug: r.bitcoin_discount_eligible for r in ProductPaymentRule.objects.all()}
+    products = [
+        {"slug": slug, "name": item["nombre"], "eligible": flags.get(slug, True)}
+        for slug, item in services.PRODUCTOS.items()
+    ]
+    return render(request, "tienda/panel_payments.html", {"products": products})
+
+
+@staff_required
 def measurements(request):
     from .models import ProductMeasurement, SizeRange
 
@@ -152,6 +167,16 @@ def order(request, public_id):
             )
             return redirect("panel_order", public_id=order.public_id)
         order.refresh_from_db()
+    elif request.method == "POST" and request.POST.get("form") == "payment_method":
+        try:
+            services.set_payment_method(
+                order, request.POST.get("payment_method", ""), user=request.user
+            )
+        except services.TransitionError as exc:
+            error = str(exc)
+            order.refresh_from_db()
+        else:
+            return redirect("panel_order", public_id=order.public_id)
     elif request.method == "POST":
         try:
             services.apply_transition(
@@ -176,6 +201,10 @@ def order(request, public_id):
             "allowed": services.allowed_transitions(order),
             "cost": services.cost_summary(order),
             "cost_form": cost_form,
+            "settable_methods": [
+                ("unspecified", "To be arranged"),
+                ("bitcoin", "Bitcoin"),
+            ],
             "error": error,
         },
         status=400 if (error or cost_form.errors) else 200,

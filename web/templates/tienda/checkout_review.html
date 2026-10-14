@@ -34,6 +34,11 @@
         {% if not breakdown.is_final %}
         <p class="fit-alert" role="status">Provisional price. Our team will review your quote manually and confirm the final price before any payment.</p>
         {% endif %}
+        {% if is_demo %}
+        <p class="fit-alert" role="status">DEMO option: no payment is processed on this site and nothing is charged. Placing the order only records your preference; our team will contact you to arrange a payment method that can be verified.</p>
+        {% elif method == "bitcoin" and not discount_eligible %}
+        <p class="fit-alert" role="status">The Bitcoin discount does not apply to this product.</p>
+        {% endif %}
 
         <h2>Delivery</h2>
         <dl class="fit-summary">
