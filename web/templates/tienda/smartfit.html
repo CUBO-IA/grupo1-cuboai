@@ -27,7 +27,9 @@
         {% if producto %}
         <p class="fit-help">Measurements for: <strong>{{ producto.nombre }}</strong></p>
         {% endif %}
-        {% if form.errors %}
+        {% if form.non_field_errors %}
+        {% for e in form.non_field_errors %}<p class="fit-alert" role="alert">{{ e }}</p>{% endfor %}
+        {% elif form.errors %}
         <p class="fit-alert" role="alert">Please review the highlighted fields.</p>
         {% endif %}
 

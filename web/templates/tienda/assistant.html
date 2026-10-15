@@ -1,40 +1,59 @@
 {% extends "tienda/base.html" %}
+{% load static %}
 {% block title %}Weiner Kingdom | Guide{% endblock %}
 {% block content %}
 <section class="page-heading">
-    <p class="eyebrow">GUIDED ASSISTANT</p>
-    <h1>Find the right piece</h1>
+    <p class="eyebrow">GUIDE ME</p>
+    <h1 class="heading-long">Find the Perfect Outfit for Your Dachshund</h1>
+    <p>Tell us what you're looking for, and we'll recommend the best option from our collection.</p>
 </section>
 
 <section class="fit-layout">
     <div class="fit-form">
         <form method="get">
             <div class="fit-field">
-                <label for="occasion">What is it for?</label>
+                <label for="occasion">What are you looking for?</label>
                 <select id="occasion" name="occasion">
-                    <option value="">Choose an occasion</option>
+                    <option value="">Choose an option</option>
                     {% for key, label in occasions %}
                     <option value="{{ key }}" {% if selected == key %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                 </select>
             </div>
             <div class="fit-field">
-                <label for="q">Or ask a short question</label>
-                <input id="q" name="q" type="text" maxlength="200" value="{{ q }}" placeholder="e.g. How much is the Dog Sweater?">
+                <label for="q">Or describe it in a few words</label>
+                <input id="q" name="q" type="text" maxlength="200" value="{{ q }}" placeholder="e.g. a warm jumper for winter">
             </div>
-            <button class="button" type="submit">Ask</button>
+            <button class="button" type="submit">Recommend</button>
         </form>
     </div>
 
     <aside class="fit-tips">
-        <h2>Answer</h2>
+        <h2>Our recommendation</h2>
         {% if reply %}
             <p {% if reply.unknown %}class="fit-alert"{% endif %}>{{ reply.message }}</p>
             {% for p in reply.products %}
-            <div class="fit-field">
-                <strong>{{ p.name }}</strong> — {{ p.price }}
-                <p class="fit-help">{{ p.tagline }}</p>
-                <a class="button" href="{% url 'detalle' p.slug %}">View product</a>
+            <div class="reco-card{% if forloop.first and reply.products|length > 1 %} is-top{% endif %}">
+                <a href="{% url 'detalle' p.slug %}"><img src="{% static p.image %}" alt="{{ p.name }}"></a>
+                <div>
+                    {% if forloop.first and selected %}<p class="eyebrow">BEST MATCH</p>{% elif selected %}<p class="eyebrow">ALTERNATIVE</p>{% endif %}
+                    <strong>{{ p.name }}</strong> — {{ p.price }}
+                    <p class="fit-help">{{ p.tagline }}</p>
+                    <div class="reco-actions">
+                        <a class="button" href="{% url 'detalle' p.slug %}">View Product</a>
+                        {% if saved_dog %}
+                        <form method="post" action="{% url 'cart_add' %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="producto" value="{{ p.slug }}">
+                            <input type="hidden" name="dog" value="{{ saved_dog.public_id }}">
+                            <input type="hidden" name="quantity" value="1">
+                            <button class="button" type="submit">Add to Cart</button>
+                        </form>
+                        {% else %}
+                        <a class="button" href="{% url 'smart_fit' %}?producto={{ p.slug }}">Add to Cart</a>
+                        {% endif %}
+                    </div>
+                </div>
             </div>
             {% endfor %}
             {% if reply.next == "smart_fit" %}

@@ -299,7 +299,18 @@ footer { text-align: center; padding: 30px; color: #756960; }
 /* Product detail: gallery and public materials card */
 .detail-media { min-width: 0; }
 .detail-thumbs { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-.detail-thumbs img { width: 72px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid #eadfd5; }
+.detail-thumb { padding: 0; background: none; border: 2px solid #eadfd5; border-radius: 10px; cursor: pointer; line-height: 0; overflow: hidden; }
+.detail-thumb img { width: 72px; height: 72px; object-fit: cover; display: block; }
+.detail-thumb.is-active { border-color: #8a6a3c; box-shadow: 0 0 0 2px rgba(138,106,60,.25); }
+.detail-thumb:focus-visible { outline: 2px solid #8a6a3c; outline-offset: 2px; }
+.detail-image { object-fit: contain; }
+.reco-card { display: grid; grid-template-columns: 120px 1fr; gap: 14px; align-items: start; padding: 12px 0; border-bottom: 1px solid #eadfd5; }
+.reco-card img { width: 120px; height: 120px; object-fit: cover; border-radius: 10px; }
+.reco-card .reco-why { color: #62594F; font-size: .9rem; }
+.reco-card.is-top { background: #fff; padding: 14px; border: 1px solid #E1D6C6; border-radius: 12px; }
+.reco-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.reco-actions form { margin: 0; }
+.flash-ok { background: #eef5ea; border: 1px solid #b7d1a8; border-radius: 8px; padding: 10px 14px; }
 .wk-materials { margin-top: 24px; padding: 24px; border: 1px solid #E1D6C6; border-radius: 14px; background: #fff; }
 .wk-materials .wk-title { margin: 0 0 14px; font-family: Georgia, "Times New Roman", serif; font-weight: 400; font-size: 1.4rem; }
 .wk-materials-list { list-style: none; margin: 0; padding: 0; }
@@ -343,3 +354,4 @@ footer { text-align: center; padding: 30px; color: #756960; }
 .fit-layout > * { min-width: 0; }
 .fit-field select { max-width: 100%; text-overflow: ellipsis; }
 @media (max-width: 700px) { .fit-layout { grid-template-columns: minmax(0, 1fr); } }
+.page-heading h1.heading-long { font-size: clamp(1.8rem, 4.5vw, 3rem); }

@@ -12,15 +12,41 @@ MAX_QUERY_LENGTH = 200
 
 # Ocasiones guiadas -> productos del catálogo.
 OCCASIONS = {
-    "wedding": ("A wedding or special celebration", ["wedding-dog"]),
-    "adventure": ("Outdoor adventures", ["tactical-dog"]),
-    "holiday": ("Holiday gatherings and photos", ["christmas-dog"]),
-    "walks": (
-        "Walks with a harness",
-        ["alnut-whip-harness", "beige-anti-rub-harness", "tutti-frutti-harness"],
+    "wedding": (
+        "Wedding or special occasion",
+        ["wedding-dog"],
+        "A formal suit pair made for weddings and special celebrations.",
     ),
-    "warmth": ("Warmth and everyday style", ["cable-knit-jumper"]),
-    "bath": ("After-bath drying", ["bamboo-drying-robe"]),
+    "adventure": (
+        "Tactical or outdoor style",
+        ["tactical-dog"],
+        "Our bold outdoor-style outfit for adventures.",
+    ),
+    "holiday": (
+        "Christmas or festive outfit",
+        ["christmas-dog"],
+        "Our festive outfit for holiday gatherings and photos.",
+    ),
+    "everyday": (
+        "Comfortable everyday wear",
+        ["cable-knit-jumper", "beige-anti-rub-harness"],
+        "Comfortable pieces for everyday style.",
+    ),
+    "walks": (
+        "Harness for walks",
+        ["beige-anti-rub-harness", "alnut-whip-harness", "tutti-frutti-harness"],
+        "Harnesses designed for walks.",
+    ),
+    "warmth": (
+        "Warm knitted clothing",
+        ["cable-knit-jumper"],
+        "A knitted jumper to keep your dachshund warm.",
+    ),
+    "bath": (
+        "Drying robe after a bath",
+        ["bamboo-drying-robe"],
+        "A robe to dry your dog after a bath.",
+    ),
 }
 
 # Palabras clave -> producto (coinciden con nombres y descripciones del catálogo).
@@ -66,6 +92,7 @@ def _product_card(slug):
         "price": item["precio"],
         "tagline": item["tagline"],
         "description": item["descripcion"],
+        "image": item["imagen"],
     }
 
 
@@ -73,10 +100,13 @@ def recommend(occasion):
     """Recomendación guiada por ocasión; None si la opción no existe."""
     if occasion not in OCCASIONS:
         return None
-    slugs = OCCASIONS[occasion][1]
-    names = ", ".join(PRODUCTOS[s]["nombre"] for s in slugs)
+    _label, slugs, why = OCCASIONS[occasion]
+    slugs = [s for s in slugs if s in PRODUCTOS]
+    if not slugs:
+        return None
+    top = PRODUCTOS[slugs[0]]["nombre"]
     return {
-        "message": f"For this occasion we suggest: {names}.",
+        "message": f"Our best match: {top}. {why}",
         "products": [_product_card(s) for s in slugs],
         "next": "smart_fit",
         "unknown": False,

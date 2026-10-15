@@ -20,6 +20,7 @@
 </header>
 
 <main>
+{% if flash %}<p class="flash-ok" role="status">{{ flash }}</p>{% endif %}
 {% block content %}{% endblock %}
 </main>
 

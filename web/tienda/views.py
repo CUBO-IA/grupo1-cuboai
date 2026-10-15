@@ -1,8 +1,13 @@
+import logging
+
+from django.db import DatabaseError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from .forms import CheckoutForm, SmartFitForm
 from .models import Cart, DogProfile, Order, Quote
+
+logger = logging.getLogger(__name__)
 
 # El catálogo vive en tienda/catalog.py (fuente de verdad).
 from .catalog import PRODUCTOS  # noqa: E402,F401
@@ -18,7 +23,21 @@ def detalle(request, producto):
     item = PRODUCTOS.get(producto)
     if item is None:
         return render(request, "tienda/detalle.html", {"producto": None}, status=404)
-    return render(request, "tienda/detalle.html", {"producto": item, "slug": producto})
+    from . import services
+
+    saved = _saved_dogs(request)
+    return render(
+        request,
+        "tienda/detalle.html",
+        {
+            "producto": item,
+            "slug": producto,
+            "saved_dog": saved[0] if saved else None,
+            "saved_dogs": saved,
+            "size_options": services.size_options(),
+            "quantities": range(1, services.MAX_QUANTITY + 1),
+        },
+    )
 
 
 SESSION_DOGS = "dogs"
@@ -50,6 +69,34 @@ def _requested_product(request):
     return slug if slug in PRODUCTOS else ""
 
 
+FLASH = "flash"
+SAVE_ERROR = (
+    "We could not save your measurements right now. Your data is still in the form; "
+    "please try again in a moment."
+)
+
+
+def _save_dog(request, form):
+    """Guarda el perfil; si se reenvía el mismo formulario reutiliza el perfil
+    ya guardado en la sesión en vez de duplicarlo."""
+    d = form.cleaned_data
+    fields = {
+        "name": d.get("name", ""),
+        "breed": d["breed"],
+        "weight_kg": d["weight_kg"],
+        "back_length_cm": d["back_length_cm"],
+        "chest_girth_cm": d["chest_girth_cm"],
+        "neck_girth_cm": d.get("neck_girth_cm"),
+    }
+    for dog in _saved_dogs(request):
+        if all(getattr(dog, k) == v for k, v in fields.items()):
+            _remember_dog(request, dog)
+            return dog
+    dog = form.save()
+    _remember_dog(request, dog)
+    return dog
+
+
 def smart_fit(request):
     from . import services
 
@@ -58,10 +105,15 @@ def smart_fit(request):
     if request.method == "POST":
         form = SmartFitForm(request.POST, require_neck=require_neck)
         if form.is_valid():
-            dog = form.save()
-            _remember_dog(request, dog)
-            url = reverse("smart_fit_resultado", args=[dog.public_id])
-            return redirect(url + (f"?producto={producto}" if producto else ""))
+            try:
+                dog = _save_dog(request, form)
+            except DatabaseError:
+                logger.exception("Smart Fit: could not save measurements")
+                form.add_error(None, SAVE_ERROR)
+            else:
+                request.session[FLASH] = "Measurements saved."
+                url = reverse("smart_fit_resultado", args=[dog.public_id])
+                return redirect(url + (f"?producto={producto}" if producto else ""))
     else:
         form = SmartFitForm(
             initial={"weight_unit": "kg", "length_unit": "cm"}, require_neck=require_neck
@@ -90,14 +142,20 @@ def smart_fit_editar(request, public_id):
     if request.method == "POST":
         form = SmartFitForm(request.POST, require_neck=require_neck)
         if form.is_valid():
-            form.save(instance=dog)
-            _remember_dog(request, dog)
-            if request.GET.get("next") == "cart":
-                return redirect("cart")
-            if back_quote:
-                return redirect("smart_quote", public_id=back_quote.public_id)
-            url = reverse("smart_fit_resultado", args=[dog.public_id])
-            return redirect(url + (f"?producto={producto}" if producto else ""))
+            try:
+                form.save(instance=dog)
+            except DatabaseError:
+                logger.exception("Smart Fit: could not update measurements")
+                form.add_error(None, SAVE_ERROR)
+            else:
+                _remember_dog(request, dog)
+                request.session[FLASH] = "Measurements saved."
+                if request.GET.get("next") == "cart":
+                    return redirect("cart")
+                if back_quote:
+                    return redirect("smart_quote", public_id=back_quote.public_id)
+                url = reverse("smart_fit_resultado", args=[dog.public_id])
+                return redirect(url + (f"?producto={producto}" if producto else ""))
     else:
         form = SmartFitForm(initial=SmartFitForm.initial_from(dog), require_neck=require_neck)
     return render(
@@ -457,6 +515,7 @@ def assistant(request):
         "tienda/assistant.html",
         {
             "occasions": [(k, v[0]) for k, v in bot.OCCASIONS.items()],
+            "saved_dog": (_saved_dogs(request) or [None])[0],
             "selected": occasion,
             "q": q,
             "reply": reply,

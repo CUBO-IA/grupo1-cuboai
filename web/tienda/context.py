@@ -12,4 +12,5 @@ def cart_summary(request):
             cart = None
         if cart is not None:
             units = sum(q.quantity for q in services.cart_lines(cart))
-    return {"cart_units": units}
+    flash = session.pop("flash", "") if session is not None else ""
+    return {"cart_units": units, "flash": flash}

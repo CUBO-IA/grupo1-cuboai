@@ -5,13 +5,34 @@
 <section class="detail">
 {% if producto %}
     <div class="detail-media">
-        <img class="detail-image" src="{% static producto.imagen %}" alt="{{ producto.nombre }}">
+        <img class="detail-image" id="detail-main" src="{% static producto.imagen %}" alt="{{ producto.nombre }}">
         {% if producto.imagenes|length > 1 %}
-        <div class="detail-thumbs">
+        <div class="detail-thumbs" role="group" aria-label="Product photos">
             {% for img in producto.imagenes %}
-            <img src="{% static img %}" alt="{{ producto.nombre }} — view {{ forloop.counter }}">
+            <button type="button" class="detail-thumb{% if forloop.first %} is-active{% endif %}"
+                    data-src="{% static img %}" aria-label="Show photo {{ forloop.counter }}"
+                    aria-pressed="{% if forloop.first %}true{% else %}false{% endif %}">
+                <img src="{% static img %}" alt="{{ producto.nombre }} — view {{ forloop.counter }}">
+            </button>
             {% endfor %}
         </div>
+        <script>
+        (function () {
+            var main = document.getElementById("detail-main");
+            var thumbs = document.querySelectorAll(".detail-thumb");
+            thumbs.forEach(function (btn) {
+                btn.addEventListener("click", function () {
+                    main.src = btn.getAttribute("data-src");
+                    thumbs.forEach(function (b) {
+                        b.classList.remove("is-active");
+                        b.setAttribute("aria-pressed", "false");
+                    });
+                    btn.classList.add("is-active");
+                    btn.setAttribute("aria-pressed", "true");
+                });
+            });
+        })();
+        </script>
         {% endif %}
     </div>
     <div class="detail-content">
@@ -51,6 +72,40 @@
                 {% endfor %}
             </ul>
         </section>
+
+        {% if saved_dog %}
+        <form method="post" action="{% url 'cart_add' %}" class="fit-form">
+            {% csrf_token %}
+            <input type="hidden" name="producto" value="{{ slug }}">
+            <div class="fit-field">
+                <label for="add-dog">Add to cart for</label>
+                <select id="add-dog" name="dog">
+                    {% for d in saved_dogs %}<option value="{{ d.public_id }}">{{ d.display_name }} ({{ d.breed }})</option>{% endfor %}
+                </select>
+            </div>
+            <div class="fit-field">
+                <label for="add-size">Size</label>
+                <select id="add-size" name="size">
+                    <option value="">Not sure — team will confirm</option>
+                    {% for s in size_options %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="fit-field">
+                <label for="add-qty">Quantity</label>
+                <select id="add-qty" name="quantity">
+                    {% for n in quantities %}<option value="{{ n }}">{{ n }}</option>{% endfor %}
+                </select>
+            </div>
+            <button class="button" type="submit">Add to Cart</button>
+            <a class="button" href="{% url 'cart' %}">View Cart{% if cart_units %} ({{ cart_units }}){% endif %}</a>
+        </form>
+        {% else %}
+        <p class="fit-help">Add to cart needs your dog's measurements so we can match a size.</p>
+        <p>
+            <a class="button" href="{% url 'smart_fit' %}?producto={{ slug }}">Add to Cart</a>
+            <a class="button" href="{% url 'cart' %}">View Cart{% if cart_units %} ({{ cart_units }}){% endif %}</a>
+        </p>
+        {% endif %}
 
         <p>
             <a class="button" href="{% url 'smart_fit' %}?producto={{ slug }}">Get my fit and quote</a>
