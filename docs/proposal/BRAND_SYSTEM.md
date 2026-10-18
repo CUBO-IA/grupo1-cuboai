@@ -1,43 +1,61 @@
-# BRAND_SYSTEM — Wiener Kingdom (design tokens + identidad)
+# Wiener Kingdom — sistema de marca provisional
 
-> Fuente de verdad visual: lámina Canva seleccionada por el equipo
-> `docs/proposal/assets/marca_oficial_canva.png` y `smart_fit_editorial.png`.
-> Los SVG antiguos de dachshund/caricaturas NO se reutilizan.
+![Identidad principal seleccionada: diseño de Canva](assets/marca_oficial_canva.png)
 
-## 1. Nombre
-- Aprobado: **Wiener Kingdom**.
-- ⚠️ Pendiente de acuerdo: plantillas originales usan "Weiner Kingdom"; corregir spelling solo en PR de textos con aprobación.
+**Identidad principal seleccionada:** la lámina de Canva anterior, con dachshund lineal, corona y monograma VK/WK. No reemplazar por ilustraciones conceptuales de perro. Las piezas editoriales adicionales son ilustraciones, no logos oficiales.
 
-## 2. Paleta (tokens CSS propuestos)
-| Token | Hex | Uso |
+
+## Posicionamiento
+
+**Luxury with a little mischief.** Prendas de dachshund que convierten el ajuste, la personalidad y el cuidado en una experiencia premium. Un negocio de nicho que puede crecer hacia herramientas de comercio inteligente mediante módulos independientes.
+
+## Naming
+
+Forma deseada: **Wiener Kingdom** (el repositorio actual usa también **Weiner Kingdom**, pendiente de acuerdo con compañeros). No cambiar el nombre del repo, dominio o marca registrada de forma unilateral. No se ha verificado disponibilidad legal.
+
+## Logo seleccionado a partir de la lámina de Canva
+
+Isotipo geométrico **WK**: corona de tres puntas, silueta alargada de dachshund integrada en forma abstracta. Evitar mascotas genéricas, dibujos ajenos o referencias a franquicias conocidas.
+
+## Paleta
+
+| Token | HEX | Aplicación |
 |---|---|---|
-| `--wk-navy` | #101E36 | fondo primario, header |
-| `--wk-carmine` | #AF3635 | acentos, CTAs |
-| `--wk-burgundy` | #842F34 | hover/estados |
-| `--wk-steel` | #366A91 | secundarios, enlaces |
-| `--wk-silver` | #C5CBD5 | bordes, divisores |
-| `--wk-ivory` | #FAF8F6 | fondo claro, texto sobre navy |
+| royal-night | `#101E36` | Encabezados y fondos oscuros |
+| oxblood | `#842F34` | Marca profunda |
+| vermilion | `#AF3635` | CTA primario |
+| electric-steel | `#366A91` | Tecnología, enlaces |
+| silver | `#C5CBD5` | Contornos |
+| ivory | `#FAF8F6` | Fondos boutique |
+| ink | `#1A2538` | Texto |
 
-> Nota: el Atlas (cap. 18) lista otra paleta (Obsidian #20151E, Midnight #0C2949, Crimson #AE2D28, Signal red #D74637, Electric blue #3078A3, Steel #7F94A8, Silver #C3CCD4). **Resolver conflicto:** la lámina Canva es la referencia oficial provisional; registrar decisión del equipo.
+Paleta inspirada en la imagen de referencia; se adapta para legibilidad y estética premium. La figura de superhéroe usada para indicar los colores **no se reutiliza**.
 
-## 3. Tipografía (propuesta)
-- Display: serif premium (fallback Georgia/"Times New Roman").
-- Body: sans legible (system-ui / -apple-system / Segoe UI).
-- Escala fluida con `clamp()`; contraste AA mínimo 4.5:1 texto, 3:1 UI.
+## Tipografía
 
-## 4. Logo
-- Concepto: corona geométrica + silueta dachshund (sin personajes/marcas de terceros).
-- Entregable: lámina Canva oficial; no reinventar aquí.
+Space Grotesk / Inter o equivalentes de licencia abierta. Titulares elegantes y compactos; cuerpo legible. Tamaños móviles AA.
 
-## 5. Fotografía (regla dura)
-- Usar las fotos reales del catálogo original cuando estén disponibles.
-- Fallback honesto (placeholder etiquetado "imagen no disponible"), NUNCA imágenes generadas presentadas como fotos del producto.
-- Revisar peso de imágenes (algunas 300–450KB) para Core Web Vitals.
+## Sistema UI
 
-## 6. Voz de marca
-- "Commerce, reimagined." / "Descubre más. Compra mejor."
-- Tono premium, honesto, sin urgencia manipuladora, sin ratings inventados.
+Hero editorial con dachshund original, colección en tarjetas fotográficas reales cuando existan permisos, detalles de talla transparentes, carrito claro, checkout sin efectos distractores, y panel de vendedor con métricas trazables.
 
-## 7. Accesibilidad de marca
-- Contraste sobre #101E36 y #AF3635 verificado (WCAG AA).
-- Foco visible, reduced-motion, navegación por teclado.
+## Copy
+
+- Titular: **Pequeños de tamaño. Realeza de corazón.**
+- English: **Made to fit. Born to stand out.**
+- Lo que vendemos hoy: prendas y accesorios para dachshunds.
+- Lo que exploramos mañana: comercio mejor conectado.
+
+## Prohibiciones
+
+No usar logos, ilustraciones, personajes ni assets protegidos de terceros sin permiso. No usar datos, credenciales ni trabajo privado de otras iniciativas en documentos compartidos.
+
+## Arte editorial reutilizable (no isotipos)
+
+![Exploración Smart Fit](assets/smart_fit_editorial.png)
+
+![Portada editorial alternativa](assets/arte_editorial_atlas.png)
+
+![Resumen visual complementario](assets/estado_visual_complementario.png)
+
+**Política visual:** ninguna caricatura canina. Mostrar fotografías reales verificadas para la venta cuando exista autorización de uso; si faltan, tarjetas tipográficas y textiles marcados como demostrativos. No declarar que renders IA son productos reales.

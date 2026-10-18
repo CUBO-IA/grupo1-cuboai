@@ -1,79 +1,38 @@
-# REPOSITORY_AUDIT — Wiener Kingdom (CUBO-IA/grupo1-cuboai)
+# Auditoría de punto de partida — Wiener Kingdom
 
-> Modo: lectura. Commit auditado: `68f50327de47454a81f52cd476a772b03df8423a` (main).
-> Fecha: 2026-10-17. Ningún archivo modificado; sin push, sin rama remota, sin PR.
+**Base:** [`CUBO-IA/grupo1-cuboai`](https://github.com/CUBO-IA/grupo1-cuboai), `main`, inspección de árbol, README, `web/tienda/catalog.py`, `web/templates/tienda`, `web/config/settings.py` y documentos de requisitos (17 oct 2026). **No se ha ejecutado la suite del equipo desde un clon completo**, porque el entorno de esta preparación no accede al servidor GitHub por Git TCP/HTTPS; las pruebas citadas son reportes previos del propio repositorio.
 
-## 1. Resumen ejecutivo (máx. 8 líneas)
-- Django 5.2 + Python 3.12+, app `tienda` en `web/`, SQLite de desarrollo.
-- Catálogo de 8 productos activos + 1 retirado (dog-sweater, solo histórico) en `tienda/catalog.py`.
-- Flujo completo cliente: Smart Fit (medidas) → Smart Quote (cotización servidor, provisional) → carrito multiproducto → checkout → pedido persistente con 4 estados independientes.
-- Panel privado staff (login Django, `is_staff`), pagos manuales, costos internos, descuento Bitcoin 15% sujeto a verificación manual.
-- Asistente determinista por reglas (NO IA generativa).
-- Suite de 11 archivos de tests presente. NO re-ejecutada en esta entrega (sin runtime Django disponible en el sandbox).
-- Bloqueante: credencial GitHub no configurada en el agente → read-only confirmado; no es posible crear fork/PR todavía.
+## Lo que ya construyó el equipo (no borrarlo)
 
-## 2. Árbol relevante
-```
-web/
-├── config/            settings.py (DEBUG=True, ALLOWED_HOSTS=[]), urls.py, wsgi.py
-├── manage.py
-├── requirements.txt   Django>=5.0,<6.0 · gunicorn · whitenoise
-├── static/tienda/     css/style.css (14KB), js/script.js (140B), img/ (fotos catálogo)
-└── tienda/
-    ├── catalog.py      PRODUCTOS (8 activos) + RETIRED_SLUGS
-    ├── models.py       DogProfile, Cart, Quote, Order, OrderEvent, OrderLine,
-    │                   ProductCost, MaterialLine, ProductMeasurement,
-    │                   SizeRange, ProductPaymentRule
-    ├── services.py     precio/cotización/pedido/transiciones/costos/descuento
-    ├── panel.py        panel staff (staff_required)
-    ├── views.py        catálogo, smart fit, quote, carrito, checkout, pedido
-    ├── assistant.py    asistente guiado determinista
-    ├── forms.py        SmartFitForm, CheckoutForm, CostForm
-    ├── urls.py         rutas públicas + panel
-    └── test_*.py       11 archivos de tests
-```
+- Backend **Django 5.2 / Python** con `web/config` y `web/tienda` y SQLite de desarrollo.
+- **Catálogo:** ocho productos activos en `catalog.py` y un producto histórico retirado. El README inicial y checklist antiguos hablan de 4: usar código actual como criterio, pero validar con el equipo.
+- **Smart Fit:** registra medidas del perro, formatos y validaciones.
+- **Smart Quote:** calcula el precio base en el servidor; ajustes por talla todavía no definidos.
+- **Carrito y checkout:** persistencia de pedidos, restricciones de duplicados y validación del lado servidor.
+- **Panel privado:** requiere usuarios staff, controla estado de pedidos, pagos manuales, fabricación, envío y costos.
+- **Descuento Bitcoin:** 15% de subtotal en artículos elegibles sujeto a verificación manual; no hay gateway real y PayPal/tarjeta son opciones de DEMO.
+- **Asistente actual:** determinista por reglas de catálogo, **no** IA de modelo de lenguaje.
+- **Pruebas:** abundantes `test_*.py` y migraciones; la propia documentación reporta 80 y 96 según estado de tareas. No confundir esas cifras históricas con el estado actual.
 
-## 3. Tabla YA EXISTE / FUNCIONA PARCIAL / FALTA / NO TOCAR
+## Hallazgos y riesgos concretos
 
-| Estado | Componente | Detalle |
-|---|---|---|
-| ✅ YA EXISTE | Catálogo | 8 productos activos con precios, materiales, fichas; 1 retirado histórico |
-| ✅ YA EXISTE | Smart Fit | DogProfile métrico (kg/cm), validación de rangos, kg↔lb cm↔in, 5 perfiles/sesión |
-| ✅ YA EXISTE | Smart Quote | Cotización SIEMPRE en servidor, provisional, tope UNIT_PRICE_CAP=$850, MAX_QUANTITY=10 |
-| ✅ YA EXISTE | Carrito | Multiproducto, líneas=Quote, dedupe, actualizar cantidad, quitar, checkout |
-| ✅ YA EXISTE | Pedido | Order con snapshot, 4 estados independientes (pedido/pago/producción/envío), OrderLine |
-| ✅ YA EXISTE | Panel staff | staff_required, lista/filtros/búsqueda, ficha taller, costos, reglas de pago |
-| ✅ YA EXISTE | Descuento BTC | 15% solo productos elegibles, PENDIENTE hasta verificación manual |
-| ✅ YA EXISTE | Costos internos | ProductCost + MaterialLine, estimado vs real, margen; PRIVADO |
-| ✅ YA EXISTE | Asistente | Determinista, solo catálogo + textos fijos, declara desconocido |
-| ✅ YA EXISTE | Tests | 11 archivos test_* (carrito, panel, pagos, costos, spec comercial, flujo) |
-| ⚠️ PARCIAL | Pagos | Solo métodos DEMO (paypal_demo/card_demo nunca pagan) + bitcoin manual. Sin PSP |
-| ⚠️ PARCIAL | Precio por talla | Regla comercial NO definida → toda cotización es provisional |
-| ⚠️ PARCIAL | Envío | Sin tarifa/zona/operador; shipping=None, tracking manual |
-| ⚠️ PARCIAL | Seguridad | CSRF presente; pero DEBUG=True, ALLOWED_HOSTS=[], sin rate-limit, sin HTTPS |
-| ⚠️ PARCIAL | Cuenta cliente | Sin auth de comprador; seguimiento vía UUID en URL |
-| ❌ FALTA | PSP real / sandbox webhooks / idempotencia / conciliación | |
-| ❌ FALTA | Logística contratada (tarifas, zonas, 3PL, devoluciones) | |
-| ❌ FALTA | Analítica real con fuente/denominador | |
-| ❌ FALTA | IA conectada a datos con grounding/permisos | |
-| ❌ FALTA | Multivendedor / RBAC inter-tenant | |
-| ❌ FALTA | Despliegue producción (gunicorn presente pero sin config hardening) | |
-| 🔒 NO TOCAR | Reglas de precio/pago/descuento | Sin aprobación explícita |
-| 🔒 NO TOCAR | Estados de pedido y semántica de transición | |
-| 🔒 NO TOCAR | Catálogo y fotos originales | Fallback honesto, nunca imágenes generadas como fotos |
-| 🔒 NO TOCAR | main | Read-only hasta fork+PR autorizado |
+1. **Marca escrita de dos formas:** las plantillas y README usan `Weiner Kingdom` mientras el equipo ahora solicita **Wiener Kingdom**. Normalizar solo en un PR de marca aprobado.
+2. **Producción:** `DEBUG=True` y `ALLOWED_HOSTS=[]`; usar solo desarrollo hasta hardening y pruebas.
+3. **Acceso a pedido:** URL UUID funciona como acceso por enlace; requiere análisis de privacidad, expiración o autenticación según uso real.
+4. **Checkout:** precio provisional hasta aprobación; no mostrarlo como compra definitivamente pagada.
+5. **IVA, entrega, política de reembolsos:** procedimientos faltantes, no inventarlos.
+6. **SQLite:** bien para MVP local, revisar Postgres y concurrencia antes de volumen real.
+7. **Refactor masivo:** sería un retroceso; preservar nombres de rutas y comportamientos probados.
 
-## 4. Riesgos y bloqueos concretos
-1. **P0 — GitHub sin credenciales.** `github_identity_status` → `credentialState: unavailable`. No puedo crear fork/rama/PR. Pendiente: operador conecta GitHub (Settings → Agents → Tools).
-2. **P0 — settings de desarrollo en producción** (DEBUG=True, ALLOWED_HOSTS=[], SECRET_KEY por defecto).
-3. **P1 — Sin runtime Django en el sandbox.** Los 11 tests NO se re-ejecutaron; cualquier PR de código debe declarar "NO PROBADO" hasta levantar el entorno.
-4. **P1 — Ortografía "Weiner/Weiner Kingdom".** El código usa "weiner-kingdom" en SECRET_KEY default; el nombre aprobado es "Wiener Kingdom". Resolver en PR de textos.
-5. **P2 — Imágenes.** Algunas fotos (cable-knit-jumper-1.jpg 297KB, christmas-dog 306KB, wedding-dog 342KB) son grandes; revisar peso/Core Web Vitals sin perder origen.
+## Recomendación técnica
 
-## 5. Dependencias y permisos
-- Necesario: conexión GitHub del operador + autorización de fork + PR draft.
-- Runtime para tests: Python 3.12 + Django 5.2 local (no disponible en sandbox actual).
-- No conectar PSP/cuentas/slack/discord/canva/gworkspace hasta autorización de alcances.
+**Continuar en Django** y desarrollar una *capa de experiencia* premium sobre templates + CSS/JS, seguido por endurecimiento de seguridad, integraciones sandbox, analítica y módulos aislados. No cambiar a Next.js solo por moda; podría ser útil en un frontend desacoplado en otra fase, si lo justifica la carga.
 
-## 6. Próxima acción
-Preparar PR **docs-only** en borrador (archivos nuevos en docs/proposal/), aplicable como patch cuando se otorgue escritura/fork.
+## Evidencia y enlaces
+
+- [Repositorio principal](https://github.com/CUBO-IA/grupo1-cuboai)
+- [Guía técnica](https://github.com/CUBO-IA/grupo1-cuboai/blob/main/docs/guia-tecnica.md)
+- [Especificación comercial](https://github.com/CUBO-IA/grupo1-cuboai/blob/main/docs/especificacion-comercial.md)
+- [MVP y límites](https://github.com/CUBO-IA/grupo1-cuboai/blob/main/docs/mvp-checklist-y-limitaciones.md)
+- [Pagos](https://github.com/CUBO-IA/grupo1-cuboai/blob/main/docs/pagos.md)
+- [Catálogo fuente](https://github.com/CUBO-IA/grupo1-cuboai/blob/main/web/tienda/catalog.py)
