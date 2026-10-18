@@ -355,3 +355,27 @@ footer { text-align: center; padding: 30px; color: #756960; }
 .fit-field select { max-width: 100%; text-overflow: ellipsis; }
 @media (max-width: 700px) { .fit-layout { grid-template-columns: minmax(0, 1fr); } }
 .page-heading h1.heading-long { font-size: clamp(1.8rem, 4.5vw, 3rem); }
+
+/* ===== PREMIUM HOMEPAGE (feature/homepage-premium) ===== */
+.intro .eyebrow { color: #8a6a3c; }
+.home-featured { max-width: 1200px; margin: 0 auto; padding: 40px 25px 80px; }
+.home-featured-head { text-align: center; margin-bottom: 28px; }
+.home-featured-head h2,
+.home-cta h2 {
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 400;
+    font-size: clamp(1.8rem, 4vw, 2.6rem);
+    margin: 8px 0 0;
+}
+.home-featured-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 22px; }
+.home-featured-grid .card { transition: transform .18s ease, box-shadow .18s ease; }
+.home-featured-grid .card:hover { transform: translateY(-4px); box-shadow: 0 12px 28px rgba(45,36,31,.12); }
+.home-featured-grid .card h3 { margin: 0 0 6px; font-size: 1.02rem; line-height: 1.3; }
+.home-featured-grid .card .price { font-size: 1.15rem; margin-bottom: 14px; }
+.home-featured-grid .card .button { display: block; width: 100%; text-align: center; box-sizing: border-box; }
+.home-cta { text-align: center; padding: 60px 20px 80px; }
+.home-cta .eyebrow { color: #8a6a3c; }
+.home-cta p { margin: 18px 0 0; }
+@media (max-width: 900px) { .home-featured-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 520px) { .home-featured-grid { grid-template-columns: 1fr; } }
+
