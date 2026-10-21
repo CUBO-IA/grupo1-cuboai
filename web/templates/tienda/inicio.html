@@ -6,24 +6,21 @@
 {% block content %}
 
 <section class="home-render" aria-label="Weiner Kingdom">
-    <img src="{% static 'tienda/img/home-render.jpg' %}"
+    <img src="{% static 'tienda/img/home-render-remix.png' %}"
+         width="2123" height="741"
          alt="Weiner Kingdom — dachshunds wearing tailored coats">
-    <nav class="home-ribbon" aria-label="Main sections">
-        <a href="{% url 'productos' %}">Products</a>
-        <a href="{% url 'smart_fit' %}">Smart Fit</a>
-        <a href="{% url 'assistant' %}">Guide</a>
-    </nav>
 </section>
 
-<section class="intro">
+<section class="intro home-intro">
 
-    <h2>Made for the little dachshunds.</h2>
+    <h1 class="home-title">Made for the little dachshunds.</h1>
 
-    <p>
+    <p class="home-lead">
         Choose a garment, share your dog's measurements once, and we turn
         that information into an order that is ready to be made.
-        Explore our collection in La Madriguera Café, San Benito.
     </p>
+
+    <p class="home-location">Explore our collection in La Madriguera Café, San Benito.</p>
 
     <p>
         <a class="button" href="{% url 'productos' %}">View Products</a>
