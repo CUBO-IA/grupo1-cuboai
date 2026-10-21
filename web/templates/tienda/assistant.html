@@ -41,17 +41,13 @@
                     <p class="fit-help">{{ p.tagline }}</p>
                     <div class="reco-actions">
                         <a class="button" href="{% url 'detalle' p.slug %}">View Product</a>
-                        {% if saved_dog %}
                         <form method="post" action="{% url 'cart_add' %}">
                             {% csrf_token %}
                             <input type="hidden" name="producto" value="{{ p.slug }}">
-                            <input type="hidden" name="dog" value="{{ saved_dog.public_id }}">
+                            {% if saved_dog %}<input type="hidden" name="dog" value="{{ saved_dog.public_id }}">{% endif %}
                             <input type="hidden" name="quantity" value="1">
                             <button class="button" type="submit">Add to Cart</button>
                         </form>
-                        {% else %}
-                        <a class="button" href="{% url 'smart_fit' %}?producto={{ p.slug }}">Add to Cart</a>
-                        {% endif %}
                     </div>
                 </div>
             </div>

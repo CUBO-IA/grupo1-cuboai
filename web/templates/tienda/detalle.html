@@ -73,16 +73,20 @@
             </ul>
         </section>
 
-        {% if saved_dog %}
         <form method="post" action="{% url 'cart_add' %}" class="fit-form">
             {% csrf_token %}
             <input type="hidden" name="producto" value="{{ slug }}">
+            {% if saved_dog %}
             <div class="fit-field">
                 <label for="add-dog">Add to cart for</label>
                 <select id="add-dog" name="dog">
                     {% for d in saved_dogs %}<option value="{{ d.public_id }}">{{ d.display_name }} ({{ d.breed }})</option>{% endfor %}
+                    <option value="">Add measurements later</option>
                 </select>
             </div>
+            {% else %}
+            <p class="fit-help">You can add this to your cart now and enter your dog's measurements later from the cart.</p>
+            {% endif %}
             <div class="fit-field">
                 <label for="add-size">Size</label>
                 <select id="add-size" name="size">
@@ -99,13 +103,6 @@
             <button class="button" type="submit">Add to Cart</button>
             <a class="button" href="{% url 'cart' %}">View Cart{% if cart_units %} ({{ cart_units }}){% endif %}</a>
         </form>
-        {% else %}
-        <p class="fit-help">Add to cart needs your dog's measurements so we can match a size.</p>
-        <p>
-            <a class="button" href="{% url 'smart_fit' %}?producto={{ slug }}">Add to Cart</a>
-            <a class="button" href="{% url 'cart' %}">View Cart{% if cart_units %} ({{ cart_units }}){% endif %}</a>
-        </p>
-        {% endif %}
 
         <p>
             <a class="button" href="{% url 'smart_fit' %}?producto={{ slug }}">Get my fit and quote</a>

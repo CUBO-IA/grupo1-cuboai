@@ -79,19 +79,18 @@ class AddToCartServiceTests(TestCase):
             services.add_to_cart(cart, dog, "tactical-dog", 1)  # 11 > máximo
         self.assertEqual(cart.quotes.get().quantity, 10)
 
-    def test_required_measurement_blocks_adding(self):
+    def test_required_measurement_is_flagged_not_blocked(self):
         ProductMeasurement.objects.filter(product_slug="cable-knit-jumper").update(
             requires_neck=True
         )
         cart, dog = Cart.objects.create(), make_dog()
-        with self.assertRaises(services.CartError) as ctx:
-            services.add_to_cart(cart, dog, "cable-knit-jumper", 1)
-        self.assertIn("neck girth", str(ctx.exception))
-        # el resto de productos no se bloquea
-        services.add_to_cart(cart, dog, "tactical-dog", 1)
+        quote = services.add_to_cart(cart, dog, "cable-knit-jumper", 1)
+        self.assertEqual(services.missing_measurements(dog, "cable-knit-jumper"), ["neck_girth"])
+        self.assertTrue(services.cart_summary(cart)["has_missing"])
+        self.assertEqual(quote.cart_id, cart.pk)
         dog.neck_girth_cm = Decimal("25")
         dog.save()
-        services.add_to_cart(cart, dog, "cable-knit-jumper", 1)
+        self.assertFalse(services.cart_summary(cart)["has_missing"])
 
 
 class CartSummaryTests(TestCase):
@@ -363,7 +362,7 @@ class CartViewTests(TestCase):
         self.assertContains(page, "$600.00")
         self.assertContains(page, "Provisional")
         self.assertContains(page, "To be confirmed")
-        self.assertContains(page, "Cart (2)")  # contador en la cabecera
+        self.assertContains(page, "Cart, 2 items")  # contador en la cabecera
 
     def test_two_products_two_dogs(self):
         a, b = make_dog("A"), make_dog("B", chest="36", back="28")
@@ -388,9 +387,10 @@ class CartViewTests(TestCase):
             r = self.add(dog, **extra)
             self.assertEqual(r.status_code, 400, extra)
         self.assertEqual(Quote.objects.count(), 0)
+        # perfil inexistente: la linea se agrega con medidas pendientes
         r = self.client.post(reverse("cart_add"), {"dog": str(uuid.uuid4()), "producto": "tactical-dog"})
-        self.assertEqual(r.status_code, 302)
-        self.assertEqual(Quote.objects.count(), 0)
+        self.assertRedirects(r, reverse("cart"))
+        self.assertIsNone(Quote.objects.get().dog)
 
     def test_update_and_remove(self):
         dog = make_dog()

@@ -759,7 +759,7 @@ def _create_order(quotes, customer, cart=None):
             if q.product_slug not in PRODUCTOS:
                 raise QuoteNotOrderable("unavailable")
             missing = missing_measurements(q.dog, q.product_slug)
-            if missing:
+            if q.dog is None or missing:
                 raise QuoteNotOrderable("missing measurements")
 
         totals_list = [compute_totals(q, payment_method) for q in locked]
@@ -842,9 +842,7 @@ def add_to_cart(cart, dog, slug, quantity=1, size_label=""):
     size_label = (size_label or "").strip()
     if size_label and size_label not in size_options():
         raise CartError("Choose a size from the list.")
-    missing = missing_measurements(dog, slug)
-    if missing:
-        raise CartError("This garment needs: " + ", ".join(m.replace("_", " ") for m in missing) + ".")
+    # Sin perfil la linea queda con medidas pendientes; se completa desde el carrito.
     existing = cart.quotes.filter(
         dog=dog, product_slug=slug, size_label=size_label, status=Quote.Status.DRAFT
     ).first()
@@ -872,7 +870,7 @@ def cart_summary(cart, payment_method="unspecified"):
             continue
         t = compute_totals(quote, payment_method)
         product = get_product(quote.product_slug)
-        size = classify_size(quote.dog)
+        size = classify_size(quote.dog) if quote.dog else None
         lines.append(
             {
                 "quote": quote,
@@ -913,6 +911,8 @@ def measurement_requirements(slug):
 
 def missing_measurements(dog, slug):
     """Campos que la prenda exige y el perfil aún no tiene."""
+    if dog is None:
+        return ["measurements"]
     missing = []
     if measurement_requirements(slug)["neck_girth"] and dog.neck_girth_cm is None:
         missing.append("neck_girth")

@@ -8,6 +8,7 @@
 </section>
 
 <section class="panel-wrap">
+{% if add_error %}<p class="fit-alert" role="alert">{{ add_error }}</p>{% endif %}
 {% if not summary or not summary.lines %}
     <div class="fit-form">
         <p>Your cart is empty.</p>
@@ -23,6 +24,25 @@
             <img src="{% static l.product.imagen %}" alt="{{ l.product.nombre }}">
             <div class="cart-line-body">
                 <h2>{{ l.product.nombre }}</h2>
+                {% if not l.quote.dog %}
+                <p class="fit-alert" role="status">Measurements pending. You can keep shopping; add them before checkout.</p>
+                <p>
+                    <a class="button" href="{% url 'smart_fit' %}?producto={{ l.quote.product_slug }}&amp;line={{ l.quote.public_id }}">Add measurements</a>
+                </p>
+                {% if saved_dogs %}
+                <form method="post" action="{% url 'cart_line_update' l.quote.public_id %}" class="cart-line-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="size" value="{{ l.quote.size_label }}">
+                    <input type="hidden" name="quantity" value="{{ l.quote.quantity }}">
+                    <label>Use saved dog
+                        <select name="dog">
+                            {% for d in saved_dogs %}<option value="{{ d.public_id }}">{{ d.display_name }} ({{ d.breed }})</option>{% endfor %}
+                        </select>
+                    </label>
+                    <button class="button" type="submit">Use</button>
+                </form>
+                {% endif %}
+                {% else %}
                 <p class="fit-help">
                     For {{ l.quote.dog.display_name }} ({{ l.quote.dog.breed }}) —
                     back {{ l.quote.dog.back_length_cm }} cm, chest {{ l.quote.dog.chest_girth_cm }} cm{% if l.quote.dog.neck_girth_cm %}, neck {{ l.quote.dog.neck_girth_cm }} cm{% endif %}.
@@ -31,9 +51,11 @@
                 {% if l.missing %}
                 <p class="fit-alert" role="alert">This garment needs: {{ l.missing|join:", " }}. <a href="{% url 'smart_fit_editar' l.quote.dog.public_id %}?producto={{ l.quote.product_slug }}&amp;next=cart">Add it</a></p>
                 {% endif %}
+                {% endif %}
                 <p class="fit-help">
                     Reference size:
-                    {% if l.size.status == "matched" %}{{ l.size.candidates.0.text }}
+                    {% if not l.size %}pending measurements
+                    {% elif l.size.status == "matched" %}{{ l.size.candidates.0.text }}
                     {% elif l.size.status == "ambiguous" %}between sizes — team confirms
                     {% else %}outside the table — team confirms{% endif %}
                 </p>
@@ -78,7 +100,7 @@
         <p class="fit-alert" role="status">Provisional prices: size-based adjustments are not applied yet. Our team will review your order and confirm final prices before any payment.</p>
         {% endif %}
         {% if summary.has_missing %}
-        <p class="fit-alert" role="alert">Complete the missing measurements before checkout.</p>
+        <p class="fit-alert" role="alert">Complete the missing measurements before checkout. Your items stay in the cart.</p>
         {% else %}
         <a class="button" href="{% url 'cart_checkout' %}">Checkout ({{ summary.units }} item{{ summary.units|pluralize }})</a>
         {% endif %}
