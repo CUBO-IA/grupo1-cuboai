@@ -358,20 +358,16 @@ footer { text-align: center; padding: 30px; color: #756960; }
 .card-cart { margin: 8px 0 0; }
 
 /* ---- Home redesign: top strip, hero banner, typography ---- */
-/* Fuentes: se usan las instaladas en el equipo (local) y, si faltan, una
-   alternativa sans-serif. Para que funcionen en otros dispositivos hay que
-   anadir archivos con licencia de uso web (ver docs/tipografias.md). */
+/* Fuentes: Spartan MB solo desde el equipo (local); sin archivos publicados hasta
+   verificar su licencia web. Alternativas: League Spartan, Arial. Texto final:
+   Carlito, Arial (ver docs/tipografias.md). */
 @font-face { font-family: "Spartan MB Web"; font-weight: 700;
     src: local("Spartan MB Bold"), local("SpartanMB-Bold"), local("League Spartan Bold"); }
 @font-face { font-family: "Spartan MB Web"; font-weight: 400;
     src: local("Spartan MB Regular"), local("SpartanMB-Regular"), local("League Spartan"); }
-@font-face { font-family: "Calibri Web"; font-style: italic;
-    src: local("Calibri Italic"), local("Calibri-Italic"), local("Carlito Italic"); }
-@font-face { font-family: "Calibri Web"; font-style: normal;
-    src: local("Calibri"), local("Carlito"); }
 :root {
-    --font-spartan: "Spartan MB Web", "Spartan MB", "League Spartan", "Montserrat", "Century Gothic", Arial, sans-serif;
-    --font-calibri: "Calibri Web", Calibri, Carlito, "Segoe UI", Arial, sans-serif;
+    --font-spartan: "Spartan MB Web", "Spartan MB", "League Spartan", Arial, sans-serif;
+    --font-calibri: Carlito, Arial, sans-serif; /* Calibri no se redistribuye; Carlito es su alternativa libre */
 }
 
 .site-header { padding: 26px max(5%, calc((100% - 1200px) / 2)); border-bottom: 0; }
@@ -402,3 +398,8 @@ footer { text-align: center; padding: 30px; color: #756960; }
 .home-location { font-family: var(--font-calibri); font-style: italic; font-size: clamp(1.05rem, 1.7vw, 1.3rem); margin: 0 0 30px; }
 .home-render { width: 100%; margin: 0; padding: 12px 0 0; background: #fff; }
 .home-render img { width: min(88%, 1400px); margin: 0 auto; }
+/* Alineacion vertical del menu: texto e iconos centrados en la misma linea */
+.site-nav { display: flex; align-items: center; }
+.site-nav a { display: inline-flex; align-items: center; justify-content: center; height: 32px; line-height: 1; }
+.site-nav .nav-icon img { display: block; margin: 0; }
+.site-nav a { white-space: nowrap; }

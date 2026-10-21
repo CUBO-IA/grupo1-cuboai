@@ -2,8 +2,8 @@
 
 | Elemento | Fuente pedida | Estado en el proyecto |
 |---|---|---|
-| Título y párrafo | Spartan MB | Solo instalada en el equipo del diseñador (`local()`); alternativa: League Spartan, Montserrat, Arial |
-| Texto final (cursiva) | Calibri | Fuente de Microsoft instalada en Windows; alternativa: Carlito, Segoe UI, Arial |
+| Título y párrafo | Spartan MB | Solo instalada en el equipo del diseñador (`local()`); pila: Spartan MB, League Spartan, Arial |
+| Texto final (cursiva) | Carlito (alternativa libre a Calibri) | Calibri no se usa ni se redistribuye; pila: Carlito, Arial |
 
 El proyecto **no incluye archivos de fuente**, así que otros dispositivos verán la alternativa. El CSS ya está preparado
 (`@font-face` "Spartan MB Web" y "Calibri Web" y las variables `--font-spartan` y `--font-calibri` en `static/tienda/css/style.css`).

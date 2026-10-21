@@ -109,7 +109,8 @@
             <a class="button" href="{% url 'productos' %}">Back to Products</a>
         </p>
     </div>
-{% else %}
+
+    {% else %}
     <h1>Product not found</h1>
     <a class="button" href="{% url 'productos' %}">Back to Products</a>
 {% endif %}
