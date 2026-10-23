@@ -37,8 +37,12 @@ def _profile(request, store):
     return services_memory.get_profile(store, request.session.session_key, pid)
 
 
-def _measurement(profile):
-    return services_memory.latest_measurement(profile) if profile else None
+def _measurement(request, store, profile):
+    """Medidas persistentes SOLO con consentimiento vigente (R07)."""
+    if not profile:
+        return None
+    return services_memory.authorized_measurement(
+        store, request.session.session_key, profile)
 
 
 # ------------------------------------------------------------------- S01 ----
@@ -120,7 +124,7 @@ def collection(request, store):
         store=store, status=Product.Status.PUBLISHED) for o in (p.occasions or [])})
 
     profile = _profile(request, store)
-    measurement = _measurement(profile)
+    measurement = _measurement(request, store, profile)
     cards = []
     for p in products:
         fit = services_fit.evaluate_for_profile(p, measurement) if measurement and store.category == "moda canina" else None
@@ -149,14 +153,15 @@ def product_detail(request, store, product_slug):
         return render(request, "reino/product_detail.html", {"product": None}, status=404)
 
     profile = _profile(request, store)
-    measurement = _measurement(profile)
+    measurement = _measurement(request, store, profile)
     variants = list(product.variants.filter(is_active=True).order_by("pk"))
     fit = services_fit.evaluate_for_profile(product, measurement) if measurement else None
 
     variant_rows = []
     for v in variants:
         hint = None
-        if fit and fit["candidates"] and any(c in v.option_label for c in fit["candidates"]):
+        if fit and fit["candidates"] and any(
+                services_fit.label_matches(c, v.option_label) for c in fit["candidates"]):
             hint = "sugerida"
         variant_rows.append({"variant": v, "fit_hint": hint, "available": v.stock > 0})
 
@@ -165,10 +170,28 @@ def product_detail(request, store, product_slug):
     bundle, _ = compose_bundle(store, product, measurement=measurement)
     complements = [b["product"] for b in bundle if b["role"] == "complemento"][:2]
 
+    # Datos estructurados Product/ofertas/variantes (descubrimiento, §8 [S02]).
+    import json
+    json_ld = json.dumps({
+        "@context": "https://schema.org",
+        "@type": "Product",
+        "name": product.title,
+        "description": product.description or product.subtitle,
+        "brand": {"@type": "Brand", "name": store.name},
+        "offers": [
+            {"@type": "Offer", "sku": v.sku, "name": v.option_label,
+             "price": str(v.price), "priceCurrency": store.currency,
+             "availability": "https://schema.org/InStock" if v.stock > 0
+             else "https://schema.org/OutOfStock"}
+            for v in variants
+        ],
+    }, ensure_ascii=False)
+
     return render(request, "reino/product_detail.html", {
         "product": product, "variant_rows": variant_rows, "fit": fit,
         "profile": profile, "complements": complements,
         "media": list(product.media.all()),
+        "json_ld": json_ld,
         "has_quote_flow": bool(product.legacy_slug),  # pieza a medida: Smart Quote preservado
     })
 
@@ -186,9 +209,9 @@ def smart_fit(request, store):
         ).first()
 
     result, errors, values = None, {}, {}
-    # GET con ?producto= y medidas guardadas: evaluación directa.
+    # GET con ?producto= y medidas guardadas (autorizadas): evaluación directa.
     if request.method == "GET" and product and profile:
-        latest = _measurement(profile)
+        latest = _measurement(request, store, profile)
         if latest:
             result = services_fit.evaluate_for_profile(product, latest)
     if request.method == "POST":
@@ -208,22 +231,30 @@ def smart_fit(request, store):
         except services_fit.InvalidMeasurement as exc:
             back, errors["back"] = None, str(exc)
 
-        if not errors and profile:
-            if chest or neck or back:
+        if not errors and (chest or neck or back):
+            remember = request.POST.get("remember") == "1"
+            if remember and profile:
+                # Guardar requiere consentimiento explícito y separado (R07).
+                services_memory.grant_consent(
+                    store, request.session.session_key,
+                    services_memory.Consent.Purpose.MEASUREMENTS, profile)
                 measurement = services_memory.save_measurement(
                     profile, chest_cm=chest, neck_cm=neck, back_cm=back,
                     original={**values}, source="smartfit",
                 )
-                if product:
-                    result = services_fit.evaluate_for_profile(product, measurement)
-        elif not errors and not profile:
-            errors["profile"] = "Elegí o creá un perfil para guardar y evaluar las medidas."
+            else:
+                # «Calcular sin guardar»: evaluación temporal, nada persiste.
+                measurement = services_fit.SimpleMeasurement(chest, neck, back)
+            if product:
+                result = services_fit.evaluate_for_profile(product, measurement)
+        elif not errors:
+            errors["chest"] = "Ingresá al menos una medida para evaluar."
 
     products = Product.objects.filter(store=store, status=Product.Status.PUBLISHED)
     return render(request, "reino/smartfit.html", {
         "profile": profile, "product": product, "result": result, "errors": errors,
         "values": values, "products": products,
-        "latest": _measurement(profile),
+        "latest": _measurement(request, store, profile),
     })
 
 
@@ -285,47 +316,57 @@ def cart_remove(request, store, item_id):
 
 @_store_view
 def checkout(request, store):
-    """S08 · Checkout: entrega → envío y pago → revisar (tres pasos visibles).
+    """S08 · Checkout: datos y opciones → revisión vigente → confirmar.
 
     Microcopy final honesto: «Crear pedido pendiente de pago» (flujo manual).
-    Sin tarifa configurada no se inventa envío gratis.
+    La clave de intento es POR TIENDA (R01); el resumen aprobado queda ligado
+    a su contenido (R02); modalidad/zona/tarifa se validan en servidor (R06).
     """
     session_key = request.session.session_key
     cart = commerce.get_open_cart(store, session_key)
-    summary = commerce.cart_summary(cart) if cart else None
-    if cart is None or summary["is_empty"]:
+    if cart is None:
         return redirect("reino_cart", slug=store.slug)
 
+    idem_key = f"reino_idem_{store.slug}"  # un intento por tienda, jamás compartido (R01)
     zones = ShippingZone.objects.filter(store=store, is_active=True)
     errors = {}
     data = {}
+    payment_method = "manual"
 
     if request.method == "POST":
         step = request.POST.get("step", "review")
         data = {k: request.POST.get(k, "").strip() for k in
                 ("name", "email", "phone", "delivery_mode", "zone", "address", "city",
                  "payment_method")}
+        payment_method = data["payment_method"] or "manual"
         idem = request.POST.get("idempotency_key") or uuid.uuid4().hex
-        request.session.setdefault("reino_idem", idem)
+        request.session.setdefault(idem_key, idem)
 
         if not data["name"]:
             errors["name"] = "Ingresá tu nombre."
         if "@" not in data["email"]:
             errors["email"] = "Ingresá un correo válido."
-        zone = zones.filter(name=data["zone"]).first() if data["zone"] else None
-        if data["delivery_mode"] == "local" and zone is None:
-            errors["zone"] = "Elegí una zona de entrega."
-        if data["delivery_mode"] == "local" and not data["address"]:
-            errors["address"] = "Ingresá la dirección de entrega."
-        if data["payment_method"] not in ("manual", "bitcoin"):
+        # Zona validada en servidor: tienda + activa + modalidad coherente (R06).
+        zone = None
+        if data["delivery_mode"] == "local":
+            zone = zones.filter(name=data["zone"], mode="local").first()
+            if zone is None:
+                errors["zone"] = "Elegí una zona de entrega válida."
+            if not data["address"]:
+                errors["address"] = "Ingresá la dirección de entrega."
+        elif data["delivery_mode"] == "pickup":
+            zone = None
+        else:
+            errors["delivery_mode"] = "Elegí una modalidad de entrega válida."
+        if payment_method not in ("manual", "bitcoin"):
             errors["payment_method"] = "Elegí un método de pago habilitado."
 
         if not errors:
             try:
                 session = commerce.prepare_checkout(
-                    cart, data["payment_method"],
+                    cart, payment_method,
                     delivery_mode=data["delivery_mode"] or "pickup",
-                    zone=zone, idempotency_key=request.session["reino_idem"],
+                    zone=zone, idempotency_key=request.session[idem_key],
                 )
             except commerce.StockConflict as exc:
                 request.session["reino_cart_error"] = str(exc)
@@ -333,12 +374,18 @@ def checkout(request, store):
             except commerce.CartError as exc:
                 errors["zone"] = str(exc)
             else:
+                reviewed_id = request.POST.get("session_id", "")
+                if step == "confirm" and reviewed_id and str(session.public_id) != reviewed_id:
+                    # El resumen cambió desde la última revisión: exigir una
+                    # revisión nueva del contenido vigente (R02), nunca
+                    # confirmar un resumen obsoleto.
+                    step = "review"
                 if step == "review":
                     return render(request, "reino/checkout_review.html", {
-                        "cart": cart, "summary": summary, "data": data,
-                        "session": session, "store": store,
+                        "cart": cart, "summary": commerce.cart_summary(cart, payment_method),
+                        "data": data, "session": session, "store": store,
                         "total": _review_total(session),
-                        "idem": request.session["reino_idem"],
+                        "idem": request.session[idem_key],
                     })
                 try:
                     order = commerce.confirm_checkout(
@@ -346,18 +393,21 @@ def checkout(request, store):
                         {"name": data["name"], "email": data["email"],
                          "phone": data["phone"], "address": data["address"],
                          "city": data["city"]},
-                        idempotency_key=request.session["reino_idem"],
+                        idempotency_key=session.idempotency_key,
                     )
                 except (commerce.CartError, commerce.StockConflict) as exc:
                     errors["confirm"] = str(exc)
                 else:
-                    request.session.pop("reino_idem", None)
+                    request.session.pop(idem_key, None)
                     return redirect("reino_order_guest", slug=store.slug,
                                     public_id=order.public_id, token=order.access_token)
 
+    summary = commerce.cart_summary(cart, payment_method)
+    if summary["is_empty"]:
+        return redirect("reino_cart", slug=store.slug)
     return render(request, "reino/checkout.html", {
         "cart": cart, "summary": summary, "zones": zones, "errors": errors,
-        "data": data, "idem": request.session.get("reino_idem", uuid.uuid4().hex),
+        "data": data, "idem": request.session.get(idem_key, uuid.uuid4().hex),
     })
 
 

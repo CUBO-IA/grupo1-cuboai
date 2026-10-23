@@ -107,6 +107,10 @@ class Product(models.Model):
     occasions = models.JSONField(default=list)  # p. ej. ["celebracion", "paseo"]
     styles = models.JSONField(default=list)     # p. ej. ["royal-classic"]
     base_price = models.DecimalField(max_digits=10, decimal_places=2)
+    # Elegibilidad del descuento Bitcoin migrada de la regla histórica
+    # (tienda.ProductPaymentRule). Por defecto NO participa: solo las piezas
+    # aprobadas explícitamente por el negocio (R05).
+    bitcoin_discount_eligible = models.BooleanField(default=False)
     is_featured = models.BooleanField(default=False)
     reason = models.CharField(max_length=160, blank=True)  # una razón verificable
     materials = models.JSONField(default=list)
@@ -232,13 +236,20 @@ class CartItem(models.Model):
 
 
 class CheckoutSession(models.Model):
-    """Resumen aprobado de un intento de compra (idempotente)."""
+    """Resumen aprobado de un intento de compra (idempotente).
+
+    La clave idempotente queda ligada al carrito Y al contenido aprobado:
+    mismo intento => misma sesión; contenido distinto bajo la misma clave
+    => sesión nueva (la anterior queda invalidada y sus reservas liberadas).
+    """
 
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     cart = models.ForeignKey(Cart, on_delete=models.PROTECT, related_name="checkouts")
     cart_version = models.PositiveIntegerField()
-    idempotency_key = models.CharField(max_length=80, unique=True)
+    idempotency_key = models.CharField(max_length=96, unique=True)
     summary = models.JSONField(default=dict)
+    summary_hash = models.CharField(max_length=64, blank=True)  # contenido aprobado (R02)
+    is_current = models.BooleanField(default=True)  # False => sustituida por una edición
     expires_at = models.DateTimeField()
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -321,12 +332,20 @@ class Order(models.Model):
     city = models.CharField(max_length=80, blank=True)
     zone = models.CharField(max_length=80, blank=True)
     payment_method = models.CharField(max_length=10, choices=PaymentMethod.choices, default=PaymentMethod.MANUAL)
+    stock_restored_at = models.DateTimeField(null=True, blank=True)  # reposición idempotente (R04)
+    refund_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    refund_note = models.CharField(max_length=200, blank=True)  # medio + motivo del reembolso
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PLACED)
     payment_status = models.CharField(max_length=20, choices=PaymentStatus.choices, default=PaymentStatus.PENDING)
     prep_status = models.CharField(max_length=12, choices=PrepStatus.choices, default=PrepStatus.NOT_STARTED)
     delivery_status = models.CharField(max_length=12, choices=DeliveryStatus.choices, default=DeliveryStatus.UNASSIGNED)
     payment_reference = models.CharField(max_length=120, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=("store", "reference"), name="uniq_order_reference_per_store"),
+        ]
 
     def __str__(self):
         return self.reference
@@ -358,6 +377,45 @@ class OrderEvent(models.Model):
     from_value = models.CharField(max_length=24, blank=True)
     to_value = models.CharField(max_length=24)
     note = models.CharField(max_length=200, blank=True)
+    by = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+
+
+class ActionToken(models.Model):
+    """Autorización de acción de escritura del asesor (R11).
+
+    El modelo propone; el comprador confirma. Un permiso de un solo uso, con
+    alcance (tienda+sesión), caducidad e idempotencia: repetir el mismo
+    action_id devuelve el resultado ya ejecutado, nunca duplica la acción.
+    """
+
+    class Status(models.TextChoices):
+        PROPOSED = "proposed", "Propuesta"
+        EXECUTED = "executed", "Ejecutada"
+        EXPIRED = "expired", "Vencida"
+        CANCELLED = "cancelled", "Cancelada"
+
+    action_id = models.CharField(max_length=64, unique=True)
+    store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name="action_tokens")
+    session_key = models.CharField(max_length=64, db_index=True)
+    tool = models.CharField(max_length=40)
+    payload = models.JSONField(default=dict)  # variante, cantidad, precio recuperados
+    result = models.JSONField(default=dict)   # resultado de la ejecución (para reintentos)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PROPOSED)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    executed_at = models.DateTimeField(null=True, blank=True)
+
+
+class StockAdjustment(models.Model):
+    """Ajuste manual de inventario con motivo y actor (trazabilidad M04)."""
+
+    variant = models.ForeignKey(Variant, on_delete=models.PROTECT, related_name="adjustments")
+    delta = models.IntegerField()  # +N entrada / -N salida
+    reason = models.CharField(max_length=200)
     by = models.ForeignKey("auth.User", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     created_at = models.DateTimeField(auto_now_add=True)
 

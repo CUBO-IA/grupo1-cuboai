@@ -67,7 +67,14 @@ class CommerceTests(ReinoTestCase):
             commerce.confirm_checkout(session, CUSTOMER, "k-x")
 
     def test_bitcoin_descuento_15_porciento_pendiente(self):
-        """A22 (núcleo): 15 % sobre mercancía, pendiente de verificación."""
+        """A22 (núcleo): 15 % sobre mercancía ELEGIBLE, pendiente de verificación.
+
+        Actualizado por R05: el descuento aplica solo a líneas con elegibilidad
+        migrada de la regla histórica del negocio; una pieza no elegible no
+        recibe descuento aunque pague con Bitcoin.
+        """
+        self.product.bitcoin_discount_eligible = True  # elegibilidad migrada
+        self.product.save()
         variant = self.product.variants.get(option_label="Talla M")  # $63
         cart = self._cart_with(self.store_a, variant, 2)  # $126
         session = commerce.prepare_checkout(cart, "bitcoin", idempotency_key="k-btc")
@@ -75,6 +82,11 @@ class CommerceTests(ReinoTestCase):
         self.assertEqual(str(order.discount_amount), "18.90")
         self.assertEqual(str(order.total), "107.10")
         self.assertEqual(order.payment_status, Order.PaymentStatus.PENDING)
+        # Cesta mixta: la línea NO elegible no se descuenta.
+        cart2 = self._cart_with(self.store_a, self.product2.variants.first(), 1)  # $650
+        commerce.add_item(cart2, variant, 1)  # + $63 elegible
+        summary = commerce.cart_summary(cart2, "bitcoin")
+        self.assertEqual(str(summary["discount"]), "9.45")  # 15 % solo de $63
 
     def test_a29_coherencia_de_importes(self):
         """A29: mismos importes en carrito, pedido y líneas."""

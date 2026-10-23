@@ -1,16 +1,22 @@
 """Núcleo de compra P0: carrito, checkout, pedido, reservas e idempotencia.
 
-Reglas (§15):
+Reglas (§15) tras la auditoría del PR #3:
 - Agregar al carrito NO aparta inventario; preparar checkout crea una reserva
-  corta (10 min) dentro de una transacción.
-- Dinero en Decimal con money(); envío separado; nunca "total final" incompleto.
-- El servidor reconstruye importes; doble clic no crea dos pedidos (clave
-  idempotente única = misma operación devuelve el resultado previo).
-- Pago manual/bitcoin: el pedido queda PENDIENTE de verificación; un
-  comprobante es evidencia para revisar, nunca pago automático.
-- Descuento Bitcoin 15 % preservado: sobre mercancía, pendiente de verificación.
+  corta (10 min) dentro de una transacción, con demanda AGREGADA por SKU (R03).
+- La clave idempotente queda ligada a tienda+sesión+carrito+contenido (R01/R02):
+  mismo intento => mismo resumen; contenido distinto bajo la misma clave =>
+  resumen NUEVO (el anterior se invalida y sus reservas se liberan).
+- Dinero en Decimal con money(); envío validado en servidor (R06): el
+  navegador nunca es la autoridad sobre modalidad, zona o tarifa.
+- Cancelar o vencer un pedido no expedido restituye el inventario exactamente
+  una vez (R04); los movimientos quedan registrados con actor y motivo.
+- Descuento Bitcoin 15 % SOLO sobre líneas elegibles migradas de la regla
+  histórica (R05); sigue pendiente de verificación humana.
+- Transiciones con capacidad por rol (R13): logística no confirma cobros.
 """
 
+import hashlib
+import json
 import uuid
 from datetime import timedelta
 
@@ -19,12 +25,15 @@ from django.utils import timezone
 
 from .models import (
     Cart, CartItem, CheckoutSession, Order, OrderEvent, OrderItem, OutboxEvent,
-    StockReservation, Variant,
+    StockReservation, Store, Variant,
 )
 from .money import BITCOIN_DISCOUNT_RATE, money
 
 RESERVATION_MINUTES = 10
 MAX_QUANTITY = 10
+
+DELIVERY_MODES = ("pickup", "local")
+PAYMENT_METHODS = ("manual", "bitcoin")
 
 
 class CartError(Exception):
@@ -39,6 +48,10 @@ class StockConflict(Exception):
         self.lines = lines or []
 
 
+class PermissionDenied(CartError):
+    """El rol del miembro no permite esta operación (R13)."""
+
+
 def get_open_cart(store, session_key, create=False):
     cart = Cart.objects.filter(
         store=store, session_key=session_key, status=Cart.Status.OPEN
@@ -49,29 +62,42 @@ def get_open_cart(store, session_key, create=False):
 
 
 def cart_summary(cart, payment_method="manual"):
-    """Totales del carrito calculados en servidor. Envío: por calcular."""
-    lines, subtotal = [], money(0)
+    """Totales del carrito calculados en servidor. Envío: por calcular.
+
+    El descuento Bitcoin aplica ÚNICAMENTE a líneas elegibles (R05): la
+    elegibilidad migra de la regla histórica del negocio y cualquier cambio
+    futuro debe aprobarse y versionarse.
+    """
+    lines, subtotal, eligible_subtotal = [], money(0), money(0)
     for item in cart.items.select_related("variant__product", "recipient"):
         # Revalidación de precio: el snapshot puede diferir del precio vigente.
         current = item.variant.price
         line_subtotal = money(current * item.quantity)
         subtotal += line_subtotal
+        eligible = bool(item.variant.product.bitcoin_discount_eligible)
+        if eligible:
+            eligible_subtotal += line_subtotal
         lines.append({
             "item": item,
             "current_price": current,
             "price_changed": current != item.unit_price,
             "subtotal": line_subtotal,
+            "discount_eligible": eligible,
             "available": item.variant.stock,
             "ok": item.variant.is_active and item.variant.stock >= item.quantity,
         })
     discount = money(0)
     if payment_method == "bitcoin":
-        discount = money(subtotal * BITCOIN_DISCOUNT_RATE)
+        discount = money(eligible_subtotal * BITCOIN_DISCOUNT_RATE)
     return {
         "lines": lines,
         "subtotal": subtotal,
         "discount": discount,
-        "discount_note": "Descuento Bitcoin (15 %), pendiente de verificación" if discount else "",
+        "discount_eligible_subtotal": eligible_subtotal,
+        "discount_note": (
+            "Descuento Bitcoin (15 %) sobre piezas participantes, pendiente de verificación"
+            if discount else ""
+        ),
         "shipping": None,  # por calcular: nunca un total incompleto como "final"
         "merchandise_total": subtotal,
         "amount_due": subtotal,  # el descuento aplica al verificar el pago
@@ -138,18 +164,45 @@ def _bump(cart):
     cart.save(update_fields=["version", "updated_at"])
 
 
+# ------------------------------------------------------------- checkout ----
+
+def validate_shipping(store, delivery_mode, zone):
+    """Validación de envío en SERVIDOR (R06). El navegador nunca es la autoridad.
+
+    Devuelve (modalidad_normalizada, zona_validada, tarifa Decimal).
+    """
+    if delivery_mode not in DELIVERY_MODES:
+        raise CartError("Elegí una modalidad de entrega válida.")
+    if delivery_mode == "pickup":
+        return "pickup", None, money(0)
+    # Entrega local: zona obligatoria, de ESTA tienda, activa y de modalidad local.
+    if zone is None:
+        raise CartError("Elegí una zona de entrega para cotizar el envío.")
+    if zone.store_id != store.id or not zone.is_active or zone.mode != "local":
+        raise CartError("Esa zona no corresponde a la modalidad elegida.")
+    return "local", zone, money(zone.fee)
+
+
+def _summary_hash(summary):
+    """Huella del contenido aprobado: mismo intento => misma huella (R02)."""
+    canonical = json.dumps(summary, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode()).hexdigest()
+
+
 def prepare_checkout(cart, payment_method, delivery_mode="pickup", zone=None,
                      idempotency_key=None):
     """Crea la sesión de checkout con reserva atómica de stock (10 min).
 
-    - Misma clave idempotente => devuelve la sesión previa (A18).
-    - Cambio de carrito (versión) => resumen nuevo; el anterior queda inválido.
-    - Sin tarifa configurada para la zona => conflicto honesto, nunca $0 ficticio.
+    - Clave ligada a carrito y contenido (R01/R02): misma clave + mismo
+      contenido => misma sesión; misma clave + contenido distinto => sesión
+      nueva vigente (la anterior se invalida y sus reservas se liberan).
+    - Demanda agregada por SKU: dos destinatarios no reservan por encima del
+      stock disponible (R03).
+    - Modalidad/zona/tarifa validadas en servidor (R06).
     """
+    if payment_method not in PAYMENT_METHODS:
+        raise CartError("Elegí un método de pago habilitado.")
     key = idempotency_key or uuid.uuid4().hex
-    existing = CheckoutSession.objects.filter(idempotency_key=key).first()
-    if existing:
-        return existing
 
     summary = cart_summary(cart, payment_method)
     if summary["is_empty"]:
@@ -160,52 +213,74 @@ def prepare_checkout(cart, payment_method, delivery_mode="pickup", zone=None,
             [l["item"].variant.sku for l in summary["lines"] if not l["ok"]],
         )
 
-    shipping_amount = None
-    if delivery_mode == "local":
-        if zone is None:
-            raise CartError("Elegí una zona de entrega para cotizar el envío.")
-        shipping_amount = money(zone.fee)
-    elif delivery_mode == "pickup":
-        shipping_amount = money(0)
+    delivery_mode, zone, shipping_amount = validate_shipping(cart.store, delivery_mode, zone)
 
-    expires = timezone.now() + timedelta(minutes=RESERVATION_MINUTES)
+    content = {
+        "subtotal": str(summary["subtotal"]),
+        "discount": str(summary["discount"]),
+        "shipping": str(shipping_amount),
+        "payment_method": payment_method,
+        "delivery_mode": delivery_mode,
+        "zone": zone.name if zone else "",
+        "lines": [
+            {"variant_id": l["item"].variant_id, "quantity": l["item"].quantity,
+             "unit_price": str(l["current_price"]),
+             "discount_eligible": l["discount_eligible"],
+             "recipient_alias": l["item"].recipient.alias if l["item"].recipient else ""}
+            for l in summary["lines"]
+        ],
+    }
+    digest = _summary_hash(content)
+
+    # Idempotencia acotada a ESTE carrito (R01): una clave de otra tienda o de
+    # otro carrito nunca recupera el resumen ajeno.
+    existing = CheckoutSession.objects.filter(
+        idempotency_key__startswith=key, cart=cart, is_current=True
+    ).order_by("-created_at").first()
+    if existing and existing.idempotency_key == key and existing.summary_hash == digest:
+        return existing  # reintento idéntico: mismo resultado aprobado
+
     with transaction.atomic():
-        # Bloqueo en orden estable de filas para evitar interbloqueos.
+        if existing:
+            # Contenido distinto bajo la misma clave: invalidar el resumen
+            # anterior y liberar sus reservas de forma atómica (R02).
+            existing.is_current = False
+            existing.save(update_fields=["is_current"])
+            StockReservation.objects.filter(
+                checkout=existing, status=StockReservation.Status.ACTIVE
+            ).update(status=StockReservation.Status.RELEASED)
+
+        # Demanda AGREGADA por variante (R03): dos destinatarios del mismo SKU
+        # comparten el mismo stock.
+        demand = {}
+        for line in summary["lines"]:
+            demand[line["item"].variant_id] = demand.get(line["item"].variant_id, 0) + line["item"].quantity
+
         variants = list(
             Variant.objects.select_for_update()
-            .filter(pk__in=[l["item"].variant_id for l in summary["lines"]])
-            .order_by("pk")
+            .filter(pk__in=demand)
+            .order_by("pk")  # orden estable: sin interbloqueos
         )
-        by_pk = {v.pk: v for v in variants}
-        for line in summary["lines"]:
-            v = by_pk[line["item"].variant_id]
+        now = timezone.now()
+        for v in variants:
             reserved = sum(
                 r.quantity
                 for r in v.reservations.filter(
-                    status=StockReservation.Status.ACTIVE, expires_at__gt=timezone.now()
+                    status=StockReservation.Status.ACTIVE, expires_at__gt=now
                 )
             )
-            if v.stock - reserved < line["item"].quantity:
+            if v.stock - reserved < demand[v.pk]:
                 raise StockConflict(
                     f"Quedan {max(v.stock - reserved, 0)} unidades de {v.option_label}.",
                     [v.sku],
                 )
+
+        seq = CheckoutSession.objects.filter(idempotency_key__startswith=key).count()
+        internal_key = key if seq == 0 else f"{key}#{seq}"
+        expires = now + timedelta(minutes=RESERVATION_MINUTES)
         checkout = CheckoutSession.objects.create(
-            cart=cart, cart_version=cart.version, idempotency_key=key,
-            summary={
-                "subtotal": str(summary["subtotal"]),
-                "discount": str(summary["discount"]),
-                "shipping": str(shipping_amount) if shipping_amount is not None else None,
-                "payment_method": payment_method,
-                "delivery_mode": delivery_mode,
-                "zone": zone.name if zone else "",
-                "lines": [
-                    {"variant_id": l["item"].variant_id, "quantity": l["item"].quantity,
-                     "unit_price": str(l["current_price"])}
-                    for l in summary["lines"]
-                ],
-            },
-            expires_at=expires,
+            cart=cart, cart_version=cart.version, idempotency_key=internal_key,
+            summary=content, summary_hash=digest, expires_at=expires,
         )
         for line in summary["lines"]:
             StockReservation.objects.create(
@@ -224,8 +299,10 @@ def confirm_checkout(checkout, customer, idempotency_key):
     existing = Order.objects.filter(idempotency_key=idempotency_key).first()
     if existing:
         return existing
+    if not checkout.is_current:
+        raise CartError("Ese resumen fue sustituido; revisá el vigente antes de confirmar.")
     if checkout.is_expired():
-        raise CartError("La revisión venció. Volvé a confirmar tu carrito.")
+        raise CartError("La revisión venció. Tu carrito sigue guardado: prepará una nueva revisión.")
     if checkout.cart.status != Cart.Status.OPEN or checkout.cart.version != checkout.cart_version:
         raise CartError("El carrito cambió; revisá el nuevo resumen antes de confirmar.")
 
@@ -237,24 +314,33 @@ def confirm_checkout(checkout, customer, idempotency_key):
     total = money(subtotal - discount + (shipping or 0))
 
     with transaction.atomic():
+        # Referencia única por tienda sin count()+1 al aire: la fila de la
+        # tienda se bloquea dentro de la transacción (serializa por comercio) y
+        # la restricción única (store, reference) respalda la propiedad (R03).
+        store = Store.objects.select_for_update().get(pk=checkout.cart.store_id)
         variants = list(
             Variant.objects.select_for_update()
             .filter(pk__in=[l["variant_id"] for l in s["lines"]]).order_by("pk")
         )
         by_pk = {v.pk: v for v in variants}
+        demand = {}
         for line in s["lines"]:
-            v = by_pk[line["variant_id"]]
-            if v.stock < line["quantity"]:
+            demand[line["variant_id"]] = demand.get(line["variant_id"], 0) + line["quantity"]
+        for v in variants:
+            if v.stock < demand[v.pk]:
                 raise StockConflict("Sin existencias suficientes.", [v.sku])
         order = Order.objects.create(
-            store=checkout.cart.store,
+            store=store,
             cart=checkout.cart,
             idempotency_key=idempotency_key,
-            reference=_next_reference(checkout.cart.store),
-            currency=checkout.cart.store.currency,
+            reference=_next_reference(store),
+            currency=store.currency,
             subtotal=subtotal,
             discount_amount=discount,
-            discount_note="Descuento Bitcoin (15 %) pendiente de verificación" if discount else "",
+            discount_note=(
+                "Descuento Bitcoin (15 %) sobre piezas participantes, pendiente de verificación"
+                if discount else ""
+            ),
             shipping_amount=shipping,
             total=total,
             customer_name=customer["name"],
@@ -280,6 +366,8 @@ def confirm_checkout(checkout, customer, idempotency_key):
             )
         StockReservation.objects.filter(checkout=checkout, status=StockReservation.Status.ACTIVE)\
             .update(status=StockReservation.Status.CONSUMED)
+        checkout.is_current = False  # consumida: no reutilizable para otro pedido
+        checkout.save(update_fields=["is_current"])
         cart = checkout.cart
         cart.status = Cart.Status.ORDERED
         cart.save(update_fields=["status", "updated_at"])
@@ -295,12 +383,13 @@ def confirm_checkout(checkout, customer, idempotency_key):
 
 
 def _next_reference(store):
+    """Siguiente referencia legible; la tienda ya viene bloqueada (R03)."""
     prefix = "".join(w[0] for w in store.name.split()[:2]).upper() or "RC"
     last = Order.objects.filter(store=store).count()
     return f"{prefix}-{last + 1:06d}"
 
 
-# Transiciones de panel (máquina de estados, actor registrado) ---------------
+# Transiciones de panel (máquina de estados, actor y capacidad registrados) ---
 
 TRANSITIONS = {
     "status": {
@@ -327,17 +416,102 @@ TRANSITIONS = {
     },
 }
 
+# Capacidad requerida por campo de transición (R13). Un botón oculto nunca
+# sustituye la autorización del servidor.
+FIELD_CAPABILITY = {
+    "status": "orders",
+    "payment_status": "payments",
+    "prep_status": "fulfilment",
+    "delivery_status": "fulfilment",
+}
 
-def apply_transition(order, field, to_value, user=None, note=""):
-    """Cambio de estado validado; registra quién hizo cada cambio (auditoría)."""
+ROLE_CAPABILITIES = {
+    "owner": {"orders", "payments", "fulfilment", "catalog", "inventory", "settings", "team"},
+    "staff": {"orders", "fulfilment", "catalog", "inventory"},
+    "logistics": {"fulfilment"},
+}
+
+# Campos que requieren evidencia obligatoria (motivo/referencia) al transicionar.
+NEEDS_EVIDENCE = {("payment_status", Order.PaymentStatus.PAID),
+                  ("payment_status", Order.PaymentStatus.REFUNDED),
+                  ("payment_status", Order.PaymentStatus.PARTIALLY_REFUNDED)}
+
+
+def member_can(member, capability):
+    return member is not None and capability in ROLE_CAPABILITIES.get(member.role, set())
+
+
+def apply_transition(order, field, to_value, user=None, note="", member=None,
+                     refund_amount=None):
+    """Cambio de estado validado con capacidad por rol (R13) y evidencia.
+
+    - Pedido cancelado: solo admite registrar el reembolso de un pago recibido;
+      nunca preparación ni despacho (coherencia de estados comerciales).
+    - Cancelar/vencer un pedido no expedido restituye inventario UNA vez (R04).
+    - Confirmar cobro o reembolsar exige nota (evidencia); el reembolso
+      registra importe, medio y motivo: la etiqueta no es dinero devuelto.
+    """
+    capability = FIELD_CAPABILITY.get(field)
+    if member is not None and not member_can(member, capability):
+        raise PermissionDenied("Tu rol no permite esta operación.")
+
+    if order.status == Order.Status.CANCELLED and field != "payment_status":
+        raise CartError("Un pedido cancelado no puede prepararse ni despacharse.")
+    if order.status == Order.Status.CANCELLED and field == "payment_status" and \
+            to_value not in (Order.PaymentStatus.REFUNDED, Order.PaymentStatus.PARTIALLY_REFUNDED):
+        raise CartError("A un pedido cancelado solo puede registrarse el reembolso.")
+
     allowed = TRANSITIONS.get(field, {}).get(getattr(order, field), [])
     if to_value not in [str(v) for v in allowed]:
         raise CartError(f"Transición no permitida: {field} → {to_value}.")
+    if (field, to_value) in NEEDS_EVIDENCE and not note.strip():
+        raise CartError("Esta operación requiere una referencia o motivo (evidencia).")
+
     from_value = getattr(order, field)
     if from_value == to_value:
         return order
-    setattr(order, field, to_value)
-    order.save(update_fields=[field])
-    OrderEvent.objects.create(order=order, field=field, from_value=from_value,
-                              to_value=to_value, note=note, by=user)
+
+    with transaction.atomic():
+        setattr(order, field, to_value)
+        update = [field]
+        if field == "payment_status" and to_value in (
+                Order.PaymentStatus.REFUNDED, Order.PaymentStatus.PARTIALLY_REFUNDED):
+            order.refund_amount = money(refund_amount) if refund_amount is not None else order.total
+            order.refund_note = note.strip()[:200]
+            update += ["refund_amount", "refund_note"]
+        order.save(update_fields=update)
+        OrderEvent.objects.create(order=order, field=field, from_value=from_value,
+                                  to_value=to_value, note=note, by=user)
+        # R04: cancelar o vencer un pedido NO expedido restituye el inventario
+        # exactamente una vez. Un pedido despachado requiere proceso de devolución.
+        should_restock = (
+            (field == "status" and to_value == Order.Status.CANCELLED)
+            or (field == "payment_status" and to_value in (Order.PaymentStatus.EXPIRED,
+                                                           Order.PaymentStatus.FAILED))
+        )
+        if should_restock:
+            _restock_once(order, user=user,
+                          reason="Cancelación" if field == "status" else "Pago vencido/fallido")
     return order
+
+
+def _restock_once(order, user=None, reason=""):
+    """Devuelve el stock descontado al confirmar, una sola vez por pedido."""
+    if order.stock_restored_at is not None:
+        return False
+    if order.delivery_status in (Order.DeliveryStatus.SHIPPED, Order.DeliveryStatus.DELIVERED):
+        return False  # lo despachado no vuelve automáticamente: proceso de devolución
+    with transaction.atomic():
+        for item in order.items.select_related("variant"):
+            if item.variant_id is None:
+                continue
+            v = Variant.objects.select_for_update().get(pk=item.variant_id)
+            v.stock += item.quantity
+            v.save(update_fields=["stock"])
+        order.stock_restored_at = timezone.now()
+        order.save(update_fields=["stock_restored_at"])
+        OrderEvent.objects.create(
+            order=order, field="stock", to_value="restored",
+            note=f"{reason}: inventario restituido ({order.reference})", by=user,
+        )
+    return True
