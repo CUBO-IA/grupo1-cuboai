@@ -4,8 +4,13 @@ Crea las dos tiendas de la demo: Wiener Kingdom (catálogo real histórico,
 fotos reales del repo) y Estudio Nube Demo (papelería ficticia, identificada
 como datos de prueba, sin cobros reales).
 
-Uso:  python manage.py seed_demo
-Borra y recrea SOLO los datos del app reino (no toca el app histórica tienda).
+Uso normal (no destructivo):  python manage.py seed_demo
+Recrear desde cero:           python manage.py seed_demo --reset
+
+Seguridad (auditoría §9.5): el borrado total exige --reset y jamás corre en
+producción (DEBUG=False) sin la variable REINO_ALLOW_SEED=1. La elegibilidad
+Bitcoin se MIGRA de la regla histórica (tienda.ProductPaymentRule), no se
+inventa. El stock del seed es de DEMOSTRACIÓN, nunca inventario confirmado.
 """
 
 from decimal import Decimal
@@ -220,18 +225,36 @@ NUBE_KNOWLEDGE = [
 class Command(BaseCommand):
     help = "Crea las tiendas de demostración de Reino Commerce (Wiener Kingdom y Estudio Nube Demo)."
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--reset", action="store_true",
+            help="BORRA todos los datos de reino antes de sembrar (destructivo).")
+
     def handle(self, *args, **options):
+        import os
+        from django.conf import settings
         from reino import models as m
 
-        # Limpieza controlada de datos reino (orden por dependencias).
-        for model in (m.OrderEvent, m.OrderItem, m.Order, m.StockReservation,
-                      m.CheckoutSession, m.CartItem, m.Cart, m.RecommendationEvent,
-                      m.AIMessage, m.AIConversation, m.Look, m.MemorySummary,
-                      m.Preference, m.Consent, m.Measurement, m.RecipientProfile,
-                      m.KnowledgeDocument, m.OutboxEvent, m.ProductMedia, m.Variant,
-                      m.FitRule, m.Product, m.ShippingZone, m.MerchantMember, m.Store,
-                      m.Merchant):
-            model.objects.all().delete()
+        if options["reset"]:
+            if not settings.DEBUG and os.environ.get("REINO_ALLOW_SEED") != "1":
+                raise SystemExit(
+                    "Bloqueado: --reset con DEBUG=False requiere REINO_ALLOW_SEED=1 "
+                    "(protección contra borrado accidental en producción).")
+            # Limpieza controlada de datos reino (orden por dependencias).
+            for model in (m.OrderEvent, m.OrderItem, m.Order, m.StockReservation,
+                          m.CheckoutSession, m.CartItem, m.Cart, m.RecommendationEvent,
+                          m.AIMessage, m.AIConversation, m.ActionToken, m.Look,
+                          m.MemorySummary, m.Preference, m.Consent, m.Measurement,
+                          m.RecipientProfile, m.KnowledgeDocument, m.OutboxEvent,
+                          m.ProductMedia, m.StockAdjustment, m.Variant,
+                          m.FitRule, m.Product, m.ShippingZone, m.MerchantMember,
+                          m.Store, m.Merchant):
+                model.objects.all().delete()
+        elif Store.objects.filter(slug__in=("wiener-kingdom", "estudio-nube")).exists():
+            self.stdout.write(self.style.WARNING(
+                "Las tiendas demo ya existen; no se borra nada. "
+                "Usá --reset para recrear desde cero (destructivo)."))
+            return
 
         wk_merchant = Merchant.objects.create(
             name="Wiener Kingdom", country="El Salvador",
@@ -278,10 +301,18 @@ class Command(BaseCommand):
         ))
 
     def _seed_wk(self, store):
+        from tienda.models import ProductPaymentRule
         for data in WK_PRODUCTS:
             images = data.pop("images")
             materials = data.pop("materials")
             care = data.pop("care")
+            # Elegibilidad Bitcoin MIGRADA de la regla histórica vigente (R05):
+            # solo las piezas que el negocio habilitó (cable-knit-jumper y
+            # bamboo-drying-robe); sin regla histórica => no participa.
+            legacy = data.get("legacy_slug", "")
+            rule = ProductPaymentRule.objects.filter(product_slug=legacy).first()
+            data["bitcoin_discount_eligible"] = bool(
+                rule and rule.bitcoin_discount_eligible)
             product = Product.objects.create(
                 store=store, status=Product.Status.PUBLISHED,
                 materials=materials, care=care, **data,

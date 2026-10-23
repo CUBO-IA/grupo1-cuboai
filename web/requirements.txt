@@ -1,3 +1,5 @@
-Django>=5.0,<6.0
+Django>=5.2,<5.3
+Pillow>=10.0
 gunicorn>=23.0,<27.0
 whitenoise>=6.0,<7.0
+# PostgreSQL (staging/prod): psycopg[binary]>=3.2
