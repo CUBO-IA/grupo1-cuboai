@@ -30,6 +30,19 @@ class InvalidMeasurement(Exception):
     pass
 
 
+class SimpleMeasurement:
+    """Medida temporal de esta visita (sin persistencia ni consentimiento).
+
+    Sirve para «Calcular sin guardar» y para el borrador de LookLab: evalúa
+    la talla sin escribir nada en la memoria del perfil (R09/R07).
+    """
+
+    def __init__(self, chest_cm=None, neck_cm=None, back_cm=None):
+        self.chest_cm = chest_cm
+        self.neck_cm = neck_cm
+        self.back_cm = back_cm
+
+
 def to_cm(value, unit):
     """Convierte un valor a cm; lanza InvalidMeasurement si no es un número válido."""
     try:
@@ -146,3 +159,21 @@ def evaluate_for_profile(product, measurement):
         neck_cm=measurement.neck_cm,
         back_cm=measurement.back_cm,
     )
+
+
+def normalize_size_label(option_label):
+    """Normaliza la etiqueta de una variante para comparación EXACTA (R08).
+
+    «Talla S» → «S»; «s» → «S». Nunca se usan subcadenas parciales: una S
+    agotada no puede presentarse como M «compatible».
+    """
+    label = (option_label or "").strip().upper()
+    for prefix in ("TALLA ", "SIZE "):
+        if label.startswith(prefix):
+            label = label[len(prefix):]
+    return label.strip()
+
+
+def label_matches(candidate, option_label):
+    """Coincidencia exacta entre candidata de la regla y variante."""
+    return normalize_size_label(candidate) == normalize_size_label(option_label)

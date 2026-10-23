@@ -89,10 +89,14 @@ def looklab(request, store):
                         errors[field] = str(exc)
             if not errors:
                 profile = _draft_profile(request, store, draft)
-                if profile and any(converted.values()):
-                    # Guardar medidas requiere consentimiento explícito (panel aparte).
-                    if request.POST.get("remember") == "1":
-                        consent = services_memory.grant_consent(
+                # Reiniciar SIEMPRE la medida del intento: «no tengo las
+                # medidas» nunca arrastra silenciosamente un borrador viejo.
+                draft["converted"] = {}
+                draft["measurement_saved"] = False
+                if any(converted.values()):
+                    if profile and request.POST.get("remember") == "1":
+                        # Guardar medidas requiere consentimiento explícito.
+                        services_memory.grant_consent(
                             store, session_key, Consent.Purpose.MEASUREMENTS, profile)
                         services_memory.save_measurement(
                             profile, chest_cm=converted.get("chest"),
@@ -102,9 +106,8 @@ def looklab(request, store):
                             source="looklab",
                         )
                         draft["measurement_saved"] = True
-                    else:
-                        # Solo esta visita: medidas temporales en el borrador.
-                        draft["measurement_saved"] = False
+                    # Medidas de esta visita (con o sin perfil): precedencia
+                    # sobre cualquier dato guardado (R09).
                     draft["converted"] = {k: str(v) for k, v in converted.items()}
                 draft["step"] = "personalidad"
                 tenancy.set_looklab_draft(request, store, draft)
@@ -173,46 +176,140 @@ class _DraftMeasurement:
         self.back_cm = D(converted["back"]) if converted.get("back") else None
 
 
+def _resolve_measurement(request, store, draft, profile):
+    """Precedencia explícita de medidas (R09):
+
+    1. Las introducidas para ESTE intento (borrador convertido), siempre.
+    2. Después, las persistentes vigentes y AUTORIZADAS (consentimiento).
+    3. Finalmente, datos insuficientes (talla honestamente pendiente).
+    """
+    if draft.get("converted") and any(draft["converted"].values()):
+        return _DraftMeasurement(draft["converted"]), "esta_visita"
+    if profile is not None:
+        saved = services_memory.authorized_measurement(store, profile.session_key, profile)
+        if saved is not None:
+            return saved, "guardadas"
+    return None, "sin_datos"
+
+
+def _pick_variant(product, measurement, needs_fit):
+    """Unidad comprable real: producto + variante + regla de talla + precio (R08).
+
+    Devuelve (variante|None, fit, variantes_para_elegir, agotada_tu_talla).
+    NUNCA sustituye la talla compatible por otra: si la talla de la persona
+    está agotada, la pieza no se ofrece como compatible.
+    """
+    rows, fit = variants_with_fit(product, measurement)
+    in_stock = [r for r in rows if r["variant"].stock > 0]
+    if not needs_fit:
+        chosen = in_stock[0]["variant"] if in_stock else None
+        return chosen, fit, rows, False
+    if fit is None or fit["state"] == "sin_datos":
+        # Sin medidas: la talla queda pendiente; la elección es explícita.
+        fit = fit or {"state": "sin_datos", "label": "Talla por confirmar",
+                      "candidates": [], "explanation": ""}
+        return None, fit, rows, False
+    suggested = [r for r in rows if r["fit_hint"] == "sugerida"]
+    available_suggested = [r for r in suggested if r["variant"].stock > 0]
+    if available_suggested:
+        return available_suggested[0]["variant"], fit, rows, False
+    if suggested:
+        # La talla compatible existe pero está agotada: NO ofrecer otra (R08).
+        return None, fit, rows, True
+    # Sin candidatas (incompatible): la pieza no aplica para estas medidas.
+    return None, fit, rows, False
+
+
 def _reveal(request, store, draft, profile):
-    """Calcula la revelación: pieza principal + complementos compatibles."""
-    measurement = None
-    if profile:
-        measurement = services_memory.latest_measurement(profile)
-    if measurement is None and draft.get("converted"):
-        measurement = _DraftMeasurement(draft["converted"])
+    """Calcula la revelación: UNA pieza principal + complementos coherentes.
+
+    - Precedencia de medidas de esta visita sobre las guardadas (R09).
+    - Talla por variante exacta; nunca sustitución silenciosa (R08).
+    - Presupuesto del conjunto acumulado y estricto (R10).
+    """
+    measurement, measurement_origin = _resolve_measurement(request, store, draft, profile)
     if measurement and not any([measurement.chest_cm, measurement.neck_cm, measurement.back_cm]):
-        measurement = None
+        measurement, measurement_origin = None, "sin_datos"
 
     needs_fit = store.category == "moda canina"
+    budget = Decimal(draft["budget"]) if draft.get("budget") else None
+    budget_scope = draft.get("budget_scope", "products")
     intent = normalize_intent(
         occasion=draft.get("occasion", ""), style=draft.get("style", ""),
-        budget=draft.get("budget"), budget_scope=draft.get("budget_scope", "products"),
+        budget=draft.get("budget"), budget_scope=budget_scope,
         profile=profile, needs_fit=needs_fit,
     )
     result = recommend(store, intent, measurement=measurement, kind="looklab")
 
-    selection, total = [], Decimal("0")
+    selection, unavailable, excluded = [], [], list(result["excluded"])
+    total = Decimal("0")
+    total_budget = budget if (budget is not None and budget_scope in
+                              ("total", "conjunto", "pedido")) else None
+
     for entry in result["selection"]:
         product = entry["product"]
-        rows, fit = variants_with_fit(product, measurement)
-        if fit is None and needs_fit:
-            # Sin medidas: la talla queda honestamente pendiente de confirmar.
-            fit = {"state": "sin_datos", "label": "Talla por confirmar",
-                   "candidates": [], "explanation": ""}
-        chosen = next((r["variant"] for r in rows if r["fit_hint"] == "sugerida" and r["variant"].stock > 0), None)
-        if chosen is None:
-            chosen = next((r["variant"] for r in rows if r["variant"].stock > 0), None)
-        if chosen is None:
+        chosen, fit, rows, size_sold_out = _pick_variant(product, measurement, needs_fit)
+        if size_sold_out:
+            unavailable.append({
+                "product": product, "fit": fit,
+                "note": "Tu talla está agotada en esta pieza.",
+            })
             continue
+        if chosen is None and not (needs_fit and fit["state"] == "sin_datos"):
+            continue  # sin unidad comprable y con talla conocida: no entra
+        # Precio de la unidad REALMENTE seleccionada (variante); si la talla
+        # está pendiente, el precio de referencia honesto es el base.
+        unit_price = chosen.price if chosen else product.base_price
+        if total_budget is not None and total + unit_price > total_budget:
+            excluded.append({"product": product.short_title, "reason": "OVER_BUDGET_TOTAL"})
+            continue  # menos piezas, jamás inventar que el presupuesto alcanzó (R10)
         selection.append({
             "product": product, "variant": chosen, "score": entry["score"],
             "reasons": entry["reasons"], "fit": fit,
+            "size_pending": chosen is None,
+            "selectable_variants": [r["variant"] for r in rows if r["variant"].stock > 0],
+            "unit_price": unit_price,
         })
-        total += chosen.price
+        total += unit_price
+
+    # Conjunto coherente (§6.6 / §7.3): UNA pieza principal; las demás
+    # candidatas son ALTERNATIVAS (opciones de look), nunca se suman. Los
+    # complementos son de función distinta, opcionales y dentro del
+    # presupuesto restante.
+    main = selection[0] if selection else None
+    alternatives = selection[1:] if len(selection) > 1 else []
+    complements = []
+    if main is not None:
+        remaining = (total_budget - main["unit_price"]) if total_budget is not None else None
+        bundle, _ = compose_bundle(store, main["product"], measurement=measurement,
+                                   budget=remaining, max_extras=2)
+        selected_ids = {e["product"].pk for e in selection}
+        comp_total = main["unit_price"]
+        for item in bundle:
+            if item["role"] != "complemento" or item["product"].pk in selected_ids:
+                continue
+            c_variant, c_fit, c_rows, c_sold_out = _pick_variant(
+                item["product"], measurement, needs_fit)
+            if c_sold_out:
+                continue
+            c_price = c_variant.price if c_variant else item["product"].base_price
+            if total_budget is not None and comp_total + c_price > total_budget:
+                continue  # presupuesto acumulado también en complementos (R10)
+            complements.append({
+                "product": item["product"], "variant": c_variant, "fit": c_fit,
+                "size_pending": c_variant is None,
+                "selectable_variants": [r["variant"] for r in c_rows if r["variant"].stock > 0],
+                "unit_price": c_price,
+            })
+            comp_total += c_price
 
     return {
-        "selection": selection, "excluded": result["excluded"],
+        "selection": selection,          # compatibilidad con pruebas (matriz A)
+        "main": main, "alternatives": alternatives, "complements": complements,
+        "unavailable": unavailable, "excluded": excluded,
         "engine_version": result["engine_version"], "selection_total": total,
+        "budget": budget, "budget_scope": budget_scope,
+        "measurement_origin": measurement_origin,
         "alias": profile.alias if profile else "",
     }
 

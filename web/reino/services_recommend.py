@@ -214,13 +214,18 @@ def compose_bundle(store, main_product, measurement=None, budget=None, max_extra
 
 
 def variants_with_fit(product, measurement):
-    """Variantes activas anotadas con su estado de talla para la ficha/revelación."""
+    """Variantes activas anotadas con su estado de talla (coincidencia EXACTA).
+
+    R08: una variante solo puede decir «sugerida» si la regla de talla la
+    respalda a ELLA; jamás por subcadena ni por hermano de producto.
+    """
+    from .services_fit import label_matches
     fit = evaluate_for_profile(product, measurement) if measurement else None
     rows = []
     for v in product.variants.filter(is_active=True):
-        label = v.option_label
         state = None
         if fit and fit["candidates"]:
-            state = "sugerida" if any(c in label for c in fit["candidates"]) else "otra"
+            state = "sugerida" if any(label_matches(c, v.option_label)
+                                      for c in fit["candidates"]) else "otra"
         rows.append({"variant": v, "fit_hint": state})
     return rows, fit
