@@ -17,8 +17,8 @@ cd web
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python manage.py migrate
-python manage.py seed_demo        # 2 tiendas + catálogos + usuario de panel
-python manage.py test             # 336 pruebas (289 históricas + 47 de plataforma)
+python manage.py seed_demo --reset  # 2 tiendas + catálogos + usuario de panel
+python manage.py test             # 372 pruebas (289 históricas + 83 de plataforma)
 python manage.py runserver        # http://127.0.0.1:8000/  (franja hacia la boutique)
 ```
 
@@ -34,7 +34,16 @@ El asesor funciona en dos modos **etiquetados honestamente**:
   (ver `.env.example`): `REINO_AI_API_KEY`, opcionalmente `REINO_AI_BASE_URL`,
   `REINO_AI_MODEL` (defecto `gpt-4o-mini`), `REINO_AI_TIMEOUT`.
 
-Sin clave, el asesor dice «implementado pendiente de conexión» y la tienda opera completa.
+Sin clave, el asesor informa «El asesor con IA no está disponible. Podés usar la
+selección guiada» y la tienda opera completa. Las escrituras del asesor (agregar
+al carrito) son propuestas que el comprador confirma con un permiso de un solo uso.
+
+## Corrección de la auditoría (23-oct-2026)
+
+El PR recibió una auditoría independiente con 13 hallazgos bloqueantes (R01–R13):
+todos corregidos y probados (14 regresiones integradas sin cambiar su significado
++ dataset de evaluación de 81 casos + pruebas de panel/operación). Matriz completa
+hallazgo→corrección→prueba→resultado en `docs/07_MATRIZ_AUDITORIA_R01_R13.md`.
 
 ## Pagos (estado honesto)
 

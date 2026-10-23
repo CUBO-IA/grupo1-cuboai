@@ -1,6 +1,7 @@
 # STATUS · Wiener Kingdom / Reino Commerce
 
-Actualizado: 2026-10-23 (sandbox Fluso) · Rama: `feature/fluso-kingdom-mvp` · Base: `feature/homepage-premium` (`fe3c83ab60`)
+Actualizado: 2026-10-23 (segunda ronda: corrección de la auditoría del PR #3) ·
+Rama: `feature/fluso-kingdom-mvp` · Base: `feature/homepage-premium` (`fe3c83ab60`)
 
 ## Estado por módulo
 
@@ -9,44 +10,60 @@ Estados permitidos: diseñado · implementado sin ejecutar · verificado en loca
 | Módulo | Estado | Evidencia |
 |---|---|---|
 | F0 Auditoría | **verificado en local** | docs/00; 289 tests base en verde al clonar |
-| F2 Datos y aislamiento | **verificado en local** | migración `reino.0001` + seed_demo; tests A13/A26 |
-| F3 Núcleo de compra | **verificado en local** | tests A17/A18/A22/A24/A25/A27/A29 + E2E HTTP |
-| F4 Tienda visual | **verificado en local** | 26 capturas reales (`docs/capturas/`), recorrido móvil/desktop |
-| F5 Recomendador + LookLab | **verificado en local** | tests motor (ocasión, presupuesto, fit, bundle); reveal E2E |
-| F6 IA + memoria | **implementado y probado con proveedor falso; BLOQUEADO para modelo real** | tests A10/A11/A14/A15/A16 con fake; falta `REINO_AI_API_KEY` |
-| F7 Panel comerciante | **verificado en local** (mínimo P0) | tests A26/A28; capturas |
-| F8 Integraciones (pasarela/logística) | **bloqueado** | sin cuenta sandbox elegible; pago manual+BTC manual operan |
-| F9 Calidad | **verificado en local** | 336 tests OK; accesibilidad/perf: ver pendientes |
-| F10 Handoff | **verificado en local** | README + docs + PR |
+| F2 Datos y aislamiento | **verificado en local** | migraciones `reino.0001-0002` + seed_demo; tests A13/A26 |
+| F3 Núcleo de compra | **verificado en local** | R01–R06 corregidos; tests de auditoría + dataset AGG/IDM/ZON/DSC |
+| F4 Tienda visual | **verificado en local** | capturas nuevas del commit final en 5 anchos (`docs/capturas/`) |
+| F5 Recomendador + LookLab | **verificado en local** | R08–R10 corregidos; `FIT-*`/`BUD-*` del dataset; reveal E2E |
+| F6 IA + memoria | **implementado y probado con proveedor falso; BLOQUEADO para modelo real** | R07/R11/R12 corregidos; tests A10–A16 + TXT/AIA; falta `REINO_AI_API_KEY` |
+| F7 Panel comerciante | **verificado en local** (incluye editor de catálogo P0) | R13 corregido; `test_merchant_ops.py` (12 casos) |
+| Alta asistida de comercio | **verificado en local** | `OnboardingTests`; checklist de activación verificado |
+| F8 Integraciones (pasarela/logística) | **bloqueado** | sin cuenta sandbox elegible; pago manual+BTC manual operan con evidencia |
+| F9 Calidad | **verificado en local** | **372 tests OK**; CI configurada; accesibilidad de teclado: ver evidencia |
+| F10 Handoff | **verificado en local** | README + docs/00–07 + PR actualizado |
 
 ## Pruebas
 
-- `python manage.py test` → **336 OK** (289 históricas + 47 reino) · 22 s.
-- Cobertura de la matriz A01–A32: tabla completa en `docs/05_CALIDAD_Y_DESPLIEGUE.md`.
-- Capturas reales (Playwright, sandbox): `docs/capturas/` — 26 imágenes desktop 1440 + móvil 390,
-  incluido flujo LookLab completo hasta la revelación.
+- `python manage.py test` → **372 OK** (289 históricas + 83 reino) · ~25 s.
+- Regresiones de la auditoría: 14/14 en `reino/tests/test_audit.py` (integradas
+  sin cambiar su significado; fallaban en el commit `95df61f`).
+- Dataset de evaluación versionado: `reino/tests/eval_dataset.json` — **81 casos
+  identificables** (fit, presupuesto, descuento, idempotencia, zonas, memoria,
+  roles/transiciones, validación de texto, stock agregado, acciones IA). La parte
+  determinista corre en `test_eval_dataset.py` (en CI). La evaluación con
+  proveedor REAL queda como comprobación explícita pendiente de clave.
+- `makemigrations --check --dry-run`: sin cambios pendientes. `manage.py check`: 0 issues.
+- Concurrencia PostgreSQL: `test_postgres.py` escrita (salta sin Postgres);
+  este sandbox no tiene binarios de PostgreSQL → pendiente staging (bloqueo 3).
+- CI: `.github/workflows/ci.yml` (suite completa + chequeo de migraciones).
+
+## Corrección de la auditoría (23-oct-2026)
+
+Matriz completa hallazgo→corrección→prueba→resultado: `docs/07_MATRIZ_AUDITORIA_R01_R13.md`.
+13/13 hallazgos bloqueantes corregidos con sus 14 regresiones integradas; hallazgos
+de interfaz corregidos con capturas NUEVAS del commit final en 360/390/768/1024/1440 px.
 
 ## Bloqueos concretos
 
-1. **IA real (puerta de aceptación §2):** falta `REINO_AI_API_KEY` (u otro proveedor
-   compatible: `REINO_AI_BASE_URL`). Con clave, el asesor pasa a modo `ai` sin cambios de
-   código. La batería de evaluación (80 casos) está preparada como patrón en
-   `reino/tests/test_ai.py`.
-2. **Pasarela de pagos:** elegibilidad de cuenta (El Salvador) sin confirmar → operar con
-   pago manual + Bitcoin manual (ambos implementados y honestos).
-3. **PostgreSQL/RLS en staging:** A17 debe re-ejecutarse allí; SQLite local no evidencia
-   concurrencia completa.
+1. **IA real (puerta de aceptación §2):** falta `REINO_AI_API_KEY`. Con clave, el
+   asesor pasa a modo `ai` sin cambios de código; registrar la evaluación con
+   modelo/versión/fecha/latencia/coste (sin secretos).
+2. **Pasarela de pagos:** elegibilidad de cuenta (El Salvador) sin confirmar →
+   operar pago manual + Bitcoin manual (ambos implementados y honestos).
+3. **PostgreSQL/RLS en staging:** ejecutar `test_postgres.py` con conexiones
+   reales; RLS requiere políticas y roles reales (no se afirma como existente).
 4. **Tarifa San Salvador $3.50:** hipótesis pendiente de aprobación del negocio.
 
 ## Próximos pasos
 
-1. Configurar `REINO_AI_API_KEY` en staging y ejecutar la batería de evaluación.
-2. Ensayo de restauración de backup reaplicando revocaciones (A31).
-3. Auditoría manual de accesibilidad (teclado/lector) y medición Web Vitals en staging.
-4. P1: editor de catálogo, CSV, reembolso parcial con montos, embeddings RAG, lookbook.
+1. Configurar `REINO_AI_API_KEY` en staging y ejecutar la evaluación real.
+2. Levantar staging con PostgreSQL y correr `test_postgres.py` + restauración de backup.
+3. Medición Web Vitals de campo en staging (los objetivos LCP/INP/CLS están en docs/05).
+4. P1: CSV, reembolso parcial con montos, embeddings RAG, lookbook editorial,
+   compra asistida por agentes externos (autorización delegada).
 
 ## Continuidad
 
-Para reanudar: `cd web && python manage.py test` debe dar 336 OK; `seed_demo` recrea los
-datos demo; este archivo refleja el último commit de la rama. No contiene claves ni datos
-personales.
+Para reanudar: `cd web && python manage.py test` debe dar 372 OK;
+`python manage.py seed_demo --reset` recrea los datos demo (destructivo, protegido);
+`python manage.py process_outbox` drena trabajos diferidos. Este archivo refleja el
+último commit de la rama. No contiene claves ni datos personales.

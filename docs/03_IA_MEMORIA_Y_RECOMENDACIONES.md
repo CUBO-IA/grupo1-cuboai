@@ -87,3 +87,21 @@ respuestas fundamentadas. **No ejecutado contra modelo real: falta `REINO_AI_API
 Sin llamadas reales aún: coste medido = $0. Fórmula para el piloto (del diseño):
 tokens entrada × tarifa + salida × tarifa por llamada; registrar por conversación.
 El adaptador ya devuelve usage cuando el proveedor lo incluye (campo reservado).
+
+## Correcciones de la auditoría (23-oct-2026)
+
+- **R07 · Memoria autorizada:** lectura única `authorized_measurement()` con
+  finalidad y estado vigente; la usan contexto del modelo, herramientas,
+  recomendador y storefront. Revocar impide TODO uso futuro; «Borrar memoria»
+  elimina medidas, preferencias, resúmenes y conversación de la sesión.
+- **R11 · Acciones por propuesta:** el modelo NUNCA ejecuta escrituras;
+  propone (`ActionToken`: un solo uso, alcance tienda+sesión, 15 min,
+  idempotente) y el comprador confirma en `/asesor/accion/`.
+- **R12 · Texto verificado:** `_validate_answer()` contrasta precios,
+  porcentajes y promesas del texto libre contra la evidencia del turno; sin
+  soporte, la respuesta se reemplaza por abstención honesta.
+- **Evaluación:** dataset versionado `reino/tests/eval_dataset.json` con
+  **81 casos identificables** (FIT/BUD/DSC/IDM/ZON/MEM/TRN/TXT/AGG/AIA). La
+  parte determinista corre en CI (`test_eval_dataset.py`); la evaluación con
+  proveedor real queda pendiente de `REINO_AI_API_KEY` y debe registrar
+  modelo/versión/fecha/latencia/coste.

@@ -6,11 +6,18 @@
   Envío separado de mercancía; nunca «total final» con envío desconocido («Envío: por
   calcular»). No se suman monedas distintas (una moneda por tienda).
 - **Reserva:** agregar al carrito NO aparta stock; `prepare_checkout` crea reserva de
-  10 min en transacción con `select_for_update` ordenado. Dos compras de la última unidad:
-  una sola reserva válida (A17, probado también con 2 hilos).
-- **Idempotencia:** clave por intento (checkout + pedido, únicas en DB). Doble clic y
-  reintentos devuelven el pedido existente (A18 verificado). Cambio de carrito invalida
-  el resumen previo. Checkout vencido no confirma.
+  10 min en transacción con `select_for_update` ordenado y **demanda agregada por SKU**
+  (dos destinatarios del mismo SKU comparten stock — R03). Dos compras de la última
+  unidad: una sola reserva válida (A17, probado también con 2 hilos; PostgreSQL: pendiente staging).
+- **Idempotencia por ámbito y contenido (R01/R02):** la clave del intento vive por
+  tienda y queda ligada al carrito y al contenido aprobado (`summary_hash`). Mismo
+  intento ⇒ mismo resumen; contenido distinto ⇒ resumen NUEVO (el anterior se
+  invalida y sus reservas se liberan atómicamente); confirmar exige la revisión
+  vigente. Checkout vencido no confirma y el carrito se conserva (recuperación).
+- **Ciclo de vida del stock (R04):** confirmar descuenta una vez; cancelar o vencer
+  un pedido NO despachado restituye exactamente una vez (`stock_restored_at`) con
+  evento y motivo; lo despachado requiere proceso de devolución. Pedido cancelado
+  no puede prepararse ni despacharse; solo admite registrar su reembolso.
 - **Estados separados** (Order): pedido `placed/confirmed/cancelled/closed` · pago
   `pending/requires_action/paid/failed/expired/refunded/...` · preparación
   `not_started/preparing/ready/cancelled` · entrega `unassigned/scheduled/shipped/
@@ -19,11 +26,12 @@
 - **Pago manual autorizado:** el pedido queda PENDIENTE de verificación; un comprobante
   es evidencia para revisar, nunca pago automático (microcopy honesto en checkout y
   confirmación: «Crear pedido pendiente de pago»).
-- **Bitcoin 15 % preservado:** descuento sobre mercancía, pendiente de verificación;
-  prueba numérica A22-núcleo: 2 × $63 = $126 → descuento $18.90, total $107.10
-  (test_commerce). La elegibilidad por producto del flujo legacy sigue intacta.
-  Acumulación con otras promociones: desactivada provisionalmente (no existe otra
-  promoción); cambiar la política requiere decisión de la propietaria.
+- **Bitcoin 15 % preservado y ACOTADO (R05):** descuento SOLO sobre líneas elegibles,
+  migrado de la regla histórica vigente (`tienda.ProductPaymentRule`, migración 0017:
+  participan `cable-knit-jumper` y `bamboo-drying-robe`; el resto NO). El snapshot del
+  checkout y del pedido conservan la elegibilidad por línea. Prueba numérica: 2 × $63
+  elegible → descuento $18.90; línea no elegible → $0 (DSC-01..08). Pendiente de
+  verificación humana; acumulación con otras promociones: desactivada.
 - **Pasarelas electrónicas:** NO conectadas (sin cuenta sandbox elegible confirmada;
   ver §27 del diseño). Nunca se afirma «pago electrónico completado».
 

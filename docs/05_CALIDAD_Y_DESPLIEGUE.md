@@ -4,7 +4,7 @@
 
 | Suite | Resultado |
 |---|---|
-| `python manage.py test` (completa) | **336 tests OK** (289 históricos + 47 nuevos reino) en ~22 s |
+| `python manage.py test` (completa) | **372 tests OK** (289 históricos + 83 reino: 14 regresiones de auditoría + 81 casos del dataset + panel) en ~25 s |
 | `manage.py check` | 0 issues |
 | Migraciones en base vacía + `seed_demo` | OK, reproducible (A30) |
 | Recorrido E2E por cliente de pruebas | Home → colección → ficha → LookLab (4 pasos) → revelación → carrito → checkout (revisión) → pedido → seguimiento con token: **OK** |
@@ -80,7 +80,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt          # Django 5.2, gunicorn, whitenoise
 python manage.py migrate
 python manage.py seed_demo               # datos demo controlados (2 tiendas)
-python manage.py test                    # 336 tests
+python manage.py test                    # 372 tests
 python manage.py runserver               # http://127.0.0.1:8000/tiendas/
 # Panel: /negocio/wiener-kingdom/ · usuario demo_staff / demo1234 (SOLO demo)
 # IA real: export REINO_AI_API_KEY=... (ver .env.example) → asesor en modo "ai"
