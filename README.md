@@ -1,77 +1,81 @@
-# Wiener Kingdom — MVP (CUBO_AI Challenge 2026)
+# Wiener Kingdom · Reino Commerce
 
-Tienda Django para prendas de dachshund con medidas del perro (Smart Fit), cotización en el servidor (Smart Quote), checkout, pedidos persistentes y panel privado.
+Boutique digital de moda y accesorios para dachshunds sobre **Reino Commerce**,
+plataforma multi-tienda con LookLab (selección guiada por medidas y ocasión),
+Royal Stylist (asesor con IA real y herramientas controladas) y Royal Passport
+(perfiles y memoria con consentimiento).
 
-La aplicación está en [`web/`](web/). Documentación adicional en [`docs/`](docs/).
+- **Tienda 1:** Wiener Kingdom (catálogo real histórico) — `/s/wiener-kingdom/`
+- **Tienda 2:** Estudio Nube Demo (papelería ficticia de demostración, sin cobros) — `/s/estudio-nube/`
+- **Directorio:** `/tiendas/` · **Para negocios:** `/para-negocios/`
+- **Flujos históricos preservados** (Smart Fit, Smart Quote «hecho a medida», panel de costos): `/productos/`, `/smart-fit/`, `/quote/…`, `/panel/…`
 
-## Requisitos
-- Python 3.12 o superior (probado con 3.12.13 en Windows 10)
-- Django 5.2 (ver `web/requirements.txt`)
+## Arranque (probado en Python 3.11 + Django 5.2)
 
-## Instalación y ejecución (Windows, PowerShell)
-
-```powershell
+```bash
 cd web
-python -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe manage.py migrate
-.venv\Scripts\python.exe manage.py createsuperuser
-.venv\Scripts\python.exe manage.py runserver
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python manage.py migrate
+python manage.py seed_demo        # 2 tiendas + catálogos + usuario de panel
+python manage.py test             # 336 pruebas (289 históricas + 47 de plataforma)
+python manage.py runserver        # http://127.0.0.1:8000/  (franja hacia la boutique)
 ```
 
-- Sitio: http://127.0.0.1:8000/
-- Panel privado: http://127.0.0.1:8000/panel/login/ (usuario creado con `createsuperuser`; debe ser `is_staff`)
-- Pruebas: `.venv\Scripts\python.exe manage.py test`
-- Migraciones nuevas: `manage.py makemigrations` y luego `manage.py migrate`
+Panel del comerciante: `http://127.0.0.1:8000/negocio/wiener-kingdom/`
+usuario **`demo_staff` / `demo1234`** — credencial de DEMOSTRACIÓN, cámbiala fuera de local.
 
-`db.sqlite3`, `.venv/` y `staticfiles/` no se versionan.
+## IA real (Royal Stylist)
 
-## Variables de entorno
+El asesor funciona en dos modos **etiquetados honestamente**:
 
-| Variable | Obligatoria | Uso |
-|---|---|---|
-| `DJANGO_SECRET_KEY` | Solo en producción | Clave de firma de sesiones y CSRF. Si falta se usa un valor **solo de desarrollo**. |
+- `rules` (por defecto): selección por reglas sobre el catálogo real. La UI lo indica.
+- `ai`: modelo real con 11 herramientas controladas. Requiere variables de entorno
+  (ver `.env.example`): `REINO_AI_API_KEY`, opcionalmente `REINO_AI_BASE_URL`,
+  `REINO_AI_MODEL` (defecto `gpt-4o-mini`), `REINO_AI_TIMEOUT`.
 
-No hay otras variables, credenciales ni claves de terceros. Para publicar hay que fijar además `DEBUG=False` y `ALLOWED_HOSTS` (hoy están en `config/settings.py` para desarrollo).
+Sin clave, el asesor dice «implementado pendiente de conexión» y la tienda opera completa.
 
-## Arquitectura mínima
+## Pagos (estado honesto)
 
-```
-Navegador ──► config/urls.py ──► tienda/urls.py
-                                   ├─ views.py     catálogo (PRODUCTOS), Smart Fit, cotización, checkout, pedido, asistente
-                                   ├─ panel.py     panel privado (solo staff)
-                                   ├─ services.py  precio base, cotización, pedido, transiciones, costos
-                                   ├─ assistant.py asistente guiado determinista
-                                   ├─ forms.py     validación de medidas, checkout y costos
-                                   └─ models.py    DogProfile, Quote, Order, OrderEvent
-                                SQLite (db.sqlite3)
-```
-
-```
-DogProfile 1 ──< Quote 1 ──0..1 Order 1 ──< OrderEvent
-```
-
-- El catálogo vive en el diccionario `PRODUCTOS` (`tienda/views.py`); las cotizaciones lo referencian por su clave.
-- Las URLs de perfil, cotización y pedido usan UUID.
-- El precio lo calcula siempre el servidor; el navegador solo elige producto.
-- El pedido guarda un `snapshot` y cuatro estados independientes (pedido, pago, producción, envío).
-
-## Rutas
-
-| Ruta | Descripción |
-|---|---|
-| `/`, `/productos/`, `/producto/<slug>/` | Inicio, catálogo y fichas |
-| `/guide/` | Asistente guiado |
-| `/smart-fit/` | Medidas del perro |
-| `/quote/<uuid>/`, `/quote/<uuid>/checkout/` | Cotización y checkout |
-| `/order/<uuid>/` | Pedido y seguimiento del cliente |
-| `/panel/`, `/panel/orders/<uuid>/` | Panel privado |
+Pago **manual coordinado** y **Bitcoin manual con 15 % de descuento** al verificar el pago.
+No hay pasarela electrónica conectada; todo pedido nace «pendiente de pago» y el equipo
+lo verifica en el panel (transición registrada con usuario y nota).
 
 ## Documentación
-- [Guía técnica](docs/guia-tecnica.md)
-- [Guion de demo](docs/guion-demo.md)
-- [Checklist del MVP, IA y limitaciones](docs/mvp-checklist-y-limitaciones.md)
-- [Task 2: catálogo y datos](docs/task-02-catalogo-datos.md)
-- [Task 12: ensayo y alcance congelado](docs/task-12-ensayo-y-alcance.md)
-- [Especificación comercial y su implementación](docs/especificacion-comercial.md)
-- [Borrador de políticas (no publicado)](docs/politicas-borrador.md)
+
+| Doc | Contenido |
+|---|---|
+| `docs/00_AUDITORIA_INICIAL.md` | Estado real del repo, PRs, qué se ejecutó |
+| `docs/01_PRODUCTO_Y_DISENO.md` | Visión, pantallas, tokens, adaptaciones al diseño |
+| `docs/02_ARQUITECTURA_Y_DATOS.md` | Módulos, modelo de datos, aislamiento, concurrencia |
+| `docs/03_IA_MEMORIA_Y_RECOMENDACIONES.md` | Orquestador, herramientas, RAG, consentimiento, motor |
+| `docs/04_COMERCIO_Y_OPERACION.md` | Pagos, delivery, panel, comisiones |
+| `docs/05_CALIDAD_Y_DESPLIEGUE.md` | Matriz de pruebas A01–A32, accesibilidad, arranque |
+| `docs/06_NEGOCIO_Y_DEMO.md` | Hipótesis económicas, guion de demo 5 min, limitaciones |
+| `docs/REFERENCIAS_Y_DECISIONES.md` | Fuentes, licencias de fuentes, decisiones registradas |
+| `docs/STATUS.md` | Estado por módulo con evidencia y próximos pasos |
+| `docs/proposal/` | Planificación previa del equipo (PR #1) |
+
+## Estructura
+
+```
+web/
+├── config/            # settings (env-driven) + urls (reino primero, legacy intacta)
+├── tienda/            # app histórica: Smart Fit/Quote, carrito legacy, panel de costos
+├── reino/             # plataforma multi-tienda (P0)
+│   ├── models.py          # Merchant/Store, catálogo DB, pedidos, memoria, IA, outbox
+│   ├── tenancy.py         # resolución de tienda/sesión (fail-closed)
+│   ├── services_fit.py    # Smart Fit por regla versionada
+│   ├── services_recommend.py  # motor v1 (elegibilidad→score→razones→bundle)
+│   ├── services_commerce.py   # carrito/checkout/pedido/reservas/idempotencia
+│   ├── services_memory.py     # consentimientos y borrado de memoria
+│   ├── ai/                # adaptador LLM + herramientas + orquestador + fallback
+│   ├── views_*.py         # storefront, looklab, stylist, cuenta, panel, plataforma
+│   ├── management/commands/seed_demo.py
+│   └── tests/             # 47 pruebas de aceptación (matriz A)
+├── templates/reino/   # Royal Editorial (es, voseo)
+└── static/reino/      # tokens CSS, fuentes OFL vendoradas, js ligero, imágenes demo
+```
+
+El Salvador · 2026
