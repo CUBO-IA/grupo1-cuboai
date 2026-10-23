@@ -54,5 +54,26 @@ def stylist_message(request, store):
     ctx = _ctx(request, store)
     reply = respond(conversation, text, ctx)
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
-        return render(request, "reino/_stylist_reply.html", {"reply": reply})
+        return render(request, "reino/_stylist_reply.html", {"reply": reply, "store": store})
     return render(request, "reino/stylist_reply_page.html", {"reply": reply, "store": store})
+
+
+@_store_view
+@require_POST
+def stylist_confirm_action(request, store):
+    """El comprador CONFIRMA una acción propuesta por el asesor (R11).
+
+    El permiso (ActionToken) es de un solo uso, con alcance tienda+sesión y
+    caducidad; reintentar el mismo action_id nunca duplica la escritura.
+    """
+    from .ai.tools import run_tool
+    action_id = (request.POST.get("action_id") or "").strip()
+    ctx = _ctx(request, store)
+    result = run_tool("add_item_to_cart", {"action_id": action_id}, ctx)
+    if result.get("error"):
+        request.session["reino_cart_error"] = (
+            "Esa propuesta venció o ya no es válida. Pedí una nueva al asesor."
+        )
+        return redirect("reino_stylist", slug=store.slug)
+    request.session["reino_flash"] = "Agregado al carrito."
+    return redirect("reino_cart", slug=store.slug)

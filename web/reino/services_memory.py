@@ -30,6 +30,22 @@ def create_profile(store, session_key, alias, kind="dog", breed="", photo_path="
 
 
 def latest_measurement(profile):
+    """Crudo: NO usar directamente en IA/recomendador (R07). Ver
+    authorized_measurement() para lecturas con finalidad verificada."""
+    return profile.measurements.first()
+
+
+def authorized_measurement(store, session_key, profile):
+    """Única lectura autorizada de medidas persistentes (R07).
+
+    Verifica tienda, titular, perfil, finalidad (MEASUREMENTS) y estado
+    vigente del consentimiento. Tras revocar, devuelve None: ninguna
+    herramienta, recomendador ni contexto del modelo puede reutilizarlas.
+    """
+    if profile is None:
+        return None
+    if not has_consent(store, session_key, Consent.Purpose.MEASUREMENTS, profile):
+        return None
     return profile.measurements.first()
 
 
@@ -93,13 +109,18 @@ def authorized_preferences(profile, store, session_key):
 
 
 def delete_profile_memory(store, session_key, profile):
-    """Borra memoria del perfil: foto, preferencias, resúmenes y medidas opcionales.
+    """Borra TODA la memoria del perfil (R07): medidas, preferencias,
+    resúmenes, foto, consentimientos y recuerdos de conversación de la sesión.
 
-    No toca pedidos (otra base de conservación) ni documentos públicos.
+    No toca pedidos (otra base de conservación: conservan solo lo necesario
+    para su propia finalidad) ni documentos públicos de la tienda.
     """
+    from .models import AIConversation
+    profile.measurements.all().delete()
     profile.preferences.all().delete()
     profile.memory_summaries.all().delete()
     profile.consents.update(status=Consent.Status.REVOKED, revoked_at=timezone.now())
+    AIConversation.objects.filter(store=store, session_key=session_key).delete()
     profile.photo_path = ""
     profile.save(update_fields=["photo_path"])
     return True

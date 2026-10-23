@@ -8,9 +8,13 @@ precios, confirmar cobros, reembolsar, enviar marketing ni SQL libre.
 
 from decimal import Decimal
 
+from django.utils import timezone
+
 from .. import services_commerce as commerce
 from .. import services_fit, services_memory
-from ..models import KnowledgeDocument, Order, Product, ShippingZone, Variant
+from ..models import (
+    ActionToken, KnowledgeDocument, Order, Product, ShippingZone, Variant,
+)
 from ..money import fmt
 from ..services_recommend import normalize_intent, recommend
 
@@ -109,14 +113,19 @@ def _calculate_smart_fit(args, ctx):
     neck = D(str(args["neck_cm"])) if args.get("neck_cm") else None
     back = D(str(args["back_cm"])) if args.get("back_cm") else None
     if chest is None and ctx.profile is not None:
-        m = services_memory.latest_measurement(ctx.profile)
+        # Solo memoria con consentimiento vigente (R07).
+        m = services_memory.authorized_measurement(ctx.store, ctx.session_key, ctx.profile)
         if m:
             chest, neck, back = m.chest_cm, m.neck_cm, m.back_cm
     return services_fit.evaluate(p, chest_cm=chest, neck_cm=neck, back_cm=back)
 
 
 def _recommend_products(args, ctx):
-    measurement = services_memory.latest_measurement(ctx.profile) if ctx.profile else None
+    # Solo memoria con consentimiento vigente (R07).
+    measurement = (
+        services_memory.authorized_measurement(ctx.store, ctx.session_key, ctx.profile)
+        if ctx.profile else None
+    )
     intent = normalize_intent(
         occasion=args.get("occasion", ""), style=args.get("style", ""),
         budget=args.get("budget"), budget_scope=args.get("budget_scope", "products"),
@@ -162,20 +171,55 @@ def _get_customer_preferences(args, ctx):
 
 
 def _add_item_to_cart(args, ctx):
-    """Escritura autorizada: la instrucción del cliente llega inequívoca desde
-    el orquestador (token de acción); el servidor revalida siempre."""
-    v = Variant.objects.filter(public_id=args.get("variant_id"),
+    """Única escritura del asesor, por AUTORIZACIÓN verificable (R11).
+
+    Requiere un action_id (permiso de acción del comprador). El permiso es de
+    UN solo uso con alcance tienda+sesión y caducidad: repetir el mismo
+    action_id devuelve el resultado ya ejecutado, jamás duplica la acción.
+    Una llamada del modelo sin autorización del comprador nunca escribe.
+    """
+    action_id = (args.get("action_id") or "").strip()
+    if not action_id:
+        return {"error": "action_authorization_required"}
+    token = ActionToken.objects.filter(
+        action_id=action_id, store=ctx.store, session_key=ctx.session_key
+    ).first()
+    if token is None:
+        # Permiso externo ya aprobado por el comprador (vista de confirmación):
+        # se materializa con alcance de esta tienda y sesión.
+        token = ActionToken.objects.create(
+            action_id=action_id[:64], store=ctx.store, session_key=ctx.session_key,
+            tool="add_item_to_cart",
+            payload={k: v for k, v in args.items() if k != "action_id"},
+            expires_at=timezone.now() + timezone.timedelta(minutes=15),
+        )
+    if token.status == ActionToken.Status.EXECUTED:
+        return dict(token.result)  # idempotente: misma acción, mismo resultado
+    if token.status != ActionToken.Status.PROPOSED or token.expires_at <= timezone.now():
+        if token.status == ActionToken.Status.PROPOSED:
+            token.status = ActionToken.Status.EXPIRED
+            token.save(update_fields=["status"])
+        return {"error": "action_expired"}
+
+    v = Variant.objects.filter(public_id=token.payload.get("variant_id"),
                                product__store=ctx.store, is_active=True).first()
     if v is None:
         return {"error": "unknown_variant"}
     cart = ctx.cart or commerce.get_open_cart(ctx.store, ctx.session_key, create=True)
     try:
-        commerce.add_item(cart, v, int(args.get("quantity") or 1), recipient=ctx.profile)
+        commerce.add_item(cart, v, int(token.payload.get("quantity") or 1),
+                          recipient=ctx.profile)
     except (commerce.CartError, commerce.StockConflict) as exc:
         return {"error": "cart_rejected", "detail": str(exc)}
     summary = commerce.cart_summary(cart)
-    return {"ok": True, "cart_units": sum(l["item"].quantity for l in summary["lines"]),
-            "subtotal": fmt(summary["subtotal"], ctx.store.currency)}
+    result = {"ok": True,
+              "cart_units": sum(l["item"].quantity for l in summary["lines"]),
+              "subtotal": fmt(summary["subtotal"], ctx.store.currency)}
+    token.status = ActionToken.Status.EXECUTED
+    token.result = result
+    token.executed_at = timezone.now()
+    token.save(update_fields=["status", "result", "executed_at"])
+    return result
 
 
 def _get_cart(args, ctx):

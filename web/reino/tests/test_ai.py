@@ -79,28 +79,50 @@ class StylistAITests(ReinoTestCase):
         self.assertEqual(result["error"], "not_found")
 
     def test_a15_ia_caida_modo_reglas_etiquetado(self):
-        """A15: proveedor inalcanzable => modo rules, honesto, tienda usable."""
+        """A15: proveedor inalcanzable => modo rules, honesto, tienda usable.
+
+        Actualizado por la auditoría R12/UI: el mensaje al comprador no expone
+        detalles de infraestructura; sigue etiquetando el modo honestamente.
+        """
         with mock.patch.object(adapter, "chat",
                                side_effect=adapter.ProviderUnavailable("down")):
             reply = orchestrator.respond(self._conv(), "algo para paseo", self._ctx())
         self.assertEqual(reply["mode"], "rules")
-        self.assertIn("reglas", reply["mode_note"])
+        self.assertIn("no está disponible", reply["mode_note"])
+        self.assertNotIn("API", reply["mode_note"])  # nada de infraestructura
         self.assertTrue(reply["cards"])  # la selección por reglas sigue sirviendo
 
     def test_a16_agregar_ambiguo_no_adivina(self):
-        """A16: variante inexistente en add_item_to_cart => rechazo, no adivinanza."""
+        """A16: variante inexistente en add_item_to_cart => rechazo, no adivinanza.
+
+        Actualizado por R11: primero se exige autorización del comprador; con
+        ella, la variante inexistente sigue sin «adivinarse».
+        """
         result = run_tool("add_item_to_cart",
                           {"variant_id": "00000000-0000-0000-0000-000000000000"},
+                          self._ctx())
+        self.assertEqual(result["error"], "action_authorization_required")
+        result = run_tool("add_item_to_cart",
+                          {"variant_id": "00000000-0000-0000-0000-000000000000",
+                           "action_id": "aprobada-por-el-comprador"},
                           self._ctx())
         self.assertEqual(result["error"], "unknown_variant")
 
     def test_a16_agregar_explicito_ejecuta_una_accion(self):
+        """R11: la acción explícita AUTORIZADA ejecuta exactamente una vez."""
         variant = self.product.variants.get(option_label="Talla M")
         result = run_tool("add_item_to_cart",
-                          {"variant_id": str(variant.public_id), "quantity": 1},
+                          {"variant_id": str(variant.public_id), "quantity": 1,
+                           "action_id": "accion-aprobada-a16"},
                           self._ctx())
         self.assertTrue(result["ok"])
         self.assertEqual(result["cart_units"], 1)
+        # Reintentar la MISMA acción aprobada no duplica (idempotencia).
+        again = run_tool("add_item_to_cart",
+                         {"variant_id": str(variant.public_id), "quantity": 1,
+                          "action_id": "accion-aprobada-a16"},
+                         self._ctx())
+        self.assertEqual(again["cart_units"], 1)
 
 
 class MemoryConsentTests(ReinoTestCase):

@@ -1,39 +1,62 @@
-"""Orquestador del asesor (§10, pasos 1–8).
+"""Orquestador del asesor (§10, pasos 1–8) tras la auditoría del PR #3.
 
 1. Contexto firmado por servidor (tienda, sesión, perfil permitido).
-2. Recupera solo memoria pertinente y autorizada.
+2. Recupera solo memoria pertinente y AUTORIZADA por finalidad vigente (R07):
+   una medida revocada jamás vuelve al contexto del modelo.
 3. El modelo interpreta intención y decide herramientas (máx. 4 rondas).
 4. Herramientas devuelven datos reales del catálogo/guía.
 5. Filtrado/puntuación en backend (recommend).
 6. El modelo redacta con esos resultados.
-7. VALIDACIÓN: se rechazan IDs desconocidos, precios inventados o
-   afirmaciones sin soporte; las tarjetas se construyen en servidor.
-8. Acciones con clave idempotente y confirmación real.
+7. VALIDACIÓN: IDs desconocidos no se hidratan; el TEXTO se verifica contra
+   la evidencia recuperada (R12): precios, porcentajes, fechas o garantías
+   sin soporte en herramientas reemplazan la respuesta por una abstención
+   honesta. Las tarjetas siempre se construyen en servidor.
+8. Escrituras por PROPUESTA Y AUTORIZACIÓN (R11): el modelo nunca ejecuta
+   una acción; genera una propuesta con permiso de un solo uso (ActionToken)
+   que el comprador confirma. Repetir la llamada no duplica.
 
 Modo degradado: si el proveedor no está disponible, responde el recomendador
 basado en reglas y se ETIQUETA el modo disponible (nunca se simula IA).
 """
 
 import json
+import re
 import uuid
+from datetime import timedelta
 
 from django.conf import settings
+from django.utils import timezone
 
 from .. import services_memory
-from ..models import AIConversation, AIMessage
+from ..models import ActionToken, AIConversation, AIMessage
 from . import adapter, fallback
 from .schemas import SYSTEM_PROMPT, TOOL_SPECS
 from .tools import ToolContext, run_tool
 
 MAX_HISTORY = 12  # no reenviar todo el historial en cada turno
+WRITE_TOOLS = {"add_item_to_cart"}  # escrituras: propuesta + confirmación (R11)
+ACTION_TTL_MINUTES = 15
+
+_MONEY_RE = re.compile(r"\$\s*([0-9]+(?:[.,][0-9]{1,2})?)")
+_PERCENT_RE = re.compile(r"(\d{1,2})\s*%")
+_GUARANTEE_RE = re.compile(
+    r"garantizad|llega hoy|entrega hoy|entrega inmediata|lo recibís hoy|"
+    r"devolución asegurada|reembolso garantizado",
+    re.IGNORECASE,
+)
+
+ABSTENTION_TEXT = (
+    "No puedo confirmar ese dato con la información publicada de la tienda. "
+    "¿Querés revisar juntos la ficha del producto o las políticas de entrega?"
+)
 
 
 def _memory_context(ctx):
-    """Solo campos consentidos y pertinentes (capa estructurada, §12)."""
+    """Solo campos consentidos y pertinentes (capa estructurada, §12 y R07)."""
     if ctx.profile is None:
         return ""
     parts = [f"\nPerfil activo autorizado: «{ctx.profile.alias}» (elegido por el cliente)."]
-    m = services_memory.latest_measurement(ctx.profile)
+    m = services_memory.authorized_measurement(ctx.store, ctx.session_key, ctx.profile)
     if m:
         medidas = []
         if m.chest_cm: medidas.append(f"pecho {m.chest_cm} cm")
@@ -57,6 +80,32 @@ def get_conversation(store, session_key):
     return conv
 
 
+def _validate_answer(answer_text, evidence_blobs):
+    """Verificación de hechos comerciales del TEXTO libre (R12).
+
+    Precio, porcentaje, fecha o garantía solo pueden afirmarse con soporte en
+    resultados autorizados de herramientas de ESTE turno. Sin evidencia, la
+    respuesta se reemplaza por una abstención honesta (nunca se «pule» el
+    dato inventado).
+    """
+    if not answer_text:
+        return answer_text, []
+    problems = []
+    evidence = " ".join(evidence_blobs)
+
+    for amount in _MONEY_RE.findall(answer_text):
+        normalized = amount.replace(",", ".")
+        if normalized not in evidence:
+            problems.append(f"precio_sin_evidencia:{amount}")
+    for pct in _PERCENT_RE.findall(answer_text):
+        if pct not in evidence and f"{pct} %" not in evidence:
+            problems.append(f"porcentaje_sin_evidencia:{pct}")
+    if _GUARANTEE_RE.search(answer_text) and '"fragments"' not in evidence \
+            and '"zones"' not in evidence:
+        problems.append("promesa_sin_evidencia")
+    return answer_text, problems
+
+
 def respond(conversation, user_text, ctx: ToolContext):
     """Procesa un turno del cliente y devuelve el contrato de respuesta a UI."""
     request_id = uuid.uuid4().hex[:12]
@@ -66,8 +115,9 @@ def respond(conversation, user_text, ctx: ToolContext):
     if not adapter.available():
         reply = fallback.respond(user_text, ctx)
         reply["mode"] = "rules"
-        reply["mode_note"] = ("El asesor con IA está pendiente de conexión; estás usando "
-                              "la selección por reglas de la tienda.")
+        reply["mode_note"] = ("El asesor con IA no está disponible ahora. "
+                              "Estás usando la selección guiada de la tienda.")
+        reply.setdefault("proposed_actions", [])
         _persist(conversation, reply, request_id)
         return reply
 
@@ -80,8 +130,9 @@ def respond(conversation, user_text, ctx: ToolContext):
         if msg.role in ("user", "assistant"):
             messages.append({"role": msg.role, "content": msg.content})
 
-    cards, warnings, actions = [], [], []
+    cards, warnings, proposals, evidence = [], [], [], []
     rounds = 0
+    answer = ""
     try:
         while rounds < settings.REINO_AI["MAX_TOOL_ROUNDS"]:
             rounds += 1
@@ -97,10 +148,23 @@ def respond(conversation, user_text, ctx: ToolContext):
                     args = json.loads(call["function"].get("arguments") or "{}")
                 except json.JSONDecodeError:
                     args = {}
-                # Escrituras: solo la instrucción inequívoca del cliente llega
-                # hasta aquí; la herramienta revalida en servidor.
-                result = run_tool(name, args, ctx)
-                _collect_cards(name, result, cards, warnings)
+                if name in WRITE_TOOLS:
+                    # R11: el modelo PROPONE; nunca ejecuta. El comprador
+                    # confirma con un permiso de un solo uso y caducidad.
+                    token = _propose_action(name, args, ctx)
+                    proposals.append({
+                        "action_id": token.action_id,
+                        "tool": name,
+                        "label": _proposal_label(token),
+                        "payload": token.payload,
+                    })
+                    result = {"error": "requires_buyer_confirmation",
+                              "proposal_id": token.action_id}
+                else:
+                    result = run_tool(name, args, ctx)
+                    _collect_cards(name, result, cards, warnings)
+                    if isinstance(result, dict) and not result.get("error"):
+                        evidence.append(json.dumps(result, ensure_ascii=False, default=str))
                 messages.append({
                     "role": "tool", "tool_call_id": call["id"],
                     "content": json.dumps(result, ensure_ascii=False, default=str)[:4000],
@@ -112,8 +176,9 @@ def respond(conversation, user_text, ctx: ToolContext):
     except adapter.ProviderUnavailable:
         reply = fallback.respond(user_text, ctx)
         reply["mode"] = "rules"
-        reply["mode_note"] = ("La IA no está disponible en este momento; estás usando "
-                              "la selección por reglas. Tus selecciones siguen guardadas.")
+        reply["mode_note"] = ("El asesor con IA no está disponible ahora. "
+                              "Estás usando la selección guiada de la tienda.")
+        reply.setdefault("proposed_actions", [])
         _persist(conversation, reply, request_id)
         return reply
     except adapter.ProviderError as exc:
@@ -123,11 +188,19 @@ def respond(conversation, user_text, ctx: ToolContext):
             "cards": [], "clarifying_question": None,
             "suggested_actions": [{"label": "Reintentar", "action": "retry"},
                                   {"label": "Ver colección", "action": "collection"}],
+            "proposed_actions": [],
             "warnings": [f"provider_error:{exc}"], "mode": "ai",
             "request_id": request_id,
         }
         _persist(conversation, reply, request_id)
         return reply
+
+    # R12: validar el texto contra la evidencia del turno.
+    answer, problems = _validate_answer(answer, evidence)
+    if problems:
+        warnings += problems
+        answer = ABSTENTION_TEXT
+        cards = []  # sin evidencia no hay tarjetas que mostrar
 
     reply = {
         "answer_text": answer or "Acá tenés lo que encontré.",
@@ -135,13 +208,31 @@ def respond(conversation, user_text, ctx: ToolContext):
         # validados en servidor, nunca del texto del modelo (A11).
         "cards": _dedupe_cards(cards)[:3],
         "clarifying_question": None,
-        "suggested_actions": actions,
+        "suggested_actions": [],
+        "proposed_actions": proposals,
         "warnings": warnings,
         "mode": "ai",
         "request_id": request_id,
     }
     _persist(conversation, reply, request_id)
     return reply
+
+
+def _propose_action(tool, args, ctx):
+    """Crea el permiso de acción propuesta: alcance tienda+sesión, 15 min (R11)."""
+    return ActionToken.objects.create(
+        action_id=uuid.uuid4().hex[:24],
+        store=ctx.store, session_key=ctx.session_key, tool=tool,
+        payload={k: v for k, v in (args or {}).items() if k != "action_id"},
+        expires_at=timezone.now() + timedelta(minutes=ACTION_TTL_MINUTES),
+    )
+
+
+def _proposal_label(token):
+    if token.tool == "add_item_to_cart":
+        qty = token.payload.get("quantity") or 1
+        return f"Agregar al carrito (cantidad {qty})"
+    return "Ejecutar acción"
 
 
 def _collect_cards(tool_name, result, cards, warnings):
