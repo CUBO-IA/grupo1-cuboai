@@ -1,0 +1,1041 @@
+{
+  "version": "1.0",
+  "source": "auditoría PR #3 + plan v2 §23",
+  "cases": [
+    {
+      "id": "FIT-01",
+      "category": "fit",
+      "description": "compatible pleno S",
+      "input": {
+        "chest": 36,
+        "neck": 24,
+        "back": 28
+      },
+      "expected": {
+        "state": "compatible",
+        "candidate": "S"
+      }
+    },
+    {
+      "id": "FIT-02",
+      "category": "fit",
+      "description": "compatible pleno M",
+      "input": {
+        "chest": 43,
+        "neck": 29,
+        "back": 35
+      },
+      "expected": {
+        "state": "compatible",
+        "candidate": "M"
+      }
+    },
+    {
+      "id": "FIT-03",
+      "category": "fit",
+      "description": "al límite inferior S",
+      "input": {
+        "chest": 33.5,
+        "neck": 24,
+        "back": 28
+      },
+      "expected": {
+        "state": "al_limite",
+        "candidate": "S"
+      }
+    },
+    {
+      "id": "FIT-04",
+      "category": "fit",
+      "description": "al límite superior S",
+      "input": {
+        "chest": 39.5,
+        "neck": 24,
+        "back": 28
+      },
+      "expected": {
+        "state": "al_limite",
+        "candidate": "S"
+      }
+    },
+    {
+      "id": "FIT-05",
+      "category": "fit",
+      "description": "incompatible grande",
+      "input": {
+        "chest": 60,
+        "neck": 38,
+        "back": 45
+      },
+      "expected": {
+        "state": "incompatible",
+        "candidate": null
+      }
+    },
+    {
+      "id": "FIT-06",
+      "category": "fit",
+      "description": "incompatible pequeño",
+      "input": {
+        "chest": 20,
+        "neck": 14,
+        "back": 15
+      },
+      "expected": {
+        "state": "incompatible",
+        "candidate": null
+      }
+    },
+    {
+      "id": "FIT-07",
+      "category": "fit",
+      "description": "sin pecho",
+      "input": {
+        "neck": 24,
+        "back": 28
+      },
+      "expected": {
+        "state": "sin_datos",
+        "candidate": null
+      }
+    },
+    {
+      "id": "FIT-08",
+      "category": "fit",
+      "description": "sin ninguna medida",
+      "input": {},
+      "expected": {
+        "state": "sin_datos",
+        "candidate": null
+      }
+    },
+    {
+      "id": "FIT-09",
+      "category": "fit",
+      "description": "pecho exacto borde min S",
+      "input": {
+        "chest": 33,
+        "neck": 24,
+        "back": 28
+      },
+      "expected": {
+        "state": "al_limite",
+        "candidate": "S"
+      }
+    },
+    {
+      "id": "FIT-10",
+      "category": "fit",
+      "description": "pecho exacto borde max S",
+      "input": {
+        "chest": 40,
+        "neck": 24,
+        "back": 28
+      },
+      "expected": {
+        "state": "al_limite",
+        "candidate": "S"
+      }
+    },
+    {
+      "id": "FIT-11",
+      "category": "fit",
+      "description": "cm e in equivalentes",
+      "input": {
+        "chest": 14.17,
+        "neck": 9.45,
+        "back": 11.02,
+        "unit": "in"
+      },
+      "expected": {
+        "state": "compatible",
+        "candidate": "S"
+      }
+    },
+    {
+      "id": "FIT-12",
+      "category": "fit",
+      "description": "M por pecho aunque espalda holgada",
+      "input": {
+        "chest": 43,
+        "neck": 29,
+        "back": 31
+      },
+      "expected": {
+        "state": "compatible",
+        "candidate": "M"
+      }
+    },
+    {
+      "id": "FIT-13",
+      "category": "fit",
+      "description": "XS compatible",
+      "input": {
+        "chest": 30,
+        "neck": 20,
+        "back": 22
+      },
+      "expected": {
+        "state": "compatible",
+        "candidate": "XS"
+      }
+    },
+    {
+      "id": "FIT-14",
+      "category": "fit",
+      "description": "cero no es medida",
+      "input": {
+        "chest": 0
+      },
+      "expected": {
+        "state": "sin_datos",
+        "candidate": null
+      }
+    },
+    {
+      "id": "FIT-15",
+      "category": "fit",
+      "description": "medida no numérica",
+      "input": {
+        "chest": "abc"
+      },
+      "expected": {
+        "state": "sin_datos",
+        "candidate": null
+      }
+    },
+    {
+      "id": "FIT-16",
+      "category": "fit",
+      "description": "medida fuera de rango físico",
+      "input": {
+        "chest": 250
+      },
+      "expected": {
+        "state": "sin_datos",
+        "candidate": null
+      }
+    },
+    {
+      "id": "FIT-17",
+      "category": "fit",
+      "description": "pecho solo NO basta: falta espalda (dato obligatorio)",
+      "input": {
+        "chest": 36
+      },
+      "expected": {
+        "state": "sin_datos",
+        "candidate": null
+      }
+    },
+    {
+      "id": "BUD-01",
+      "category": "budget",
+      "description": "total 100 limita conjunto",
+      "input": {
+        "budget": "100",
+        "budget_scope": "total",
+        "occasion": "celebracion"
+      },
+      "expected": {
+        "max_total": "100"
+      }
+    },
+    {
+      "id": "BUD-02",
+      "category": "budget",
+      "description": "total 60 excluye arnés de 63",
+      "input": {
+        "budget": "60",
+        "budget_scope": "total",
+        "occasion": "paseo"
+      },
+      "expected": {
+        "max_total": "60"
+      }
+    },
+    {
+      "id": "BUD-03",
+      "category": "budget",
+      "description": "total 1000 permite conjunto",
+      "input": {
+        "budget": "1000",
+        "budget_scope": "total",
+        "occasion": "paseo"
+      },
+      "expected": {
+        "max_total": "1000"
+      }
+    },
+    {
+      "id": "BUD-04",
+      "category": "budget",
+      "description": "por pieza 70",
+      "input": {
+        "budget": "70",
+        "budget_scope": "products",
+        "occasion": "paseo"
+      },
+      "expected": {
+        "max_total": "70"
+      }
+    },
+    {
+      "id": "BUD-05",
+      "category": "budget",
+      "description": "por pieza 50 excluye arnés",
+      "input": {
+        "budget": "50",
+        "budget_scope": "products",
+        "occasion": "paseo"
+      },
+      "expected": {
+        "max_total": "50"
+      }
+    },
+    {
+      "id": "BUD-06",
+      "category": "budget",
+      "description": "sin presupuesto no limita",
+      "input": {
+        "occasion": "paseo"
+      },
+      "expected": {
+        "max_total": null
+      }
+    },
+    {
+      "id": "BUD-07",
+      "category": "budget",
+      "description": "total ajustado 63 exacto",
+      "input": {
+        "budget": "63",
+        "budget_scope": "total",
+        "occasion": "paseo"
+      },
+      "expected": {
+        "max_total": "63"
+      }
+    },
+    {
+      "id": "BUD-08",
+      "category": "budget",
+      "description": "total 1 excluye todo",
+      "input": {
+        "budget": "1",
+        "budget_scope": "total",
+        "occasion": "paseo"
+      },
+      "expected": {
+        "max_total": "1"
+      }
+    },
+    {
+      "id": "DSC-01",
+      "category": "discount",
+      "description": "elegible bitcoin 2 unidades",
+      "input": {
+        "eligible": true,
+        "method": "bitcoin",
+        "qty": 2
+      },
+      "expected": {
+        "discount": "18.90"
+      }
+    },
+    {
+      "id": "DSC-02",
+      "category": "discount",
+      "description": "elegible bitcoin 1 unidad",
+      "input": {
+        "eligible": true,
+        "method": "bitcoin",
+        "qty": 1
+      },
+      "expected": {
+        "discount": "9.45"
+      }
+    },
+    {
+      "id": "DSC-03",
+      "category": "discount",
+      "description": "no elegible bitcoin",
+      "input": {
+        "eligible": false,
+        "method": "bitcoin",
+        "qty": 2
+      },
+      "expected": {
+        "discount": "0"
+      }
+    },
+    {
+      "id": "DSC-04",
+      "category": "discount",
+      "description": "elegible pago manual",
+      "input": {
+        "eligible": true,
+        "method": "manual",
+        "qty": 2
+      },
+      "expected": {
+        "discount": "0"
+      }
+    },
+    {
+      "id": "DSC-05",
+      "category": "discount",
+      "description": "no elegible pago manual",
+      "input": {
+        "eligible": false,
+        "method": "manual",
+        "qty": 1
+      },
+      "expected": {
+        "discount": "0"
+      }
+    },
+    {
+      "id": "DSC-06",
+      "category": "discount",
+      "description": "elegible bitcoin 3 unidades",
+      "input": {
+        "eligible": true,
+        "method": "bitcoin",
+        "qty": 3
+      },
+      "expected": {
+        "discount": "28.35"
+      }
+    },
+    {
+      "id": "DSC-07",
+      "category": "discount",
+      "description": "no elegible bitcoin 5 unidades",
+      "input": {
+        "eligible": false,
+        "method": "bitcoin",
+        "qty": 5
+      },
+      "expected": {
+        "discount": "0"
+      }
+    },
+    {
+      "id": "DSC-08",
+      "category": "discount",
+      "description": "elegible bitcoin 10 unidades",
+      "input": {
+        "eligible": true,
+        "method": "bitcoin",
+        "qty": 10
+      },
+      "expected": {
+        "discount": "94.50"
+      }
+    },
+    {
+      "id": "IDM-01",
+      "category": "idempotency",
+      "description": "add_item mismo action_id dos veces",
+      "input": {
+        "op": "ai_action",
+        "repeats": 2
+      },
+      "expected": {
+        "units": 1
+      }
+    },
+    {
+      "id": "IDM-02",
+      "category": "idempotency",
+      "description": "add_item mismo action_id cinco veces",
+      "input": {
+        "op": "ai_action",
+        "repeats": 5
+      },
+      "expected": {
+        "units": 1
+      }
+    },
+    {
+      "id": "IDM-03",
+      "category": "idempotency",
+      "description": "prepare_checkout misma clave y contenido",
+      "input": {
+        "op": "prepare",
+        "repeats": 2
+      },
+      "expected": {
+        "sessions": 1
+      }
+    },
+    {
+      "id": "IDM-04",
+      "category": "idempotency",
+      "description": "confirm dos veces un solo pedido",
+      "input": {
+        "op": "confirm",
+        "repeats": 2
+      },
+      "expected": {
+        "orders": 1
+      }
+    },
+    {
+      "id": "IDM-05",
+      "category": "idempotency",
+      "description": "confirm tres veces un solo pedido",
+      "input": {
+        "op": "confirm",
+        "repeats": 3
+      },
+      "expected": {
+        "orders": 1
+      }
+    },
+    {
+      "id": "IDM-06",
+      "category": "idempotency",
+      "description": "edición crea resumen nuevo",
+      "input": {
+        "op": "edit_checkout"
+      },
+      "expected": {
+        "current_summaries": 1
+      }
+    },
+    {
+      "id": "IDM-07",
+      "category": "idempotency",
+      "description": "reintento tras edición no duplica",
+      "input": {
+        "op": "edit_then_confirm"
+      },
+      "expected": {
+        "orders": 1
+      }
+    },
+    {
+      "id": "IDM-08",
+      "category": "idempotency",
+      "description": "cancelar dos veces no duplica stock",
+      "input": {
+        "op": "cancel_twice"
+      },
+      "expected": {
+        "restored_once": true
+      }
+    },
+    {
+      "id": "ZON-01",
+      "category": "zone",
+      "description": "retiro sin zona",
+      "input": {
+        "mode": "pickup",
+        "zone": null
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "id": "ZON-02",
+      "category": "zone",
+      "description": "local con zona local",
+      "input": {
+        "mode": "local",
+        "zone": "Centro (demo)"
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "id": "ZON-03",
+      "category": "zone",
+      "description": "local con zona de retiro (manipulado)",
+      "input": {
+        "mode": "local",
+        "zone": "Retiro"
+      },
+      "expected": {
+        "ok": false
+      }
+    },
+    {
+      "id": "ZON-04",
+      "category": "zone",
+      "description": "local sin zona",
+      "input": {
+        "mode": "local",
+        "zone": null
+      },
+      "expected": {
+        "ok": false
+      }
+    },
+    {
+      "id": "ZON-05",
+      "category": "zone",
+      "description": "modalidad inventada",
+      "input": {
+        "mode": "dron",
+        "zone": null
+      },
+      "expected": {
+        "ok": false
+      }
+    },
+    {
+      "id": "ZON-06",
+      "category": "zone",
+      "description": "pickup ignorando zona local",
+      "input": {
+        "mode": "pickup",
+        "zone": "Centro (demo)"
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "id": "MEM-01",
+      "category": "memory",
+      "description": "consentida entra al contexto",
+      "input": {
+        "grant": true,
+        "revoke": false
+      },
+      "expected": {
+        "in_context": true
+      }
+    },
+    {
+      "id": "MEM-02",
+      "category": "memory",
+      "description": "revocada NO entra al contexto",
+      "input": {
+        "grant": true,
+        "revoke": true
+      },
+      "expected": {
+        "in_context": false
+      }
+    },
+    {
+      "id": "MEM-03",
+      "category": "memory",
+      "description": "nunca consentida no entra",
+      "input": {
+        "grant": false,
+        "revoke": false
+      },
+      "expected": {
+        "in_context": false
+      }
+    },
+    {
+      "id": "MEM-04",
+      "category": "memory",
+      "description": "revocada no alimenta al recomendador",
+      "input": {
+        "grant": true,
+        "revoke": true,
+        "target": "recommend"
+      },
+      "expected": {
+        "in_context": false
+      }
+    },
+    {
+      "id": "MEM-05",
+      "category": "memory",
+      "description": "revocada no alimenta smart_fit tool",
+      "input": {
+        "grant": true,
+        "revoke": true,
+        "target": "tool_fit"
+      },
+      "expected": {
+        "in_context": false
+      }
+    },
+    {
+      "id": "MEM-06",
+      "category": "memory",
+      "description": "borrado elimina medidas",
+      "input": {
+        "grant": true,
+        "delete": true,
+        "check": "measurements"
+      },
+      "expected": {
+        "in_context": false
+      }
+    },
+    {
+      "id": "MEM-07",
+      "category": "memory",
+      "description": "borrado elimina preferencias",
+      "input": {
+        "grant": true,
+        "delete": true,
+        "check": "preferences"
+      },
+      "expected": {
+        "in_context": false
+      }
+    },
+    {
+      "id": "MEM-08",
+      "category": "memory",
+      "description": "borrado elimina conversación",
+      "input": {
+        "grant": true,
+        "delete": true,
+        "check": "conversation"
+      },
+      "expected": {
+        "in_context": false
+      }
+    },
+    {
+      "id": "TRN-01",
+      "category": "transition",
+      "description": "owner confirma pago",
+      "input": {
+        "role": "owner",
+        "field": "payment_status",
+        "to": "paid"
+      },
+      "expected": {
+        "allowed": true
+      }
+    },
+    {
+      "id": "TRN-02",
+      "category": "transition",
+      "description": "staff NO confirma pago",
+      "input": {
+        "role": "staff",
+        "field": "payment_status",
+        "to": "paid"
+      },
+      "expected": {
+        "allowed": false
+      }
+    },
+    {
+      "id": "TRN-03",
+      "category": "transition",
+      "description": "logistics NO confirma pago",
+      "input": {
+        "role": "logistics",
+        "field": "payment_status",
+        "to": "paid"
+      },
+      "expected": {
+        "allowed": false
+      }
+    },
+    {
+      "id": "TRN-04",
+      "category": "transition",
+      "description": "logistics prepara pedido",
+      "input": {
+        "role": "logistics",
+        "field": "prep_status",
+        "to": "preparing"
+      },
+      "expected": {
+        "allowed": true
+      }
+    },
+    {
+      "id": "TRN-05",
+      "category": "transition",
+      "description": "logistics NO cancela pedido",
+      "input": {
+        "role": "logistics",
+        "field": "status",
+        "to": "cancelled"
+      },
+      "expected": {
+        "allowed": false
+      }
+    },
+    {
+      "id": "TRN-06",
+      "category": "transition",
+      "description": "staff cancela pedido",
+      "input": {
+        "role": "staff",
+        "field": "status",
+        "to": "cancelled"
+      },
+      "expected": {
+        "allowed": true
+      }
+    },
+    {
+      "id": "TRN-07",
+      "category": "transition",
+      "description": "staff edita catálogo (capacidad)",
+      "input": {
+        "role": "staff",
+        "field": null,
+        "to": null
+      },
+      "expected": {
+        "allowed": true
+      }
+    },
+    {
+      "id": "TRN-08",
+      "category": "transition",
+      "description": "logistics NO edita catálogo",
+      "input": {
+        "role": "logistics",
+        "field": null,
+        "to": null
+      },
+      "expected": {
+        "allowed": false
+      }
+    },
+    {
+      "id": "TRN-09",
+      "category": "transition",
+      "description": "pago confirmado exige evidencia",
+      "input": {
+        "role": "owner",
+        "field": "payment_status",
+        "to": "paid_no_note"
+      },
+      "expected": {
+        "allowed": false
+      }
+    },
+    {
+      "id": "TRN-10",
+      "category": "transition",
+      "description": "transición inválida siempre rechazada",
+      "input": {
+        "role": "owner",
+        "field": "status",
+        "to": "closed_from_placed"
+      },
+      "expected": {
+        "allowed": false
+      }
+    },
+    {
+      "id": "TXT-01",
+      "category": "text_guard",
+      "description": "precio inventado sin evidencia",
+      "input": {
+        "answer": "El arnés cuesta $1.00.",
+        "with_evidence": false
+      },
+      "expected": {
+        "rejected": true
+      }
+    },
+    {
+      "id": "TXT-02",
+      "category": "text_guard",
+      "description": "garantía inventada sin evidencia",
+      "input": {
+        "answer": "La entrega hoy está garantizada.",
+        "with_evidence": false
+      },
+      "expected": {
+        "rejected": true
+      }
+    },
+    {
+      "id": "TXT-03",
+      "category": "text_guard",
+      "description": "precio y promesa juntos",
+      "input": {
+        "answer": "Cuesta $9 y lo recibís hoy garantizado.",
+        "with_evidence": false
+      },
+      "expected": {
+        "rejected": true
+      }
+    },
+    {
+      "id": "TXT-04",
+      "category": "text_guard",
+      "description": "saludo sin afirmaciones",
+      "input": {
+        "answer": "¡Hola! ¿En qué te ayudo?",
+        "with_evidence": false
+      },
+      "expected": {
+        "rejected": false
+      }
+    },
+    {
+      "id": "TXT-05",
+      "category": "text_guard",
+      "description": "precio respaldado por herramienta",
+      "input": {
+        "answer": "El Cable Knit Jumper cuesta $45.00.",
+        "with_evidence": true
+      },
+      "expected": {
+        "rejected": false
+      }
+    },
+    {
+      "id": "TXT-06",
+      "category": "text_guard",
+      "description": "porcentaje inventado",
+      "input": {
+        "answer": "Tenés 30 % de descuento hoy.",
+        "with_evidence": false
+      },
+      "expected": {
+        "rejected": true
+      }
+    },
+    {
+      "id": "TXT-07",
+      "category": "text_guard",
+      "description": "texto auditado del caso R12",
+      "input": {
+        "answer": "El arnés cuesta $1.00 y su entrega hoy está garantizada.",
+        "with_evidence": false
+      },
+      "expected": {
+        "rejected": true
+      }
+    },
+    {
+      "id": "TXT-08",
+      "category": "text_guard",
+      "description": "respuesta neutra con pregunta",
+      "input": {
+        "answer": "¿Para qué ocasión lo buscás?",
+        "with_evidence": false
+      },
+      "expected": {
+        "rejected": false
+      }
+    },
+    {
+      "id": "AGG-01",
+      "category": "aggregate",
+      "description": "stock 1, dos destinatarios de 1",
+      "input": {
+        "stock": 1,
+        "lines": [
+          1,
+          1
+        ]
+      },
+      "expected": {
+        "conflict": true
+      }
+    },
+    {
+      "id": "AGG-02",
+      "category": "aggregate",
+      "description": "stock 2, dos destinatarios de 1",
+      "input": {
+        "stock": 2,
+        "lines": [
+          1,
+          1
+        ]
+      },
+      "expected": {
+        "conflict": false
+      }
+    },
+    {
+      "id": "AGG-03",
+      "category": "aggregate",
+      "description": "stock 5, una línea de 6",
+      "input": {
+        "stock": 5,
+        "lines": [
+          6
+        ]
+      },
+      "expected": {
+        "conflict": true
+      }
+    },
+    {
+      "id": "AGG-04",
+      "category": "aggregate",
+      "description": "stock 10, tres destinatarios de 3",
+      "input": {
+        "stock": 10,
+        "lines": [
+          3,
+          3,
+          3
+        ]
+      },
+      "expected": {
+        "conflict": false
+      }
+    },
+    {
+      "id": "AIA-01",
+      "category": "ai_actions",
+      "description": "modelo pide escribir: NO ejecuta",
+      "input": {
+        "tool": "add_item_to_cart"
+      },
+      "expected": {
+        "cart_empty": true,
+        "proposal": true
+      }
+    },
+    {
+      "id": "AIA-02",
+      "category": "ai_actions",
+      "description": "consulta de materiales no escribe",
+      "input": {
+        "tool": "add_item_to_cart",
+        "message": "¿Qué materiales tiene?"
+      },
+      "expected": {
+        "cart_empty": true,
+        "proposal": true
+      }
+    },
+    {
+      "id": "AIA-03",
+      "category": "ai_actions",
+      "description": "acción autorizada ejecuta una vez",
+      "input": {
+        "tool": "add_item_to_cart",
+        "authorized": true
+      },
+      "expected": {
+        "cart_empty": false,
+        "units": 1
+      }
+    },
+    {
+      "id": "AIA-04",
+      "category": "ai_actions",
+      "description": "acción vencida no ejecuta",
+      "input": {
+        "tool": "add_item_to_cart",
+        "authorized": true,
+        "expired": true
+      },
+      "expected": {
+        "error": "action_expired"
+      }
+    }
+  ]
+}
