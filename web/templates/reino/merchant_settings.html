@@ -4,11 +4,109 @@
 <h1 class="mt-0">Configuración</h1>
 
 <h2>Identidad</h2>
-<div class="looklab-card" style="max-width:560px">
-    <p class="mb-0"><strong>{{ store.name }}</strong> · /s/{{ store.slug }}/<br>
-    {{ store.tagline }}<br>
-    <span class="small muted">{{ store.currency }} · {{ store.locale }} · {{ store.category }} ·
-    estado: {{ store.get_status_display }}{% if store.is_demo %} (demo, sin cobros reales){% endif %}</span></p>
+<div class="looklab-card" style="max-width:640px">
+    {% if can_settings %}
+    <form method="post" action="{% url 'reino_merchant_settings_store' store.slug %}">
+        {% csrf_token %}
+        <div class="field"><label for="name">Nombre de la tienda</label>
+            <input id="name" name="name" maxlength="80" value="{{ store.name }}"></div>
+        <div class="field"><label for="tagline">Lema (tagline)</label>
+            <input id="tagline" name="tagline" maxlength="160" value="{{ store.tagline }}"></div>
+        <div class="field--inline">
+            <div class="field"><label for="contact_email">Correo de contacto</label>
+                <input id="contact_email" name="contact_email" type="email" value="{{ store.contact_email }}"></div>
+            <div class="field"><label for="contact_phone">Teléfono</label>
+                <input id="contact_phone" name="contact_phone" maxlength="40" value="{{ store.contact_phone }}"></div>
+        </div>
+        <button class="btn btn--primary" type="submit">Guardar identidad</button>
+    </form>
+    {% else %}
+    <p class="mb-0"><strong>{{ store.name }}</strong> · /s/{{ store.slug }}/<br>{{ store.tagline }}<br>
+    <span class="small muted">{{ store.currency }} · estado: {{ store.get_status_display }}.
+    Tu rol no incluye editar la identidad.</span></p>
+    {% endif %}
+    <p class="small muted" style="margin-top:10px">/s/{{ store.slug }}/ · {{ store.currency }} · {{ store.locale }} · {{ store.category }} ·
+    {{ store.get_status_display }}{% if store.is_demo %} (demo, sin cobros reales){% endif %}</p>
+</div>
+
+<h2 style="margin-top:32px">Zonas de entrega y retiro</h2>
+<div class="looklab-card" style="max-width:760px">
+    <table class="data">
+        <thead><tr><th>Nombre</th><th>Modalidad</th><th>Tarifa</th><th>Activa</th></tr></thead>
+        <tbody>{% for z in zones %}<tr>
+            <td>{{ z.name }}</td><td>{{ z.get_mode_display|default:z.mode }}</td>
+            <td>${{ z.fee }}</td><td>{% if z.is_active %}Sí{% else %}No{% endif %}</td>
+        </tr>{% endfor %}</tbody>
+    </table>
+    {% if can_settings %}
+    <form method="post" action="{% url 'reino_merchant_zone_save' store.slug %}" class="field--inline" style="margin-top:14px">
+        {% csrf_token %}
+        <div class="field"><label>Nombre</label><input name="name" maxlength="80" required></div>
+        <div class="field"><label>Modalidad</label>
+            <select name="mode"><option value="local">Entrega local</option><option value="pickup">Retiro</option></select></div>
+        <div class="field"><label>Tarifa (USD)</label><input name="fee" inputmode="decimal" value="0"></div>
+        <div class="field"><label>Nota de plazo</label><input name="eta_note" maxlength="120"></div>
+        <div class="field" style="align-self:end">
+            <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" name="is_active" value="1" checked> Activa</label></div>
+        <div class="field" style="align-self:end"><button class="btn btn--secondary" type="submit">Guardar zona</button></div>
+    </form>
+    <p class="help small">La tarifa se valida en el servidor al confirmar el pedido: el navegador nunca decide el costo de envío.</p>
+    {% endif %}
+</div>
+
+<h2 style="margin-top:32px">Políticas de la tienda</h2>
+<div class="looklab-card" style="max-width:760px">
+    {% if policies %}
+    <table class="data">
+        <thead><tr><th>Tema</th><th>Título</th><th>Versión</th><th>Publicada</th></tr></thead>
+        <tbody>{% for p in policies %}<tr>
+            <td>{{ p.topic }}</td><td>{{ p.title }}</td><td>v{{ p.version }}</td>
+            <td>{% if p.is_published %}Sí{% else %}Borrador{% endif %}</td>
+        </tr>{% endfor %}</tbody>
+    </table>
+    {% else %}<p class="muted small">Sin políticas cargadas.</p>{% endif %}
+    {% if can_settings %}
+    <form method="post" action="{% url 'reino_merchant_policy_save' store.slug %}" style="margin-top:14px">
+        {% csrf_token %}
+        <div class="field--inline">
+            <div class="field"><label>Tema</label><input name="topic" maxlength="40" placeholder="cambios" required></div>
+            <div class="field"><label>Título</label><input name="title" maxlength="120" required></div>
+        </div>
+        <div class="field"><label>Contenido aprobado</label><textarea name="body" rows="4" required></textarea></div>
+        <label style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+            <input type="checkbox" name="publish" value="1" checked> Publicada (visible en ayuda y para el asesor)
+        </label>
+        <button class="btn btn--secondary" type="submit">Guardar política</button>
+    </form>
+    <p class="help small">El mismo contenido alimenta la ayuda y al asesor: una sola fuente, cero contradicciones.</p>
+    {% endif %}
+</div>
+
+<h2 style="margin-top:32px">Equipo</h2>
+<div class="looklab-card" style="max-width:760px">
+    <table class="data">
+        <thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th>{% if can_team %}<th></th>{% endif %}</tr></thead>
+        <tbody>{% for m in team %}<tr>
+            <td>{{ m.user.username }}</td><td>{{ m.get_role_display }}</td>
+            <td>{% if m.is_active %}Activo{% else %}Inactivo{% endif %}</td>
+            {% if can_team %}<td>
+                {% if m.is_active %}
+                <form method="post" action="{% url 'reino_merchant_team_remove' store.slug m.pk %}">
+                    {% csrf_token %}<button class="btn btn--ghost btn--sm" type="submit">Quitar acceso</button>
+                </form>{% endif %}
+            </td>{% endif %}
+        </tr>{% endfor %}</tbody>
+    </table>
+    {% if can_team %}
+    <form method="post" action="{% url 'reino_merchant_team_save' store.slug %}" class="field--inline" style="margin-top:14px">
+        {% csrf_token %}
+        <div class="field"><label>Usuario existente</label><input name="username" required></div>
+        <div class="field"><label>Rol</label>
+            <select name="role"><option value="staff">Equipo</option><option value="logistics">Logística</option><option value="owner">Propietario</option></select></div>
+        <div class="field" style="align-self:end"><button class="btn btn--secondary" type="submit">Agregar / cambiar rol</button></div>
+    </form>
+    <p class="help small">Capacidades: Propietario = todo. Equipo = catálogo, inventario, pedidos y preparación (sin confirmar cobros). Logística = solo preparación y entregas.</p>
+    {% endif %}
 </div>
 
 <h2 style="margin-top:32px">Integraciones</h2>

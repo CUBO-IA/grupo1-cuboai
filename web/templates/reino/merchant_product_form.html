@@ -1,0 +1,137 @@
+{% extends "reino/merchant_base.html" %}
+{% load static %}
+{% block title %}{% if product %}Editar {{ product.short_title }}{% else %}Nuevo producto{% endif %} · {{ store.name }}{% endblock %}
+{% block panel %}
+<h1 class="mt-0">{% if product %}Editar «{{ product.short_title }}»{% else %}Nuevo producto{% endif %}</h1>
+
+{% if errors %}
+<div class="form-errors" role="alert">{% for f, e in errors.items %}<p class="mb-0">{{ e }}</p>{% endfor %}</div>
+{% endif %}
+
+<form method="post" class="looklab-card" style="max-width:760px">
+    {% csrf_token %}
+    <div class="field--inline">
+        <div class="field"><label for="title">Título completo</label>
+            <input id="title" name="title" maxlength="160" required value="{{ data.title|default:product.title }}"></div>
+        <div class="field"><label for="short_title">Nombre corto</label>
+            <input id="short_title" name="short_title" maxlength="80" value="{{ data.short_title|default:product.short_title }}"></div>
+    </div>
+    <div class="field"><label for="subtitle">Beneficio verificable (una línea)</label>
+        <input id="subtitle" name="subtitle" maxlength="200" value="{{ data.subtitle|default:product.subtitle }}"></div>
+    <div class="field"><label for="description">Descripción</label>
+        <textarea id="description" name="description" rows="4">{{ data.description|default:product.description }}</textarea></div>
+    <div class="field--inline">
+        <div class="field"><label for="category">Categoría</label>
+            <input id="category" name="category" maxlength="40" value="{{ data.category|default:product.category|default:'general' }}"></div>
+        <div class="field"><label for="base_price">Precio base (USD)</label>
+            <input id="base_price" name="base_price" inputmode="decimal" required value="{{ data.base_price|default:product.base_price }}"></div>
+    </div>
+    <div class="field--inline">
+        <div class="field"><label for="occasions">Ocasiones (separadas por coma)</label>
+            <input id="occasions" name="occasions" value="{{ data.occasions|join:', '|default:'' }}" placeholder="paseo, celebracion"></div>
+        <div class="field"><label for="styles">Estilos (separados por coma)</label>
+            <input id="styles" name="styles" value="{{ data.styles|join:', '|default:'' }}" placeholder="royal-classic"></div>
+    </div>
+    <div class="field"><label for="materials">Materiales (separados por coma)</label>
+        <input id="materials" name="materials" value="{{ data.materials|join:', '|default:'' }}"></div>
+    <div class="field"><label for="reason">Razón verificable para recomendarlo</label>
+        <input id="reason" name="reason" maxlength="160" value="{{ data.reason|default:product.reason }}"></div>
+    {% if product %}
+    <div class="field"><label for="status">Estado</label>
+        <select id="status" name="status">
+            <option value="draft" {% if product.status == "draft" %}selected{% endif %}>Borrador</option>
+            <option value="published" {% if product.status == "published" %}selected{% endif %}>Publicado</option>
+            <option value="archived" {% if product.status == "archived" %}selected{% endif %}>Archivado</option>
+        </select></div>
+    {% endif %}
+    <label style="display:flex;gap:10px;align-items:center;font-weight:600;margin-bottom:10px">
+        <input type="checkbox" name="is_featured" value="1" {% if product.is_featured %}checked{% endif %} style="width:18px;height:18px">
+        Selección editorial de la casa
+    </label>
+    <label style="display:flex;gap:10px;align-items:center;font-weight:600;margin-bottom:18px">
+        <input type="checkbox" name="bitcoin_discount_eligible" value="1" {% if product.bitcoin_discount_eligible %}checked{% endif %} style="width:18px;height:18px">
+        Participa en el descuento Bitcoin (elegibilidad aprobada por el negocio)
+    </label>
+    <button class="btn btn--primary" type="submit">Guardar</button>
+    <a class="btn btn--ghost" href="{% url 'reino_merchant_catalog' store.slug %}">Volver</a>
+</form>
+
+{% if product %}
+<div class="looklab-card" style="max-width:760px;margin-top:22px">
+    <h2 style="font-size:1.2rem" class="mt-0">Variantes</h2>
+    <table class="data">
+        <thead><tr><th>SKU</th><th>Etiqueta</th><th>Precio</th><th>Stock</th><th></th></tr></thead>
+        <tbody>
+        {% for v in variants %}
+        <tr>
+            <td>{{ v.sku }}</td><td>{{ v.option_label }}</td>
+            <td>${{ v.price }}{% if v.price_override %} <span class="small muted">(especial)</span>{% endif %}</td>
+            <td>
+                <form method="post" action="{% url 'reino_merchant_variant_stock' store.slug v.pk %}" style="display:flex;gap:6px;align-items:center">
+                    {% csrf_token %}
+                    <input type="number" name="delta" value="1" style="width:64px" aria-label="Ajuste">
+                    <input type="text" name="reason" placeholder="Motivo (obligatorio)" required style="min-width:150px">
+                    <button class="btn btn--ghost btn--sm" type="submit">Ajustar</button>
+                </form>
+            </td>
+            <td>
+                <form method="post" action="{% url 'reino_merchant_variant_toggle' store.slug v.pk %}">
+                    {% csrf_token %}
+                    <button class="btn btn--ghost btn--sm" type="submit">{% if v.is_active %}Desactivar{% else %}Activar{% endif %}</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    <form method="post" action="{% url 'reino_merchant_variant_new' store.slug product.pk %}" class="field--inline" style="margin-top:14px">
+        {% csrf_token %}
+        <div class="field"><label>SKU nuevo</label><input name="sku" maxlength="60" required></div>
+        <div class="field"><label>Etiqueta</label><input name="option_label" maxlength="60" placeholder="Talla M" required></div>
+        <div class="field"><label>Stock inicial</label><input name="stock" type="number" min="0" value="0"></div>
+        <div class="field"><label>Precio especial (opcional)</label><input name="price_override" inputmode="decimal"></div>
+        <div class="field" style="align-self:end"><button class="btn btn--secondary" type="submit">+ Variante</button></div>
+    </form>
+</div>
+
+<div class="looklab-card" style="max-width:760px;margin-top:22px">
+    <h2 style="font-size:1.2rem" class="mt-0">Tabla de tallas</h2>
+    {% if fit_rules %}
+    <p class="small muted">Activa: v{{ fit_rules.0.version }} (aprobada por {{ fit_rules.0.approved_by }}).</p>
+    {% else %}<p class="small muted">Sin tabla publicada: Smart Fit informará «datos insuficientes» (honesto).</p>{% endif %}
+    <form method="post" action="{% url 'reino_merchant_fit_rule' store.slug product.pk %}">
+        {% csrf_token %}
+        <div class="field"><label for="ranges">Nueva versión (JSON de rangos en cm)</label>
+        <textarea id="ranges" name="ranges" rows="4" placeholder='[{"label":"S","neck_min":22,"neck_max":27,"chest_min":33,"chest_max":40,"back_min":25,"back_max":32}]'></textarea></div>
+        <label style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
+            <input type="checkbox" name="requires_neck" value="1"> Requiere medida de cuello
+        </label>
+        <button class="btn btn--secondary" type="submit">Publicar nueva versión</button>
+    </form>
+</div>
+
+<div class="looklab-card" style="max-width:760px;margin-top:22px">
+    <h2 style="font-size:1.2rem" class="mt-0">Imágenes</h2>
+    <form method="post" action="{% url 'reino_merchant_product_media' store.slug product.pk %}" class="field--inline">
+        {% csrf_token %}
+        <div class="field"><label>Ruta estática</label><input name="path" placeholder="reino/img/…" required></div>
+        <div class="field"><label>Texto alternativo</label><input name="alt" required></div>
+        <div class="field" style="align-self:end"><button class="btn btn--secondary" type="submit">+ Imagen</button></div>
+    </form>
+</div>
+
+{% if adjustments %}
+<div class="looklab-card" style="max-width:760px;margin-top:22px">
+    <h2 style="font-size:1.2rem" class="mt-0">Ajustes de inventario recientes</h2>
+    <table class="data">
+        <thead><tr><th>Fecha</th><th>Variante</th><th>Ajuste</th><th>Motivo</th><th>Por</th></tr></thead>
+        <tbody>{% for a in adjustments %}<tr>
+            <td class="small">{{ a.created_at|date:"d/m H:i" }}</td><td>{{ a.variant.sku }}</td>
+            <td>{% if a.delta > 0 %}+{% endif %}{{ a.delta }}</td><td>{{ a.reason }}</td>
+            <td class="small">{{ a.by.username|default:"—" }}</td>
+        </tr>{% endfor %}</tbody>
+    </table>
+</div>
+{% endif %}
+{% endif %}
+{% endblock %}

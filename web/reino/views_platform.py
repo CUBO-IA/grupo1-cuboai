@@ -1,9 +1,60 @@
-"""Plataforma: gateway, directorio de tiendas (P01), para-negocios (M01), P02."""
+"""Plataforma: gateway, directorio (P01), para-negocios (M01), admin (P02)
+y ALTA ASISTIDA de comercios (recorrido operativo, §6.15)."""
 
 from django.contrib.auth.decorators import login_required, user_passes_test
-from django.shortcuts import render
+from django.contrib.auth.models import User
+from django.shortcuts import redirect, render
+from django.views.decorators.http import require_POST
 
-from .models import Merchant, Store
+from .models import (
+    KnowledgeDocument, Merchant, MerchantMember, ShippingZone, Store,
+)
+
+ONBOARDING_CHECKLIST = [
+    ("identidad", "Identidad: nombre, categoría y promesa de la tienda"),
+    ("responsable", "Usuario responsable con rol de propietario"),
+    ("catalogo", "Catálogo inicial: al menos un producto con variante"),
+    ("envios", "Entrega: retiro y/o zonas con tarifa aprobada"),
+    ("politicas", "Políticas de cambios y entrega publicadas"),
+    ("pago", "Método de cobro definido (manual al inicio)"),
+]
+
+
+def robots_txt(request):
+    """robots.txt: rutas privadas fuera del rastreo; sitemap enlazado."""
+    from django.http import HttpResponse
+    lines = [
+        "User-agent: *",
+        "Allow: /s/",
+        "Disallow: /s/*/carrito/",
+        "Disallow: /s/*/checkout/",
+        "Disallow: /s/*/pedido/",
+        "Disallow: /cuenta/",
+        "Disallow: /negocio/",
+        "Disallow: /plataforma/",
+        "Disallow: /panel/",
+        f"Sitemap: {request.scheme}://{request.get_host()}/sitemap.xml",
+        "",
+    ]
+    return HttpResponse("\n".join(lines), content_type="text/plain")
+
+
+def sitemap_xml(request):
+    """Sitemap público: tiendas visibles + productos publicados (§8)."""
+    from django.http import HttpResponse
+    from .models import Product
+    base = f"{request.scheme}://{request.get_host()}"
+    urls = [f"{base}/tiendas/"]
+    for store in Store.objects.exclude(status=Store.Status.DRAFT):
+        urls.append(f"{base}/s/{store.slug}/")
+        urls.append(f"{base}/s/{store.slug}/coleccion/")
+        for product in Product.objects.filter(store=store, status="published"):
+            urls.append(f"{base}/s/{store.slug}/producto/{product.slug}/")
+    body = "\n".join(f"  <url><loc>{u}</loc></url>" for u in urls)
+    xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+           f"{body}\n</urlset>")
+    return HttpResponse(xml, content_type="application/xml")
 
 
 def directory(request):
@@ -20,9 +71,88 @@ def for_business(request):
     return render(request, "reino/for_business.html")
 
 
+def _is_operator(user):
+    return user.is_superuser or user.is_staff
+
+
 @login_required(login_url="panel_login")
-@user_passes_test(lambda u: u.is_superuser, login_url="panel_login")
+@user_passes_test(_is_operator, login_url="panel_login")
 def platform_admin(request):
-    """P02 mínimo: comercios, estados y consumo de IA (solo superusuario)."""
-    merchants = Merchant.objects.prefetch_related("stores").all()
-    return render(request, "reino/platform_admin.html", {"merchants": merchants})
+    """P02: comercios, estados y alta asistida (personal de la plataforma)."""
+    merchants = Merchant.objects.prefetch_related("stores", "members__user").all()
+    return render(request, "reino/platform_admin.html", {
+        "merchants": merchants, "checklist": ONBOARDING_CHECKLIST,
+    })
+
+
+@login_required(login_url="panel_login")
+@user_passes_test(_is_operator, login_url="panel_login")
+@require_POST
+def merchant_onboard(request):
+    """Alta asistida (§6.15): crea comercio en BORRADOR + usuario responsable
+    + permisos + zonas y políticas iniciales. Activar requiere completar el
+    checklist operativo; nada queda vendible por accidente."""
+    name = request.POST.get("name", "").strip()[:120]
+    slug = request.POST.get("slug", "").strip().lower()[:60]
+    category = request.POST.get("category", "general").strip()[:60]
+    username = request.POST.get("username", "").strip()
+    is_demo = request.POST.get("is_demo") == "1"
+    errors = []
+    if not name or not slug:
+        errors.append("Nombre y slug son obligatorios.")
+    elif Store.objects.filter(slug=slug).exists():
+        errors.append("Ese slug ya está en uso.")
+    if not username:
+        errors.append("Indicá el usuario responsable.")
+    if errors:
+        request.session["reino_flash"] = " ".join(errors)
+        return redirect("reino_platform")
+
+    merchant = Merchant.objects.create(name=name, status="onboarding")
+    store = Store.objects.create(
+        merchant=merchant, slug=slug, name=name, category=category,
+        is_demo=is_demo, status=Store.Status.DEMO if is_demo else Store.Status.DRAFT,
+    )
+    user, created = User.objects.get_or_create(username=username)
+    if created:
+        user.set_unusable_password()
+        user.is_staff = True
+        user.save()
+    MerchantMember.objects.create(user=user, merchant=merchant, role="owner")
+    ShippingZone.objects.create(store=store, name="Retiro en taller", mode="pickup", fee=0)
+    KnowledgeDocument.objects.create(
+        store=store, topic="cambios", title="Cambios (borrador por aprobar)",
+        body="Política de cambios pendiente de aprobación del negocio.",
+        audience="customer", is_published=False,
+    )
+    request.session["reino_flash"] = (
+        f"«{name}» creado en borrador con {username} como propietario. "
+        "Completá el checklist antes de activar."
+    )
+    return redirect("reino_platform")
+
+
+@login_required(login_url="panel_login")
+@user_passes_test(_is_operator, login_url="panel_login")
+@require_POST
+def store_activate(request, slug):
+    """Activar una tienda exige checklist operativo completo (verificado)."""
+    store = Store.objects.filter(slug=slug).first()
+    if store is None:
+        return redirect("reino_platform")
+    missing = []
+    if not store.products.filter(status="published").exists():
+        missing.append("catálogo (un producto publicado)")
+    if not ShippingZone.objects.filter(store=store, is_active=True).exists():
+        missing.append("entrega (una zona activa)")
+    if not KnowledgeDocument.objects.filter(store=store, is_published=True).exists():
+        missing.append("políticas publicadas")
+    if not store.merchant.members.filter(is_active=True, role="owner").exists():
+        missing.append("propietario activo")
+    if missing and not store.is_demo:
+        request.session["reino_flash"] = "Falta antes de activar: " + ", ".join(missing) + "."
+    else:
+        store.status = Store.Status.ACTIVE if not store.is_demo else Store.Status.DEMO
+        store.save(update_fields=["status"])
+        request.session["reino_flash"] = f"«{store.name}» está {store.get_status_display()}."
+    return redirect("reino_platform")

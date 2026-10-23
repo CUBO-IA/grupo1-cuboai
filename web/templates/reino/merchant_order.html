@@ -34,15 +34,20 @@
         Preparación: <span class="state-chip state-chip--{{ order.prep_status }}">{{ order.get_prep_status_display }}</span>
         Entrega: <span class="state-chip state-chip--{{ order.delivery_status }}">{{ order.get_delivery_status_display }}</span></p>
 
+        {% comment %} Auditoría R13: cada acción requiere su capacidad; el botón
+           oculto nunca sustituye la autorización del servidor. {% endcomment %}
+        {% if not capabilities.payments and not capabilities.orders and not capabilities.fulfilment %}
+        <p class="small muted">Tu rol es de solo lectura para este pedido.</p>
+        {% else %}
         <form method="post" action="{% url 'reino_merchant_order_transition' store.slug order.public_id %}">
             {% csrf_token %}
             <div class="field--inline">
                 <div class="field"><label for="field">Dimensión</label>
                     <select id="field" name="field">
-                        <option value="payment_status">Pago</option>
-                        <option value="status">Pedido</option>
-                        <option value="prep_status">Preparación</option>
-                        <option value="delivery_status">Entrega</option>
+                        {% if capabilities.payments %}<option value="payment_status">Pago</option>{% endif %}
+                        {% if capabilities.orders %}<option value="status">Pedido</option>{% endif %}
+                        {% if capabilities.fulfilment %}<option value="prep_status">Preparación</option>
+                        <option value="delivery_status">Entrega</option>{% endif %}
                     </select></div>
                 <div class="field"><label for="to">Nuevo estado</label>
                     <input id="to" name="to" list="states" placeholder="paid, ready, shipped…">
@@ -53,12 +58,16 @@
                         <option value="scheduled"><option value="shipped"><option value="delivered"><option value="incident"><option value="returned">
                     </datalist></div>
             </div>
-            <div class="field"><label for="note">Nota / referencia <span class="muted">(p. ej. comprobante; una foto NO confirma el pago)</span></label>
+            <div class="field"><label for="note">Evidencia / referencia <span class="muted">(obligatoria para confirmar cobros y reembolsos; una foto NO confirma el pago)</span></label>
                 <input id="note" name="note" maxlength="200"></div>
+            <div class="field"><label for="refund_amount">Importe del reembolso <span class="muted">(solo si aplica)</span></label>
+                <input id="refund_amount" name="refund_amount" inputmode="decimal"></div>
             <button class="btn btn--primary" type="submit">Aplicar transición</button>
         </form>
+        {% endif %}
         <p class="help small" style="margin-top:10px">Las transiciones siguen la máquina de estados y quedan
-        registradas con tu usuario. El pago verificado es una decisión del equipo, nunca automática por comprobante.</p>
+        registradas con tu usuario. El pago verificado es una decisión del equipo, nunca automática por comprobante.
+        Cancelar un pedido no expedido devuelve el inventario automáticamente (una sola vez).</p>
     </div>
 </div>
 

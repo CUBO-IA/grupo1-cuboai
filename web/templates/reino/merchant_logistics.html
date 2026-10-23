@@ -1,0 +1,40 @@
+{% extends "reino/merchant_base.html" %}
+{% block title %}Logística · {{ store.name }}{% endblock %}
+{% block panel %}
+<h1 class="mt-0">Preparación y entrega</h1>
+<p class="muted small">Los pedidos cancelados no aparecen: no pueden prepararse ni despacharse.</p>
+
+<h2 style="font-size:1.2rem">Por preparar (pago verificado)</h2>
+{% if to_prepare %}
+<div class="table-wrap"><table class="data">
+    <thead><tr><th>Pedido</th><th>Cliente</th><th>Entrega</th><th>Piezas</th></tr></thead>
+    <tbody>{% for o in to_prepare %}<tr>
+        <td><a href="{% url 'reino_merchant_order' store.slug o.public_id %}">{{ o.reference }}</a></td>
+        <td>{{ o.customer_name }}</td>
+        <td class="small">{% if o.delivery_mode == "local" %}{{ o.zone }} · {{ o.address }}{% else %}Retiro{% endif %}</td>
+        <td class="small">{% for i in o.items.all %}{{ i.quantity }}× {{ i.title }} ({{ i.option_label }}){% if not forloop.last %}, {% endif %}{% endfor %}</td>
+    </tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<p class="muted small">Nada por preparar.</p>{% endif %}
+
+<h2 style="font-size:1.2rem">En preparación</h2>
+{% if preparing %}
+<ul>{% for o in preparing %}<li><a href="{% url 'reino_merchant_order' store.slug o.public_id %}">{{ o.reference }}</a> · {{ o.customer_name }}</li>{% endfor %}</ul>
+{% else %}<p class="muted small">Nada en preparación.</p>{% endif %}
+
+<h2 style="font-size:1.2rem">Listas para entregar</h2>
+{% if ready %}
+<ul>{% for o in ready %}<li><a href="{% url 'reino_merchant_order' store.slug o.public_id %}">{{ o.reference }}</a> · {% if o.delivery_mode == "local" %}entrega {{ o.zone }}{% else %}retiro{% endif %}</li>{% endfor %}</ul>
+{% else %}<p class="muted small">Nada listo todavía.</p>{% endif %}
+
+<h2 style="font-size:1.2rem">Entregas en curso</h2>
+{% if shipping %}
+<div class="table-wrap"><table class="data">
+    <thead><tr><th>Pedido</th><th>Estado de entrega</th></tr></thead>
+    <tbody>{% for o in shipping %}<tr>
+        <td><a href="{% url 'reino_merchant_order' store.slug o.public_id %}">{{ o.reference }}</a></td>
+        <td><span class="state-chip">{{ o.get_delivery_status_display }}</span></td>
+    </tr>{% endfor %}</tbody>
+</table></div>
+{% else %}<p class="muted small">Sin entregas programadas.</p>{% endif %}
+{% endblock %}
