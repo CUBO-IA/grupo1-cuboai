@@ -7,9 +7,11 @@
     <h1>Contame para quién estás comprando y qué necesitás.</h1>
 
     {% if not ai_available %}
-    <p class="mode-note" role="status">El asesor con IA está <strong>implementado pendiente de conexión</strong>
-    (falta la clave del proveedor). Mientras tanto usás la selección por reglas de la tienda —
-    consulta el catálogo real y explica sus razones.</p>
+    {% comment %} Auditoría §4: al comprador NUNCA se le muestran detalles de
+       infraestructura (claves/proveedor); el diagnóstico vive en el panel. {% endcomment %}
+    <p class="mode-note" role="status">El asesor con IA no está disponible ahora.
+    Podés usar la <strong>selección guiada</strong> de la tienda — consulta el catálogo real
+    y explica sus razones.</p>
     {% endif %}
 
     {% if profile %}

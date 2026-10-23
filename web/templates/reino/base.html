@@ -6,25 +6,32 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{% if reino_store %}{{ reino_store.name }}{% else %}Reino Commerce{% endif %}{% endblock %}</title>
     <meta name="description" content="{% block meta_description %}{% if reino_store %}{{ reino_store.description }}{% else %}Tu tienda entiende mejor lo que buscan tus clientes.{% endif %}{% endblock %}">
+    {% block robots %}{% endblock %}
+    {% block canonical %}{% endblock %}
+    {% block structured_data %}{% endblock %}
     <link rel="stylesheet" href="{% static 'reino/css/reino.css' %}">
 </head>
 <body>
 <a class="skip-link" href="#contenido">Saltar al contenido</a>
 
+{% comment %}Auditoría §6.2: «Sin perfil activo» no es lo primero que lee una
+persona nueva. El chip de contexto aparece solo cuando existe un perfil; el
+aviso de tienda demo se mantiene siempre visible.{% endcomment %}
 {% if reino_store %}
-<div class="context-bar" role="region" aria-label="Contexto de compra">
-    <div class="container">
-        <span aria-hidden="true">♛</span>
-        {% if reino_profile %}
+    {% if reino_profile %}
+    <div class="context-bar" role="region" aria-label="Contexto de compra">
+        <div class="container">
+            <span aria-hidden="true">♛</span>
             <span>Comprando para <strong>{{ reino_profile.alias }}</strong></span>
             <a href="{% url 'reino_account' %}" style="color:#fff">Cambiar</a>
-        {% else %}
-            <span class="muted" style="color:#B9C3D6">Sin perfil activo</span>
-            <a href="{% url 'reino_looklab' reino_store.slug %}" style="color:#fff">Elegí para quién comprás</a>
-        {% endif %}
-        {% if reino_store.is_demo %}<span class="badge-demo">Tienda demo</span>{% endif %}
+            {% if reino_store.is_demo %}<span class="badge-demo">Tienda demo</span>{% endif %}
+        </div>
     </div>
-</div>
+    {% elif reino_store.is_demo %}
+    <div class="context-bar" role="region" aria-label="Aviso de demostración">
+        <div class="container"><span class="badge-demo">Tienda demo: contenido de prueba, sin cobros reales</span></div>
+    </div>
+    {% endif %}
 {% endif %}
 
 <header class="rk-header">
@@ -50,21 +57,24 @@
         {% endif %}
         <div class="rk-header__actions">
             {% if reino_store %}
-            <a class="rk-iconbtn" href="{% url 'reino_stylist' reino_store.slug %}">
-                <span aria-hidden="true">✦</span> <span class="rk-hide-sm">Asesor</span>
+            <a class="rk-iconbtn" href="{% url 'reino_stylist' reino_store.slug %}" aria-label="Asesor Royal Stylist">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3z"/><circle cx="18.5" cy="17.5" r="2.2"/></svg>
+                <span class="rk-hide-sm">Asesor</span>
             </a>
             {% endif %}
             <a class="rk-iconbtn" href="{% url 'reino_account' %}" aria-label="Cuenta y perfiles">
-                <span aria-hidden="true">◉</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1.4-3.4 4.2-5 7.5-5s6.1 1.6 7.5 5"/></svg>
+                <span class="sr-only">Cuenta</span>
             </a>
             {% if reino_store %}
             <a class="rk-iconbtn" href="{% url 'reino_cart' reino_store.slug %}" aria-label="Carrito">
-                <span aria-hidden="true">▢</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 5h2.2l2 11h10.8l1.9-8H7.1"/><circle cx="9.5" cy="19.5" r="1.6"/><circle cx="17" cy="19.5" r="1.6"/></svg>
                 {% if reino_cart_units %}<span class="badge">{{ reino_cart_units }}</span>{% endif %}
             </a>
             {% endif %}
             <button class="rk-iconbtn rk-menu-toggle" aria-expanded="false" aria-controls="mobile-nav" data-menu-toggle>
-                <span aria-hidden="true">☰</span><span class="sr-only">Menú</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+                <span class="sr-only">Menú</span>
             </button>
         </div>
     </div>
@@ -76,11 +86,13 @@
         <a href="{% url 'reino_fit' reino_store.slug %}">Guía de tallas</a>
         {% endif %}
         <a href="{% url 'reino_stylist' reino_store.slug %}">Asesor</a>
+        <a href="{% url 'reino_account' %}">Cuenta y perfiles</a>
         <a href="{% url 'reino_help' reino_store.slug %}">Ayuda</a>
         <a href="{% url 'reino_cart' reino_store.slug %}">Carrito{% if reino_cart_units %} ({{ reino_cart_units }}){% endif %}</a>
         {% else %}
         <a href="{% url 'reino_directory' %}">Tiendas</a>
         <a href="{% url 'reino_for_business' %}">Para negocios</a>
+        <a href="{% url 'reino_account' %}">Cuenta</a>
         {% endif %}
     </nav>
 </header>

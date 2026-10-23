@@ -1,6 +1,12 @@
 {% extends "reino/base.html" %}
 {% load static %}
 {% block title %}{% if product %}{{ product.short_title }} · {{ reino_store.name }}{% else %}Producto no encontrado{% endif %}{% endblock %}
+{% block canonical %}{% if product %}<link rel="canonical" href="{{ request.scheme }}://{{ request.get_host }}{% url 'reino_product' reino_store.slug product.slug %}">{% endif %}{% endblock %}
+{% block structured_data %}{% if json_ld %}
+{% comment %} Datos estructurados Product/ofertas/variantes (Google [S02]):
+   describen el producto; NO garantizan posición ni inclusión. {% endcomment %}
+<script type="application/ld+json">{{ json_ld|safe }}</script>
+{% endif %}{% endblock %}
 {% block content %}
 {% if not product %}
 <section class="section container empty-state">
@@ -37,8 +43,10 @@
             <h1 style="font-size:clamp(1.8rem,3.5vw,2.6rem)">{{ product.short_title }}</h1>
             {% if product.subtitle %}<p class="lede">{{ product.subtitle }}</p>{% endif %}
 
+            {% comment %} El precio anunciado es el de la variante elegida (auditoría §4);
+               coincide siempre con lo que entra al carrito. {% endcomment %}
             <div class="price-block">
-                <span class="price">${{ product.base_price }}</span>
+                <span class="price" data-variant-price data-default-price="{{ product.base_price }}">${{ product.base_price }}</span>
                 <span class="note"> · envío por calcular al confirmar tu pedido</span>
             </div>
 
@@ -61,6 +69,7 @@
                         {% for row in variant_rows %}
                         <span class="variant-option {% if not row.available %}variant-option--out{% endif %}">
                             <input type="radio" name="variant" id="v{{ forloop.counter }}" value="{{ row.variant.public_id }}"
+                                   data-price="{{ row.variant.price }}"
                                    {% if not row.available %}disabled{% endif %} required>
                             <label for="v{{ forloop.counter }}">
                                 {{ row.variant.option_label }}

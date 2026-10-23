@@ -1,4 +1,5 @@
 {% load static %}
+{% load reino_tags %}
 <div class="chat__msg chat__msg--bot">
     {{ reply.answer_text }}
     {% if reply.mode_note %}<p class="small muted" style="margin:8px 0 0">{{ reply.mode_note }}</p>{% endif %}
@@ -11,12 +12,25 @@
                 <h3 class="card__title">{{ card.title }}</h3>
                 <p class="card__price">{{ card.price }}</p>
                 {% if card.fit_label %}<p class="mb-0"><span class="fit fit--{{ card.fit_state }}">{{ card.fit_label }}</span></p>{% endif %}
-                {% if card.reason_codes %}<p class="card__reason">{{ card.reason_codes|join:" · " }}</p>{% endif %}
+                {% if card.reason_codes %}<p class="card__reason">{% for c in card.reason_codes %}{{ c|reason_label }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>{% endif %}
                 <div class="card__footer">
                     <a class="btn btn--secondary btn--sm" href="{% url 'reino_product' reino_store.slug card.slug %}">Ver</a>
                 </div>
             </div>
         </article>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% comment %} Propuestas de escritura (R11): el asesor propone y el
+       comprador confirma con un permiso de un solo uso. {% endcomment %}
+    {% if reply.proposed_actions %}
+    <div style="margin:10px 0 0;display:flex;gap:8px;flex-wrap:wrap">
+        {% for proposal in reply.proposed_actions %}
+        <form method="post" action="{% url 'reino_stylist_action' reino_store.slug %}">
+            {% csrf_token %}
+            <input type="hidden" name="action_id" value="{{ proposal.action_id }}">
+            <button class="btn btn--primary btn--sm" type="submit">✓ {{ proposal.label }}</button>
+        </form>
         {% endfor %}
     </div>
     {% endif %}

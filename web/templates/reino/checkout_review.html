@@ -26,12 +26,14 @@
                 <dt>Total{% if session.summary.payment_method == "bitcoin" %} al pagar con Bitcoin verificado{% endif %}</dt>
                 <dd>${{ total.total }}</dd></div>
         </dl>
-        <p class="small muted">La reserva de tus piezas dura {{ session.expires_at|time:"H:i" }} (10 minutos).
+        <p class="small muted">Piezas reservadas hasta las {{ session.expires_at|time:"H:i" }} (10 minutos).
+        Si la reserva vence, tu carrito sigue guardado y podés preparar una nueva revisión.
         Al confirmar, el pedido queda <strong>pendiente de pago</strong> hasta la verificación del equipo.</p>
         <form method="post">
             {% csrf_token %}
             <input type="hidden" name="step" value="confirm">
             <input type="hidden" name="idempotency_key" value="{{ idem }}">
+            <input type="hidden" name="session_id" value="{{ session.public_id }}">
             <input type="hidden" name="name" value="{{ data.name }}">
             <input type="hidden" name="email" value="{{ data.email }}">
             <input type="hidden" name="phone" value="{{ data.phone }}">

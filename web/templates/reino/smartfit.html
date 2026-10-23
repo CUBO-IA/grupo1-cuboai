@@ -33,12 +33,7 @@
         </div>
 
         <div class="looklab-card">
-            {% if not profile %}
-            <h2 class="mt-0" style="font-size:1.4rem">Primero elegí un perfil</h2>
-            <p class="muted">Las medidas se guardan por perro; dos perros nunca mezclan sus datos.</p>
-            <a class="btn btn--primary" href="{% url 'reino_looklab' reino_store.slug %}">Elegir o crear perfil</a>
-            {% else %}
-            <h2 class="mt-0" style="font-size:1.4rem">Medidas de {{ profile.alias }}</h2>
+            <h2 class="mt-0" style="font-size:1.4rem">{% if profile %}Medidas de {{ profile.alias }}{% else %}Calculá sin guardar{% endif %}</h2>
             {% if latest %}
             <p class="small muted">Guardadas el {{ latest.measured_at|date:"d/m/Y" }}:
             pecho {{ latest.chest_cm|default:"—" }} cm · cuello {{ latest.neck_cm|default:"—" }} cm · largo {{ latest.back_cm|default:"—" }} cm</p>
@@ -58,9 +53,18 @@
                     <div class="field"><label for="neck">Cuello</label><input id="neck" name="neck" inputmode="decimal" value="{{ values.neck }}"></div>
                 </div>
                 <div class="field"><label for="back">Largo de espalda</label><input id="back" name="back" inputmode="decimal" value="{{ values.back }}"></div>
-                <button class="btn btn--primary" type="submit">Guardar y evaluar</button>
+                {% if profile %}
+                <label style="display:flex;gap:10px;align-items:center;font-weight:600;margin-bottom:14px">
+                    <input type="checkbox" name="remember" value="1" style="width:18px;height:18px">
+                    Guardar estas medidas para próximas compras de {{ profile.alias }}
+                </label>
+                <p class="help" style="margin:-8px 0 14px">Sin marcar = solo para esta evaluación; nada se guarda.</p>
+                {% else %}
+                <p class="help" style="margin-bottom:14px">Evaluación temporal: nada se guarda sin perfil.
+                <a href="{% url 'reino_looklab' reino_store.slug %}">Creá un perfil</a> si querés conservarlas.</p>
+                {% endif %}
+                <button class="btn btn--primary" type="submit">Evaluar talla</button>
             </form>
-            {% endif %}
         </div>
     </div>
 

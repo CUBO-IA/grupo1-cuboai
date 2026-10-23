@@ -1,5 +1,6 @@
 {% extends "reino/base.html" %}
 {% block title %}{% if order %}Pedido {{ order.reference }}{% else %}Pedido no encontrado{% endif %} · {{ reino_store.name }}{% endblock %}
+{% block robots %}<meta name="robots" content="noindex,nofollow">{% endblock %}
 {% block content %}
 {% if not order %}
 <section class="section container empty-state">

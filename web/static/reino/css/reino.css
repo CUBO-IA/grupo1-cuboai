@@ -78,17 +78,19 @@ a { color: var(--steel); text-decoration-thickness: 1px; text-underline-offset: 
 a:hover { color: var(--navy); }
 img { max-width: 100%; display: block; }
 
-.container { max-width: var(--container); margin: 0 auto; padding: 0 24px; }
-@media (min-width: 1024px) { .container { padding: 0 48px; } }
+/* Auditoría §4: espaciado vertical y horizontal SEPARADOS. Antes `.section`
+   redefinía `padding` después de `.container` y eliminaba el lateral. */
+.container { max-width: var(--container); margin: 0 auto; padding-inline: 20px; }
+@media (min-width: 1024px) { .container { padding-inline: 48px; } }
 
 .eyebrow {
   font-size: .78rem; font-weight: 700; letter-spacing: .14em;
   text-transform: uppercase; color: var(--carmine); margin-bottom: .9em;
 }
 .lede { font-size: clamp(1.05rem, 1.6vw, 1.2rem); color: var(--ink-soft); max-width: 56ch; }
-.section { padding: 56px 0; }
-@media (min-width: 1024px) { .section { padding: 88px 0; } }
-.section--tight { padding: 40px 0; }
+.section { padding-block: 56px; }
+@media (min-width: 1024px) { .section { padding-block: 88px; } }
+.section--tight { padding-block: 40px; }
 
 /* ---------------------------------------------------------- header ------- */
 .skip-link {
@@ -123,6 +125,16 @@ img { max-width: 100%; display: block; }
 }
 .rk-nav a:hover, .rk-nav a[aria-current="page"] { color: var(--navy); border-bottom-color: var(--carmine); }
 .rk-header__actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+/* Auditoría §4: cabecera móvil — logo compacto, acciones SIEMPRE dentro del
+   viewport; cuenta y asesor viven en el menú en pantallas pequeñas. */
+@media (max-width: 899px) {
+  .rk-header__bar { gap: 8px; min-height: 56px; }
+  .rk-logo { font-size: 1.05rem; white-space: normal; line-height: 1.05; gap: 7px; }
+  .rk-logo small { display: none; }
+  .rk-iconbtn { padding: 8px; min-width: 44px; }
+  .rk-hide-sm { display: none; }
+}
+.rk-iconbtn svg { width: 21px; height: 21px; display: block; }
 .rk-iconbtn {
   display: inline-flex; align-items: center; gap: 7px; min-height: 44px; min-width: 44px;
   padding: 8px 12px; border-radius: var(--radius-control); color: var(--ink);
@@ -328,11 +340,24 @@ img { max-width: 100%; display: block; }
   padding: 36px 28px;
 }
 @media (min-width: 1024px) { .reveal { padding: 56px; } }
-.reveal h2 { color: #fff; }
+/* Auditoría §4: título legible sobre superficie oscura (antes navy sobre navy). */
+.reveal h1, .reveal h2, .reveal h3, .reveal .reveal__title { color: var(--ivory); }
+.reveal__sub { color: #C6D0E2; margin-top: -6px; }
+.reveal__group { color: #C6D0E2; font-weight: 600; margin: 26px 0 0; }
 .reveal__card {
   background: var(--ivory); color: var(--ink); border-radius: var(--radius-card);
   padding: 22px; margin-top: 18px;
 }
+.reveal__card--main { border-left: 5px solid var(--carmine); }
+.reveal__summary { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; }
+.reveal__alts { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; }
+.reveal__alt {
+  background: var(--ivory); color: var(--ink); border-radius: var(--radius-card);
+  padding: 14px; width: 150px; text-decoration: none; display: block;
+}
+.reveal__alt img { width: 100%; height: 110px; object-fit: cover; border-radius: 10px; margin-bottom: 8px; background: var(--silver-soft); }
+.reveal__alt strong { display: block; font-size: .9rem; color: var(--navy); }
+.badge-fit-pendiente { font-size: .72rem; background: #FBF3E4; color: var(--warn); border-radius: 999px; padding: 2px 8px; font-weight: 700; }
 .reveal__line { display: flex; gap: 16px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--silver-soft); }
 .reveal__line > div { min-width: 0; }
 @media (max-width: 640px) {

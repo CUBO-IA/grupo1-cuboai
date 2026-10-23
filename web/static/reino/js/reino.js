@@ -109,4 +109,52 @@
       });
     });
   }
+
+  // Revelación LookLab: subtotal que SIGUE la selección (auditoría §4).
+  // El backend recalcula siempre; este cálculo es solo espejo visible.
+  var revealForm = document.querySelector("[data-reveal-form]");
+  if (revealForm) {
+    var totalEl = revealForm.querySelector("[data-reveal-total]");
+    var countEl = revealForm.querySelector("[data-reveal-count]");
+    var fmtMoney = function (n) {
+      return "$" + n.toFixed(2);
+    };
+    var recalc = function () {
+      var total = 0, count = 0;
+      revealForm.querySelectorAll("[data-reveal-check]:checked").forEach(function (box) {
+        total += parseFloat(box.getAttribute("data-price") || "0");
+        count += 1;
+      });
+      revealForm.querySelectorAll("[data-price-select]").forEach(function (sel) {
+        var opt = sel.options[sel.selectedIndex];
+        if (opt && opt.value) {
+          total += parseFloat(opt.getAttribute("data-price") || "0");
+          count += 1;
+        }
+      });
+      if (totalEl) totalEl.textContent = fmtMoney(total);
+      if (countEl) countEl.textContent = count === 1 ? "1 pieza" : count + " piezas";
+    };
+    revealForm.addEventListener("change", recalc);
+    recalc();
+  }
+
+  // Ficha de producto: el precio anunciado sigue a la variante elegida
+  // (radios de talla o selector); coincide con lo que entra al carrito.
+  var priceEl = document.querySelector("[data-variant-price]");
+  var variantSelect = document.querySelector("[data-variant-picker]");
+  if (priceEl && variantSelect) {
+    variantSelect.addEventListener("change", function () {
+      var opt = variantSelect.options[variantSelect.selectedIndex];
+      if (opt) priceEl.textContent = "$" + (opt.getAttribute("data-price") || "");
+    });
+  }
+  var buyForm = document.getElementById("buy-form");
+  if (priceEl && buyForm) {
+    buyForm.addEventListener("change", function (e) {
+      if (e.target && e.target.name === "variant") {
+        priceEl.textContent = "$" + (e.target.getAttribute("data-price") || "");
+      }
+    });
+  }
 })();
