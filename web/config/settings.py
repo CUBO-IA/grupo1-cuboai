@@ -13,7 +13,8 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.sessions",
     "django.contrib.staticfiles",
-    "tienda",
+    "tienda",  # flujos históricos preservados (Smart Fit, Smart Quote, panel)
+    "reino",   # plataforma multi-tienda (Reino Commerce P0)
 ]
 
 MIDDLEWARE = [
@@ -40,6 +41,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "tienda.context.cart_summary",
+                "reino.context.reino_context",
             ]
         },
     },
@@ -64,3 +66,17 @@ DATABASES = {
         "OPTIONS": {"transaction_mode": "IMMEDIATE", "timeout": 20},
     }
 }
+
+# --- Reino Commerce ----------------------------------------------------------
+# Proveedor de IA (Royal Stylist). Sin clave: el asesor informa su modo real
+# (reglas) y la tienda sigue funcionando. Nunca claves en el repositorio.
+REINO_AI = {
+    "PROVIDER": os.environ.get("REINO_AI_PROVIDER", "openai"),
+    "API_KEY": os.environ.get("REINO_AI_API_KEY", ""),
+    "BASE_URL": os.environ.get("REINO_AI_BASE_URL", "https://api.openai.com/v1"),
+    "MODEL": os.environ.get("REINO_AI_MODEL", "gpt-4o-mini"),
+    "TIMEOUT_SECONDS": float(os.environ.get("REINO_AI_TIMEOUT", "12")),
+    "MAX_TOOL_ROUNDS": 4,
+}
+# Reserva de stock durante el checkout (minutos).
+REINO_RESERVATION_MINUTES = int(os.environ.get("REINO_RESERVATION_MINUTES", "10"))
