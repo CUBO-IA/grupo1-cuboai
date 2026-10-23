@@ -1,0 +1,140 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}{% if reino_store %}{{ reino_store.name }}{% else %}Reino Commerce{% endif %}{% endblock %}</title>
+    <meta name="description" content="{% block meta_description %}{% if reino_store %}{{ reino_store.description }}{% else %}Tu tienda entiende mejor lo que buscan tus clientes.{% endif %}{% endblock %}">
+    <link rel="stylesheet" href="{% static 'reino/css/reino.css' %}">
+</head>
+<body>
+<a class="skip-link" href="#contenido">Saltar al contenido</a>
+
+{% if reino_store %}
+<div class="context-bar" role="region" aria-label="Contexto de compra">
+    <div class="container">
+        <span aria-hidden="true">♛</span>
+        {% if reino_profile %}
+            <span>Comprando para <strong>{{ reino_profile.alias }}</strong></span>
+            <a href="{% url 'reino_account' %}" style="color:#fff">Cambiar</a>
+        {% else %}
+            <span class="muted" style="color:#B9C3D6">Sin perfil activo</span>
+            <a href="{% url 'reino_looklab' reino_store.slug %}" style="color:#fff">Elegí para quién comprás</a>
+        {% endif %}
+        {% if reino_store.is_demo %}<span class="badge-demo">Tienda demo</span>{% endif %}
+    </div>
+</div>
+{% endif %}
+
+<header class="rk-header">
+    <div class="container rk-header__bar">
+        {% if reino_store %}
+        <a class="rk-logo" href="{% url 'reino_store_home' reino_store.slug %}">
+            <span class="crown" aria-hidden="true">♛</span>
+            <span>{{ reino_store.name }}<small>{{ reino_store.tagline }}</small></span>
+        </a>
+        <nav class="rk-nav" aria-label="Secciones de la tienda">
+            <a href="{% url 'reino_collection' reino_store.slug %}">Colección</a>
+            {% if reino_store.category == "moda canina" %}
+            <a href="{% url 'reino_looklab' reino_store.slug %}">LookLab</a>
+            <a href="{% url 'reino_fit' reino_store.slug %}">Guía de tallas</a>
+            {% endif %}
+            <a href="{% url 'reino_help' reino_store.slug %}">Ayuda</a>
+        </nav>
+        {% else %}
+        <a class="rk-logo" href="{% url 'reino_directory' %}">
+            <span class="crown" aria-hidden="true">♛</span>
+            <span>Reino Commerce<small>Tu tienda entiende mejor</small></span>
+        </a>
+        {% endif %}
+        <div class="rk-header__actions">
+            {% if reino_store %}
+            <a class="rk-iconbtn" href="{% url 'reino_stylist' reino_store.slug %}">
+                <span aria-hidden="true">✦</span> <span class="rk-hide-sm">Asesor</span>
+            </a>
+            {% endif %}
+            <a class="rk-iconbtn" href="{% url 'reino_account' %}" aria-label="Cuenta y perfiles">
+                <span aria-hidden="true">◉</span>
+            </a>
+            {% if reino_store %}
+            <a class="rk-iconbtn" href="{% url 'reino_cart' reino_store.slug %}" aria-label="Carrito">
+                <span aria-hidden="true">▢</span>
+                {% if reino_cart_units %}<span class="badge">{{ reino_cart_units }}</span>{% endif %}
+            </a>
+            {% endif %}
+            <button class="rk-iconbtn rk-menu-toggle" aria-expanded="false" aria-controls="mobile-nav" data-menu-toggle>
+                <span aria-hidden="true">☰</span><span class="sr-only">Menú</span>
+            </button>
+        </div>
+    </div>
+    <nav class="rk-mobile-nav container" id="mobile-nav" aria-label="Menú móvil">
+        {% if reino_store %}
+        <a href="{% url 'reino_collection' reino_store.slug %}">Colección</a>
+        {% if reino_store.category == "moda canina" %}
+        <a href="{% url 'reino_looklab' reino_store.slug %}">LookLab</a>
+        <a href="{% url 'reino_fit' reino_store.slug %}">Guía de tallas</a>
+        {% endif %}
+        <a href="{% url 'reino_stylist' reino_store.slug %}">Asesor</a>
+        <a href="{% url 'reino_help' reino_store.slug %}">Ayuda</a>
+        <a href="{% url 'reino_cart' reino_store.slug %}">Carrito{% if reino_cart_units %} ({{ reino_cart_units }}){% endif %}</a>
+        {% else %}
+        <a href="{% url 'reino_directory' %}">Tiendas</a>
+        <a href="{% url 'reino_for_business' %}">Para negocios</a>
+        {% endif %}
+    </nav>
+</header>
+
+<main id="contenido">
+{% if reino_flash %}<div class="container" style="margin-top:18px"><p class="flash-ok" role="status">{{ reino_flash }}</p></div>{% endif %}
+{% block content %}{% endblock %}
+</main>
+
+<footer class="rk-footer">
+    <div class="container">
+        <div>
+            <p class="rk-logo" style="color:#fff"><span class="crown" aria-hidden="true">♛</span>
+            {% if reino_store %}{{ reino_store.name }}{% else %}Reino Commerce{% endif %}</p>
+            <p class="small">{% if reino_store %}{{ reino_store.promise|default:reino_store.tagline }}{% else %}Tu tienda entiende mejor lo que buscan tus clientes.{% endif %}</p>
+            {% if reino_store.is_demo %}<p class="fine">Contenido de demostración. No habilitada para cobros reales.</p>{% endif %}
+        </div>
+        {% if reino_store %}
+        <div>
+            <h3>Tienda</h3>
+            <ul>
+                <li><a href="{% url 'reino_collection' reino_store.slug %}">Colección</a></li>
+                {% if reino_store.category == "moda canina" %}<li><a href="{% url 'reino_looklab' reino_store.slug %}">LookLab</a></li>{% endif %}
+                <li><a href="{% url 'reino_stylist' reino_store.slug %}">Asesor</a></li>
+            </ul>
+        </div>
+        <div>
+            <h3>Ayuda</h3>
+            <ul>
+                <li><a href="{% url 'reino_help' reino_store.slug %}?tema=tallas">Tallas</a></li>
+                <li><a href="{% url 'reino_help' reino_store.slug %}?tema=envios">Entrega</a></li>
+                <li><a href="{% url 'reino_help' reino_store.slug %}?tema=cambios">Cambios</a></li>
+                <li><a href="{% url 'reino_help' reino_store.slug %}?tema=compra">Pagos</a></li>
+            </ul>
+        </div>
+        <div>
+            <h3>Contacto</h3>
+            <ul>
+                {% if reino_store.contact_email %}<li><a href="mailto:{{ reino_store.contact_email }}">{{ reino_store.contact_email }}</a></li>{% endif %}
+                {% if reino_store.contact_phone %}<li>{{ reino_store.contact_phone }}</li>{% endif %}
+                {% if reino_store.pickup_address %}<li>Retiro: {{ reino_store.pickup_address }}</li>{% endif %}
+            </ul>
+        </div>
+        {% else %}
+        <div>
+            <h3>Plataforma</h3>
+            <ul>
+                <li><a href="{% url 'reino_directory' %}">Directorio de tiendas</a></li>
+                <li><a href="{% url 'reino_for_business' %}">Para negocios</a></li>
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+</footer>
+<script src="{% static 'reino/js/reino.js' %}"></script>
+</body>
+</html>

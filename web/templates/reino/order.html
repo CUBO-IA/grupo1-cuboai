@@ -1,0 +1,75 @@
+{% extends "reino/base.html" %}
+{% block title %}{% if order %}Pedido {{ order.reference }}{% else %}Pedido no encontrado{% endif %} · {{ reino_store.name }}{% endblock %}
+{% block content %}
+{% if not order %}
+<section class="section container empty-state">
+    <h1>No encontramos ese pedido.</h1>
+    <p class="muted">Revisá el enlace completo que recibiste al confirmar.</p>
+    <a class="btn btn--primary" href="{% url 'reino_store_home' reino_store.slug %}">Volver a la tienda</a>
+</section>
+{% else %}
+<section class="section container" style="max-width:860px">
+    <p class="eyebrow">Pedido registrado</p>
+    <h1>Recibimos tu pedido {{ order.reference }}.</h1>
+
+    {% if order.payment_status == "paid" %}
+    <p class="flash-ok" role="status">Pago confirmado.</p>
+    {% else %}
+    <p class="mode-note" role="status">Tu pedido está registrado. <strong>El pago está pendiente de verificación.</strong>
+    El equipo te contacta para coordinar{% if order.payment_method == "bitcoin" %} la transferencia Bitcoin y aplicar tu 15 % de descuento{% endif %}.</p>
+    {% endif %}
+
+    {# Tres bloques separados: Pago, Preparación, Entrega #}
+    <div class="steps-3" style="margin:28px 0">
+        <div class="step-card">
+            <h3>Pago</h3>
+            <p class="mb-0"><span class="state-chip state-chip--{{ order.payment_status }}">{{ order.get_payment_status_display }}</span></p>
+        </div>
+        <div class="step-card">
+            <h3>Preparación</h3>
+            <p class="mb-0"><span class="state-chip state-chip--{{ order.prep_status }}">{{ order.get_prep_status_display }}</span></p>
+        </div>
+        <div class="step-card">
+            <h3>Entrega</h3>
+            <p class="mb-0"><span class="state-chip state-chip--{{ order.delivery_status }}">{{ order.get_delivery_status_display }}</span></p>
+            <p class="small muted" style="margin-top:8px">
+            {% if order.delivery_mode == "pickup" %}Retiro: {{ reino_store.pickup_address }}{% else %}{{ order.zone }}{% endif %}</p>
+        </div>
+    </div>
+
+    <div class="looklab-card">
+        <h2 style="font-size:1.3rem" class="mt-0">Tu selección</h2>
+        {% for item in order.items.all %}
+        <div class="reveal__line">
+            <div style="flex:1"><strong>{{ item.title }}</strong> · {{ item.option_label }}
+            {% if item.recipient_alias %}<span class="small muted">· para {{ item.recipient_alias }}</span>{% endif %}
+            <br><span class="small muted">SKU {{ item.sku }} × {{ item.quantity }}</span></div>
+            <div style="font-weight:700">${{ item.subtotal }}</div>
+        </div>
+        {% endfor %}
+        <hr style="border:0;border-top:1px solid var(--silver-soft);margin:14px 0">
+        <dl style="margin:0">
+            <div style="display:flex;justify-content:space-between;padding:4px 0"><dt>Mercancía</dt><dd>${{ order.subtotal }}</dd></div>
+            {% if order.discount_amount %}<div style="display:flex;justify-content:space-between;padding:4px 0"><dt>{{ order.discount_note }}</dt><dd>−${{ order.discount_amount }}</dd></div>{% endif %}
+            <div style="display:flex;justify-content:space-between;padding:4px 0"><dt>Envío</dt><dd>{% if order.shipping_amount is not None %}${{ order.shipping_amount }}{% else %}Por confirmar{% endif %}</dd></div>
+            <div style="display:flex;justify-content:space-between;padding:10px 0;font-size:1.2rem;font-weight:700;color:var(--navy)"><dt>Total</dt><dd>${{ order.total }}</dd></div>
+        </dl>
+    </div>
+
+    {% if order.events.exists %}
+    <div class="section--tight">
+        <h2 style="font-size:1.2rem">Seguimiento</h2>
+        <ul class="small muted">
+            {% for event in order.events.all %}
+            <li>{{ event.created_at|date:"d/m/Y H:i" }} — {{ event.get_field_display|default:event.field }}: {{ event.to_value }}{% if event.note %} · {{ event.note }}{% endif %}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
+    <p class="small muted" style="margin-top:24px">Guardá este enlace: es tu acceso privado al pedido.
+    {% if reino_store.contact_email %}Dudas: <a href="mailto:{{ reino_store.contact_email }}">{{ reino_store.contact_email }}</a>{% endif %}</p>
+    <a class="btn btn--secondary" href="{% url 'reino_collection' reino_store.slug %}">Seguir explorando</a>
+</section>
+{% endif %}
+{% endblock %}

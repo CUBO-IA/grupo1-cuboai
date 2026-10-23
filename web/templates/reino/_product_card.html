@@ -1,0 +1,19 @@
+{% load static %}
+{# ProductCard: foto, nombre, precio, una razón verificable, fit si aplica #}
+<article class="card">
+    <a class="card__media" href="{% url 'reino_product' reino_store.slug product.slug %}" tabindex="-1" aria-hidden="true">
+        {% with media=product.media.first %}
+        {% if media %}<img src="{% static media.path %}" alt="{{ media.alt }}" loading="lazy">
+        {% else %}<img src="{% static 'reino/img/placeholder.svg' %}" alt="">{% endif %}
+        {% endwith %}
+    </a>
+    <div class="card__body">
+        <h3 class="card__title"><a href="{% url 'reino_product' reino_store.slug product.slug %}" style="color:inherit;text-decoration:none">{{ product.short_title }}</a></h3>
+        {% if product.reason %}<p class="card__reason">{{ product.reason }}</p>{% endif %}
+        <p class="card__price">${{ product.base_price }}</p>
+        {% if fit %}<p class="mb-0"><span class="fit fit--{{ fit.state }}">{{ fit.label }}</span></p>{% endif %}
+        <div class="card__footer">
+            <a class="btn btn--secondary btn--sm" href="{% url 'reino_product' reino_store.slug product.slug %}">Ver detalles</a>
+        </div>
+    </div>
+</article>

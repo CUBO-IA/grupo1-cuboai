@@ -1,0 +1,172 @@
+{% extends "reino/base.html" %}
+{% load static %}
+{% block title %}{{ reino_store.name }} · {{ reino_store.tagline }}{% endblock %}
+{% block content %}
+
+{# 1 · HERO — composición §6 S01: texto 5 columnas, foto 7 #}
+<section class="container hero">
+    <div>
+        <p class="eyebrow">{% if reino_store.category == "moda canina" %}Boutique para dachshunds{% else %}{{ reino_store.category|capfirst }}{% endif %}</p>
+        <h1>{% if reino_store.category == "moda canina" %}Pequeño de tamaño. Grande de estilo.{% else %}{{ reino_store.tagline }}{% endif %}</h1>
+        <p class="lede">{{ reino_store.description }}</p>
+        <div class="hero__actions">
+            {% if reino_store.category == "moda canina" %}
+            <a class="btn btn--primary" href="{% url 'reino_looklab' reino_store.slug %}">Encontrá su look</a>
+            <a class="btn btn--secondary" href="{% url 'reino_collection' reino_store.slug %}">Ver colección</a>
+            {% else %}
+            <a class="btn btn--primary" href="{% url 'reino_collection' reino_store.slug %}">Ver colección</a>
+            {% endif %}
+        </div>
+        <p class="hero__tertiary"><a href="{% url 'reino_stylist' reino_store.slug %}">Contale al asesor qué buscás →</a></p>
+    </div>
+    <div class="hero__media">
+        {% if reino_store.category == "moda canina" %}
+        <img src="{% static 'tienda/img/home-render.jpg' %}"
+             alt="Dachshunds con prendas de la colección Wiener Kingdom" fetchpriority="high">
+        {% else %}
+        <img src="{% static 'reino/img/nube/hero.jpg' %}"
+             alt="Composición editorial de papelería Estudio Nube (ilustración de demostración)" fetchpriority="high">
+        {% endif %}
+    </div>
+</section>
+
+{# 2 · CLARIDAD DE COMPRA — solo capacidades comprobadas #}
+<section class="section--tight container">
+    <div class="steps-3">
+        {% if reino_store.category == "moda canina" %}
+        <div class="step-card">
+            <h3>Guía de tallas</h3>
+            <p class="muted mb-0">Tres medidas y la regla publicada de cada prenda. El resultado se explica, no se adivina.</p>
+        </div>
+        <div class="step-card">
+            <h3>Asesoramiento</h3>
+            <p class="muted mb-0">El asesor consulta el catálogo real de esta tienda y explica por qué eligió cada pieza.</p>
+        </div>
+        <div class="step-card">
+            <h3>Seguimiento honesto</h3>
+            <p class="muted mb-0">Pago, preparación y entrega se muestran por separado. Lo pendiente se dice pendiente.</p>
+        </div>
+        {% else %}
+        <div class="step-card">
+            <h3>Catálogo curado</h3>
+            <p class="muted mb-0">Papelería y regalos de demostración con precios y stock reales de esta tienda.</p>
+        </div>
+        <div class="step-card">
+            <h3>Asesoramiento</h3>
+            <p class="muted mb-0">El asesor consulta el catálogo real y explica cada selección.</p>
+        </div>
+        <div class="step-card">
+            <h3>Contenido de prueba</h3>
+            <p class="muted mb-0">Esta tienda demuestra la plataforma; no está habilitada para cobros reales.</p>
+        </div>
+        {% endif %}
+    </div>
+</section>
+
+{# 3 · SELECCIÓN DE LA CASA — productos reales, precios siempre visibles #}
+{% if featured %}
+<section class="section container">
+    <p class="eyebrow">La colección</p>
+    <h2>Selección de la casa</h2>
+    <div class="grid grid--products" style="margin-top:28px">
+        {% for product in featured %}
+        {% include "reino/_product_card.html" with product=product %}
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+{# 4 · LOOKLAB #}
+{% if reino_store.category == "moda canina" %}
+<section class="section container">
+    <div class="module-navy">
+        <p class="eyebrow">LookLab</p>
+        <h2>Su personalidad también tiene estilo.</h2>
+        <p>Cuatro pasos: perfil, medidas, personalidad y ocasión. Al final, un look
+        revisable y comprable, explicado pieza por pieza.</p>
+        <div class="persona-grid">
+            <div class="persona"><strong>Royal Classic</strong><span>Sobrio y pulido.</span></div>
+            <div class="persona"><strong>Urban King</strong><span>Cotidiano y moderno.</span></div>
+            <div class="persona"><strong>Little Adventurer</strong><span>Práctico para explorar.</span></div>
+            <div class="persona"><strong>Party Royalty</strong><span>Ocasión especial.</span></div>
+        </div>
+        <a class="btn btn--on-navy" href="{% url 'reino_looklab' reino_store.slug %}">Empezar LookLab</a>
+    </div>
+</section>
+
+{# 5 · SMART FIT #}
+<section class="section container">
+    <div class="grid grid--2" style="align-items:center">
+        <div>
+            <p class="eyebrow">Smart Fit</p>
+            <h2>Antes de elegir talla, conocé sus medidas.</h2>
+            <p class="muted">Pecho, cuello y largo de espalda. Cada prenda tiene su propia
+            tabla publicada; el resultado puede ser compatible, al límite, incompatible
+            o con datos insuficientes — y siempre te dice por qué.</p>
+            <a class="btn btn--secondary" href="{% url 'reino_fit' reino_store.slug %}">Revisar talla</a>
+        </div>
+        <div class="module-navy" aria-hidden="true">
+            <svg viewBox="0 0 320 160" role="img" aria-label="Diagrama de medición: pecho, cuello y espalda" style="width:100%;height:auto">
+                <rect x="40" y="60" width="180" height="60" rx="30" fill="#EDF1F8"/>
+                <circle cx="230" cy="62" r="34" fill="#EDF1F8"/>
+                <rect x="52" y="112" width="14" height="40" rx="7" fill="#EDF1F8"/>
+                <rect x="186" y="112" width="14" height="40" rx="7" fill="#EDF1F8"/>
+                <path d="M70 128 A55 62 0 0 0 200 128" fill="none" stroke="#AF3635" stroke-width="3" stroke-dasharray="6 5"/>
+                <text x="135" y="152" fill="#E8A596" font-size="12" text-anchor="middle">pecho</text>
+                <path d="M226 30 A34 34 0 0 1 262 58" fill="none" stroke="#AF3635" stroke-width="3" stroke-dasharray="6 5"/>
+                <text x="258" y="26" fill="#E8A596" font-size="12" text-anchor="middle">cuello</text>
+                <line x1="70" y1="48" x2="216" y2="48" stroke="#AF3635" stroke-width="3" stroke-dasharray="6 5"/>
+                <text x="143" y="42" fill="#E8A596" font-size="12" text-anchor="middle">largo de espalda</text>
+            </svg>
+        </div>
+    </div>
+</section>
+
+{# 6 · EDITORIAL POR OCASIÓN — enlaces a filtros existentes #}
+<section class="section container">
+    <p class="eyebrow">Por ocasión</p>
+    <h2>Para su día a día y sus grandes días.</h2>
+    <div class="grid grid--2" style="margin-top:24px">
+        <a class="card" href="{% url 'reino_collection' reino_store.slug %}?ocasion=diario" style="text-decoration:none">
+            <div class="card__media"><img src="{% static 'tienda/img/cable-knit-jumper-1.jpg' %}" alt="Suéter de uso cotidiano para dachshund"></div>
+            <div class="card__body"><h3 class="card__title">Uso cotidiano</h3>
+            <p class="card__reason">Piezas cómodas para todos los días.</p></div>
+        </a>
+        <a class="card" href="{% url 'reino_collection' reino_store.slug %}?ocasion=celebracion" style="text-decoration:none">
+            <div class="card__media"><img src="{% static 'tienda/img/wedding-dog.jpg' %}" alt="Traje formal para celebraciones"></div>
+            <div class="card__body"><h3 class="card__title">Celebración</h3>
+            <p class="card__reason">Looks para bodas, fotos y fechas especiales.</p></div>
+        </a>
+    </div>
+</section>
+{% endif %}
+
+{# 7 · AYUDA PARA DECIDIR #}
+<section class="section container">
+    <h2>Preguntas para decidir mejor</h2>
+    <div class="accordion" style="margin-top:20px">
+        <details>
+            <summary>¿Cómo sé qué talla le queda?</summary>
+            <div class="accordion__body">Con tres medidas (pecho, cuello y largo) y la tabla de cada prenda.
+            La guía te muestra el resultado con su explicación. <a href="{% url 'reino_fit' reino_store.slug %}">Ir a la guía de tallas</a>.</div>
+        </details>
+        <details>
+            <summary>¿Cómo funciona la entrega?</summary>
+            <div class="accordion__body">Retiro coordinado sin costo y entregas por zona con tarifa visible antes de confirmar.
+            <a href="{% url 'reino_help' reino_store.slug %}?tema=envios">Ver política de entrega</a>.</div>
+        </details>
+        <details>
+            <summary>¿Qué métodos de pago hay?</summary>
+            <div class="accordion__body">Pago manual coordinado y Bitcoin con 15 % de descuento al verificarse.
+            <a href="{% url 'reino_help' reino_store.slug %}?tema=compra">Ver cómo comprar</a>.</div>
+        </details>
+    </div>
+</section>
+
+{# 8 · CIERRE #}
+<section class="section container center">
+    <h2>{% if reino_store.category == "moda canina" %}Cada pequeño rey merece su reino.{% else %}Encontrá tu próximo favorito.{% endif %}</h2>
+    <p class="lede" style="margin:0 auto 26px">Explorá la colección completa con precios y disponibilidad reales.</p>
+    <a class="btn btn--primary" href="{% url 'reino_collection' reino_store.slug %}">Explorar la colección</a>
+</section>
+{% endblock %}

@@ -1,0 +1,32 @@
+{% extends "reino/merchant_base.html" %}
+{% block title %}Pedidos · {{ store.name }}{% endblock %}
+{% block panel %}
+<h1 class="mt-0">Pedidos</h1>
+<div class="pill-row">
+    <a class="pill" href="{% url 'reino_merchant_orders' store.slug %}" {% if not selected %}aria-pressed="true"{% endif %}>Todos</a>
+    {% for value, label in states %}
+    <a class="pill" href="?estado={{ value }}" {% if selected == value %}aria-pressed="true"{% endif %}>{{ label }}</a>
+    {% endfor %}
+</div>
+<div class="table-wrap">
+<table class="data">
+    <thead><tr><th>Pedido</th><th>Fecha</th><th>Cliente</th><th>Total</th><th>Pedido</th><th>Pago</th><th>Preparación</th><th>Entrega</th></tr></thead>
+    <tbody>
+        {% for o in orders %}
+        <tr>
+            <td><a href="{% url 'reino_merchant_order' store.slug o.public_id %}">{{ o.reference }}</a></td>
+            <td>{{ o.created_at|date:"d/m/Y H:i" }}</td>
+            <td>{{ o.customer_name }}<br><span class="small muted">{{ o.customer_email }}</span></td>
+            <td>${{ o.total }}</td>
+            <td><span class="state-chip state-chip--{{ o.status }}">{{ o.get_status_display }}</span></td>
+            <td><span class="state-chip state-chip--{{ o.payment_status }}">{{ o.get_payment_status_display }}</span></td>
+            <td><span class="state-chip state-chip--{{ o.prep_status }}">{{ o.get_prep_status_display }}</span></td>
+            <td><span class="state-chip state-chip--{{ o.delivery_status }}">{{ o.get_delivery_status_display }}</span></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8" class="muted" style="text-align:center;padding:32px">Sin pedidos en este estado.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

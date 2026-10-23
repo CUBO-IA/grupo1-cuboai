@@ -1,0 +1,48 @@
+{% extends "reino/base.html" %}
+{% block title %}Revisar pedido · {{ reino_store.name }}{% endblock %}
+{% block content %}
+<section class="section container" style="max-width:860px">
+    <div class="checkout-steps" aria-label="Pasos de la compra">
+        <span>1 · Entrega</span><span>2 · Envío y pago</span><span class="now">3 · Revisar</span>
+    </div>
+    <h1>Revisá antes de confirmar</h1>
+
+    <div class="looklab-card" style="margin-top:20px">
+        <h2 style="font-size:1.3rem" class="mt-0">Tu pedido</h2>
+        <dl>
+            <div class="row" style="display:flex;justify-content:space-between;padding:6px 0"><dt class="muted">Entrega</dt>
+                <dd>{{ data.name }} · {% if session.summary.delivery_mode == "local" %}{{ session.summary.zone }}{% else %}Retiro{% endif %}</dd></div>
+            <div class="row" style="display:flex;justify-content:space-between;padding:6px 0"><dt class="muted">Contacto</dt><dd>{{ data.email }}</dd></div>
+            <div class="row" style="display:flex;justify-content:space-between;padding:6px 0"><dt class="muted">Pago</dt>
+                <dd>{% if session.summary.payment_method == "bitcoin" %}Bitcoin{% else %}Pago manual coordinado{% endif %}</dd></div>
+        </dl>
+        <hr style="border:0;border-top:1px solid var(--silver-soft);margin:16px 0">
+        <dl>
+            <div class="row" style="display:flex;justify-content:space-between;padding:6px 0"><dt>Mercancía</dt><dd>${{ total.subtotal }}</dd></div>
+            {% if total.discount %}<div class="row" style="display:flex;justify-content:space-between;padding:6px 0"><dt>Descuento Bitcoin (al verificar)</dt><dd>−${{ total.discount }}</dd></div>{% endif %}
+            <div class="row" style="display:flex;justify-content:space-between;padding:6px 0"><dt>Envío</dt>
+                <dd>{% if total.shipping is not None %}${{ total.shipping }}{% else %}Por confirmar{% endif %}</dd></div>
+            <div class="row" style="display:flex;justify-content:space-between;padding:12px 0;font-size:1.25rem;font-weight:700;color:var(--navy)">
+                <dt>Total{% if session.summary.payment_method == "bitcoin" %} al pagar con Bitcoin verificado{% endif %}</dt>
+                <dd>${{ total.total }}</dd></div>
+        </dl>
+        <p class="small muted">La reserva de tus piezas dura {{ session.expires_at|time:"H:i" }} (10 minutos).
+        Al confirmar, el pedido queda <strong>pendiente de pago</strong> hasta la verificación del equipo.</p>
+        <form method="post">
+            {% csrf_token %}
+            <input type="hidden" name="step" value="confirm">
+            <input type="hidden" name="idempotency_key" value="{{ idem }}">
+            <input type="hidden" name="name" value="{{ data.name }}">
+            <input type="hidden" name="email" value="{{ data.email }}">
+            <input type="hidden" name="phone" value="{{ data.phone }}">
+            <input type="hidden" name="delivery_mode" value="{{ data.delivery_mode }}">
+            <input type="hidden" name="zone" value="{{ data.zone }}">
+            <input type="hidden" name="address" value="{{ data.address }}">
+            <input type="hidden" name="city" value="{{ data.city }}">
+            <input type="hidden" name="payment_method" value="{{ data.payment_method }}">
+            <button class="btn btn--primary" type="submit" style="width:100%">Crear pedido pendiente de pago</button>
+            <a class="btn btn--ghost" style="width:100%;margin-top:8px" href="{% url 'reino_checkout' reino_store.slug %}">Volver a editar</a>
+        </form>
+    </div>
+</section>
+{% endblock %}

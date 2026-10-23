@@ -1,0 +1,46 @@
+{% extends "reino/merchant_base.html" %}
+{% block title %}Panel · {{ store.name }}{% endblock %}
+{% block panel %}
+<p class="eyebrow">{{ store.name }}{% if store.is_demo %} · demo{% endif %}</p>
+<h1 class="mt-0">Esto necesita tu atención</h1>
+
+<div class="steps-3" style="margin:20px 0">
+    <div class="step-card">
+        <h3>Pagos por verificar</h3>
+        {% if attention %}
+        <ul class="small" style="padding-left:18px;margin:0">
+            {% for o in attention %}<li><a href="{% url 'reino_merchant_order' store.slug o.public_id %}">{{ o.reference }}</a> — ${{ o.total }} · {{ o.created_at|date:"d/m" }}</li>{% endfor %}
+        </ul>
+        {% else %}<p class="muted small mb-0">Nada pendiente.</p>{% endif %}
+    </div>
+    <div class="step-card">
+        <h3>Stock bajo</h3>
+        {% if low_stock %}
+        <ul class="small" style="padding-left:18px;margin:0">
+            {% for v in low_stock %}<li>{{ v.product.short_title }} · {{ v.option_label }}: {{ v.stock }} u.</li>{% endfor %}
+        </ul>
+        {% else %}<p class="muted small mb-0">Todo con existencias.</p>{% endif %}
+    </div>
+    <div class="step-card">
+        <h3>Estado de la tienda</h3>
+        <p class="small mb-0">{{ store.get_status_display }} · {{ store.currency }}{% if store.is_demo %}<br>Contenido de demostración, sin cobros reales.{% endif %}</p>
+    </div>
+</div>
+
+<h2>Indicadores</h2>
+{% if kpis %}
+<div class="kpi-grid">
+    <div class="kpi"><div class="n">${{ kpis.ventas|floatformat:2 }}</div><div class="l">Ventas cobradas (productos + envío)</div></div>
+    <div class="kpi"><div class="n">{{ kpis.pedidos_pagados }}</div><div class="l">Pedidos pagados</div></div>
+    <div class="kpi"><div class="n">${{ kpis.ticket_medio|floatformat:2 }}</div><div class="l">Ticket medio</div></div>
+    <div class="kpi"><div class="n">{{ kpis.pendientes }}</div><div class="l">Pendientes de cobro</div></div>
+</div>
+<p class="small muted">Período: histórico completo · Moneda: {{ store.currency }}.
+Las cifras cuentan solo pedidos con pago verificado.</p>
+{% else %}
+<div class="empty-state" style="padding:32px">
+    <h3>Sin datos suficientes.</h3>
+    <p class="muted">Cuando haya pedidos con pago verificado, acá van las ventas, el ticket medio y los pendientes. Nunca mostramos porcentajes sin denominador.</p>
+</div>
+{% endif %}
+{% endblock %}

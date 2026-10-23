@@ -1,0 +1,66 @@
+{% extends "reino/base.html" %}
+{% load static %}
+{% block title %}Asesor · {{ reino_store.name }}{% endblock %}
+{% block content %}
+<section class="section container" style="max-width:860px">
+    <p class="eyebrow">Royal Stylist · {{ reino_store.name }}</p>
+    <h1>Contame para quién estás comprando y qué necesitás.</h1>
+
+    {% if not ai_available %}
+    <p class="mode-note" role="status">El asesor con IA está <strong>implementado pendiente de conexión</strong>
+    (falta la clave del proveedor). Mientras tanto usás la selección por reglas de la tienda —
+    consulta el catálogo real y explica sus razones.</p>
+    {% endif %}
+
+    {% if profile %}
+    <p class="small muted">Eligiendo para <strong>{{ profile.alias }}</strong> ·
+    <a href="{% url 'reino_account' %}">cambiar perfil</a></p>
+    {% else %}
+    <p class="small muted">Sin perfil activo: las sugerencias de talla quedan por confirmar.
+    <a href="{% url 'reino_looklab' reino_store.slug %}">Elegí para quién comprás</a></p>
+    {% endif %}
+
+    <div class="chat" data-chat-list aria-live="polite" style="margin-top:24px">
+        {% for msg in messages %}
+        <div class="chat__msg chat__msg--{{ msg.role }}">
+            {{ msg.content }}
+            {% if msg.cards %}
+            <div class="chat__cards">
+                {% for card in msg.cards %}
+                <article class="card">
+                    {% if card.image %}<div class="card__media"><img src="{% static card.image %}" alt="{{ card.alt }}" loading="lazy"></div>{% endif %}
+                    <div class="card__body">
+                        <h3 class="card__title">{{ card.title }}</h3>
+                        <p class="card__price">{{ card.price }}</p>
+                        {% if card.fit_label %}<p class="mb-0"><span class="fit fit--{{ card.fit_state }}">{{ card.fit_label }}</span></p>{% endif %}
+                        <div class="card__footer">
+                            <a class="btn btn--secondary btn--sm" href="{% url 'reino_product' reino_store.slug card.slug %}">Ver</a>
+                        </div>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% empty %}
+        <div class="chat__msg chat__msg--bot">¡Hola! Contame qué buscás y lo encuentro en la colección real de la tienda.</div>
+        {% endfor %}
+    </div>
+
+    <div class="chat__examples" role="group" aria-label="Ejemplos">
+        {% for example in examples %}
+        <button type="button" data-chat-example="{{ example }}">{{ example }}</button>
+        {% endfor %}
+    </div>
+
+    <p class="small muted" data-chat-status role="status"></p>
+    <form class="chat__form" data-chat-form method="post" action="{% url 'reino_stylist_message' reino_store.slug %}">
+        {% csrf_token %}
+        <label for="msg" style="position:absolute;left:-9999px">Tu mensaje al asesor</label>
+        <input id="msg" name="message" maxlength="500" autocomplete="off"
+               placeholder="Por ejemplo: algo elegante para Bruno, máximo $80">
+        <button class="btn btn--primary" type="submit">Enviar</button>
+        <button class="btn btn--ghost" type="button" data-chat-cancel hidden>Cancelar</button>
+    </form>
+</section>
+{% endblock %}

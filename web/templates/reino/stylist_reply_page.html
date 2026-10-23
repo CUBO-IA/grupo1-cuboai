@@ -1,0 +1,10 @@
+{% extends "reino/base.html" %}
+{% block title %}Asesor · {{ reino_store.name }}{% endblock %}
+{% block content %}
+<section class="section container" style="max-width:860px">
+    <div class="chat">
+        {% include "reino/_stylist_reply.html" %}
+    </div>
+    <p style="margin-top:24px"><a class="btn btn--secondary" href="{% url 'reino_stylist' reino_store.slug %}">Seguir conversando</a></p>
+</section>
+{% endblock %}

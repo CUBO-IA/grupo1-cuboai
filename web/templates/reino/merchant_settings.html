@@ -1,0 +1,31 @@
+{% extends "reino/merchant_base.html" %}
+{% block title %}Configuración · {{ store.name }}{% endblock %}
+{% block panel %}
+<h1 class="mt-0">Configuración</h1>
+
+<h2>Identidad</h2>
+<div class="looklab-card" style="max-width:560px">
+    <p class="mb-0"><strong>{{ store.name }}</strong> · /s/{{ store.slug }}/<br>
+    {{ store.tagline }}<br>
+    <span class="small muted">{{ store.currency }} · {{ store.locale }} · {{ store.category }} ·
+    estado: {{ store.get_status_display }}{% if store.is_demo %} (demo, sin cobros reales){% endif %}</span></p>
+</div>
+
+<h2 style="margin-top:32px">Integraciones</h2>
+<div class="table-wrap" style="max-width:760px">
+<table class="data">
+    <thead><tr><th>Integración</th><th>Estado</th><th>Detalle</th></tr></thead>
+    <tbody>
+        {% for i in integrations %}
+        <tr>
+            <td><strong>{{ i.name }}</strong></td>
+            <td><span class="state-chip {% if i.state == "Sin configurar" %}state-chip--cancelled{% elif i.state == "Prueba" %}state-chip--pending{% else %}state-chip--paid{% endif %}">{{ i.state }}</span></td>
+            <td class="small muted">{{ i.detail }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+<p class="small muted" style="margin-top:14px">Nunca mostramos claves completas en pantalla. Las claves viven
+en variables de entorno del servidor.</p>
+{% endblock %}

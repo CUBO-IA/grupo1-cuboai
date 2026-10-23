@@ -1,0 +1,30 @@
+{% load static %}
+<div class="chat__msg chat__msg--bot">
+    {{ reply.answer_text }}
+    {% if reply.mode_note %}<p class="small muted" style="margin:8px 0 0">{{ reply.mode_note }}</p>{% endif %}
+    {% if reply.cards %}
+    <div class="chat__cards">
+        {% for card in reply.cards %}
+        <article class="card">
+            {% if card.image %}<div class="card__media"><img src="{% static card.image %}" alt="{{ card.alt }}" loading="lazy"></div>{% endif %}
+            <div class="card__body">
+                <h3 class="card__title">{{ card.title }}</h3>
+                <p class="card__price">{{ card.price }}</p>
+                {% if card.fit_label %}<p class="mb-0"><span class="fit fit--{{ card.fit_state }}">{{ card.fit_label }}</span></p>{% endif %}
+                {% if card.reason_codes %}<p class="card__reason">{{ card.reason_codes|join:" · " }}</p>{% endif %}
+                <div class="card__footer">
+                    <a class="btn btn--secondary btn--sm" href="{% url 'reino_product' reino_store.slug card.slug %}">Ver</a>
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% if reply.suggested_actions %}
+    <p style="margin:10px 0 0">
+        {% for action in reply.suggested_actions %}
+        {% if action.action == "collection" %}<a class="btn btn--ghost btn--sm" href="{% url 'reino_collection' reino_store.slug %}">{{ action.label }}</a>{% endif %}
+        {% endfor %}
+    </p>
+    {% endif %}
+</div>

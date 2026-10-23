@@ -1,0 +1,27 @@
+{% extends "reino/base.html" %}
+{% block title %}Plataforma · Reino Commerce{% endblock %}
+{% block content %}
+<section class="section container">
+    <p class="eyebrow">Administración de plataforma</p>
+    <h1>Comercios</h1>
+    <div class="table-wrap" style="margin-top:20px">
+    <table class="data">
+        <thead><tr><th>Comercio</th><th>Tienda</th><th>Estado</th><th>Demo</th><th>País</th></tr></thead>
+        <tbody>
+            {% for m in merchants %}{% for s in m.stores.all %}
+            <tr>
+                <td><strong>{{ m.name }}</strong></td>
+                <td><a href="{% url 'reino_store_home' s.slug %}">/s/{{ s.slug }}/</a></td>
+                <td><span class="state-chip">{{ s.get_status_display }}</span></td>
+                <td>{% if s.is_demo %}Sí, contenido de prueba{% else %}No{% endif %}</td>
+                <td>{{ m.country }}</td>
+            </tr>
+            {% endfor %}{% endfor %}
+        </tbody>
+    </table>
+    </div>
+    <p class="small muted" style="margin-top:16px">P0 mínimo: el acceso de soporte a datos de un tenant
+    requiere alcance, motivo y registro. La administración global no implica visibilidad
+    de memorias personales.</p>
+</section>
+{% endblock %}

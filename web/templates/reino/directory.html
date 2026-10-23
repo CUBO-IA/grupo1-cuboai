@@ -1,0 +1,28 @@
+{% extends "reino/base.html" %}
+{% block title %}Reino Commerce · Directorio de tiendas{% endblock %}
+{% block content %}
+<section class="section container">
+    <p class="eyebrow">Comercios de demostración</p>
+    <h1>Elegí tu tienda.</h1>
+    <p class="lede">Reino Commerce es la tecnología; cada tienda tiene su catálogo,
+    su identidad y sus pedidos, completamente separados.</p>
+
+    <div class="grid grid--2" style="margin-top:36px">
+        {% for store in stores %}
+        <article class="store-card">
+            <div class="store-card__logo" aria-hidden="true">♛<br><span style="font-size:1rem;font-family:var(--font-body)">{{ store.name }}</span></div>
+            <div class="store-card__body">
+                <h2 class="mt-0">{{ store.name }}{% if store.is_demo %}<span class="badge-demo">Demo</span>{% endif %}</h2>
+                <p class="muted">{{ store.tagline }}</p>
+                <p class="small">{{ store.description }}</p>
+                <p class="small muted">Categoría: {{ store.category }} · Moneda: {{ store.currency }}</p>
+                <a class="btn btn--primary" href="{% url 'reino_store_home' store.slug %}">Entrar a la tienda</a>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+
+    <p class="small muted" style="margin-top:32px">Cada carrito y cada pedido se completan por tienda.
+    Cambiar de tienda conserva tus carritos separados.</p>
+</section>
+{% endblock %}

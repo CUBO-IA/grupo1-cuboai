@@ -1,0 +1,28 @@
+{% extends "reino/merchant_base.html" %}
+{% load static %}
+{% block title %}Catálogo · {{ store.name }}{% endblock %}
+{% block panel %}
+<h1 class="mt-0">Catálogo e inventario</h1>
+<p class="muted small">Alta manual en P0. Los productos archivados siguen legibles en pedidos históricos.</p>
+<div class="table-wrap">
+<table class="data">
+    <thead><tr><th></th><th>Producto</th><th>Categoría</th><th>Precio base</th><th>Variantes</th><th>Estado</th></tr></thead>
+    <tbody>
+        {% for p in products %}
+        <tr>
+            <td style="width:56px">{% with m=p.media.first %}{% if m %}<img src="{% static m.path %}" alt="" style="width:48px;height:60px;object-fit:cover;border-radius:8px">{% endif %}{% endwith %}</td>
+            <td><strong>{{ p.short_title }}</strong><br><span class="small muted">{{ p.title }}</span></td>
+            <td>{{ p.category }}</td>
+            <td>${{ p.base_price }}</td>
+            <td>
+                {% for v in p.variants.all %}
+                <span class="state-chip {% if v.stock <= 2 %}state-chip--pending{% endif %}">{{ v.option_label }}: {{ v.stock }}</span>
+                {% endfor %}
+            </td>
+            <td><span class="state-chip">{{ p.get_status_display }}</span></td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

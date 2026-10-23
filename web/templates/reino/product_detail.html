@@ -1,0 +1,135 @@
+{% extends "reino/base.html" %}
+{% load static %}
+{% block title %}{% if product %}{{ product.short_title }} · {{ reino_store.name }}{% else %}Producto no encontrado{% endif %}{% endblock %}
+{% block content %}
+{% if not product %}
+<section class="section container empty-state">
+    <h1>Esa pieza ya no está en la colección.</h1>
+    <p class="muted">Pudo haberse agotado o retirado.</p>
+    <a class="btn btn--primary" href="{% url 'reino_collection' reino_store.slug %}">Ver colección</a>
+</section>
+{% else %}
+<section class="section container">
+    <div class="pdp">
+        {# Galería: producto, uso, detalle, ajuste; si solo hay una foto, una #}
+        <div class="gallery">
+            {% with first=media.0 %}
+            <div class="gallery__main">
+                <img data-gallery-main src="{% static first.path %}" alt="{{ first.alt }}">
+            </div>
+            {% endwith %}
+            {% if media|length > 1 %}
+            <div class="gallery__thumbs" role="group" aria-label="Vistas del producto">
+                {% for m in media %}
+                <button type="button" data-gallery-thumb data-src="{% static m.path %}" data-alt="{{ m.alt }}"
+                        aria-pressed="{% if forloop.first %}true{% else %}false{% endif %}" aria-label="Ver {{ m.alt }}">
+                    <img src="{% static m.path %}" alt="">
+                </button>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        {% comment %} Panel comercial: categoría → nombre → beneficio → precio → variante →
+           talla → disponibilidad → agregar {% endcomment %}
+        <div>
+            <p class="eyebrow">{{ product.get_category_display|default:product.category|capfirst }}</p>
+            <h1 style="font-size:clamp(1.8rem,3.5vw,2.6rem)">{{ product.short_title }}</h1>
+            {% if product.subtitle %}<p class="lede">{{ product.subtitle }}</p>{% endif %}
+
+            <div class="price-block">
+                <span class="price">${{ product.base_price }}</span>
+                <span class="note"> · envío por calcular al confirmar tu pedido</span>
+            </div>
+
+            {% if fit %}
+            <p>
+                <span class="fit fit--{{ fit.state }}">{{ fit.label }}</span>
+                {% if fit.explanation %}<br><span class="small muted">{{ fit.explanation }}
+                <a href="{% url 'reino_fit' reino_store.slug %}?producto={{ product.slug }}">Ver por qué lo elegimos</a></span>{% endif %}
+            </p>
+            {% elif reino_store.category == "moda canina" %}
+            <p class="small"><a href="{% url 'reino_fit' reino_store.slug %}?producto={{ product.slug }}">¿Qué talla le queda? Revisá sus medidas →</a></p>
+            {% endif %}
+
+            {% if variant_rows %}
+            <form method="post" action="{% url 'reino_cart_add' reino_store.slug %}" id="buy-form">
+                {% csrf_token %}
+                <fieldset style="border:0;padding:0;margin:0 0 8px">
+                    <legend class="small" style="font-weight:700;margin-bottom:6px">{% if reino_store.category == "moda canina" %}Elegí la talla{% else %}Opción{% endif %}</legend>
+                    <div class="variant-list">
+                        {% for row in variant_rows %}
+                        <span class="variant-option {% if not row.available %}variant-option--out{% endif %}">
+                            <input type="radio" name="variant" id="v{{ forloop.counter }}" value="{{ row.variant.public_id }}"
+                                   {% if not row.available %}disabled{% endif %} required>
+                            <label for="v{{ forloop.counter }}">
+                                {{ row.variant.option_label }}
+                                {% if row.fit_hint == "sugerida" %}<span class="tag">sugerida</span>{% endif %}
+                                {% if not row.available %}<span class="tag" style="background:#F6E3E2;color:var(--carmine)">agotada</span>{% endif %}
+                            </label>
+                        </span>
+                        {% endfor %}
+                    </div>
+                </fieldset>
+                <div class="field--inline" style="max-width:320px">
+                    <div class="field">
+                        <label for="qty">Cantidad</label>
+                        <input id="qty" type="number" name="quantity" value="1" min="1" max="10">
+                    </div>
+                </div>
+                <button class="btn btn--primary" type="submit" style="width:100%;max-width:420px">Agregar al carrito</button>
+            </form>
+            {% else %}
+            <p class="form-errors">Esta pieza está agotada por ahora. Mirá otras opciones de la colección.</p>
+            {% endif %}
+
+            {% if has_quote_flow %}
+            <p class="small" style="margin-top:14px">
+                ¿La querés hecha a medida? <a href="/producto/{{ product.legacy_slug }}/">Solicitá una cotización</a>
+                con el proceso de medidas completo.
+            </p>
+            {% endif %}
+
+            <div class="accordion" style="margin-top:28px">
+                {% if product.materials %}
+                <details open>
+                    <summary>Materiales y detalles</summary>
+                    <div class="accordion__body"><ul>
+                        {% for m in product.materials %}<li>{{ m }}</li>{% endfor %}
+                    </ul></div>
+                </details>
+                {% endif %}
+                {% if product.care %}
+                <details>
+                    <summary>Cómo cuidarlo</summary>
+                    <div class="accordion__body"><ul>
+                        {% for c in product.care %}<li>{{ c }}</li>{% endfor %}
+                    </ul></div>
+                </details>
+                {% endif %}
+                <details>
+                    <summary>Envíos y cambios</summary>
+                    <div class="accordion__body">
+                        Retiro coordinado sin costo o entrega por zona con tarifa visible al confirmar.
+                        <a href="{% url 'reino_help' reino_store.slug %}?tema=envios">Según la política de envío</a> ·
+                        <a href="{% url 'reino_help' reino_store.slug %}?tema=cambios">Cambios</a>
+                    </div>
+                </details>
+            </div>
+        </div>
+    </div>
+
+    {# Complementos: máximo dos, cada uno con su precio y botón propio #}
+    {% if complements %}
+    <section style="margin-top:56px">
+        <h2>Complementa el look</h2>
+        <div class="grid grid--products" style="margin-top:20px">
+            {% for product in complements %}
+            {% include "reino/_product_card.html" %}
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "reino/base.html" %}
+{% block title %}Acceso denegado{% endblock %}
+{% block content %}
+<section class="section container empty-state">
+    <h1>Este panel pertenece a otra tienda.</h1>
+    <p class="muted">Tu cuenta no tiene membresía en «{{ slug }}». Los pedidos, clientes y
+    configuración de cada comercio están aislados.</p>
+    <a class="btn btn--primary" href="{% url 'reino_directory' %}">Ir al directorio</a>
+</section>
+{% endblock %}
