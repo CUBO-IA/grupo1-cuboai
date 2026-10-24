@@ -44,3 +44,27 @@ python manage.py runserver
 
 Plataforma: `/explorar/` · Tiendas: `/tiendas/` · Panel: `/negocio/wiener-kingdom/`
 (demo_staff/demo1234, solo demo) · Diseño: `/negocio/wiener-kingdom/diseno/`.
+
+## Ronda 4 — Revisión 3 (prompt maestro final): G0–G7
+
+- **G0/F13**: upstream/main (`98fc9f6`) fusionado en la rama del PR (merge `d26f4360`);
+  CI postgres inspeccionado y corregido (F01–F04).
+- **F05–F12** corregidos con pruebas (ver `docs/09_CIERRE_FINAL.md`): comparador alineado,
+  visibilidad coherente, contraste con par validado, vista previa de borrador, versiones
+  inmutables con hash, claims de entrega/devolución endurecidos, editor de filas fit,
+  evidencias móvil/movimiento/componentes.
+- **G2 dominio**: `offer_type` físico/digital/servicio + `DigitalAsset/Grant`,
+  `ServiceSlot/Booking`; `mercado-demo` con 6 categorías físicas + digital + servicio;
+  envío «ninguno» para carritos no físicos.
+- **G3 IA**: contrato de intención `intent-v1` gobierna cada turno; ranking
+  `ranking-v1` auditable; dataset de evaluación **202 casos** con 5 runners;
+  modo «sin guardar» (efímero, sella historial) en el asesor.
+- **G4 pagos/envíos**: `PaymentAttempt/PaymentEvent` con efectos exactamente-una-vez,
+  webhook autenticado, conciliación, reembolsos con límites, «2 tiendas 2 pagos»;
+  `Shipment/ShipmentEvent` idempotente, parciales, tracking deduplicado; adaptadores
+  por contrato (fake sólo-tests, manual operativo); proveedores reales = bloqueo
+  externo declarado (credenciales).
+- **G5/G6**: `/plataforma/componentes/`, `docs/DIRECCION_VISUAL.md`, `/salud/`,
+  `backup_reino` + `restore_check` (restauración verificada en base temporal).
+- **Suite final: 493 tests OK** (5 omitidos sólo-Postgres, en CI). Migraciones limpias.
+- Evidencia nueva: `docs/capturas/r4_*.jpg` (8 capturas) + `shots4/` en el workspace.

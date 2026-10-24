@@ -12,6 +12,14 @@ publicado con estudio de diseño `/negocio/<slug>/diseno/`; correo transaccional
 real con outbox idempotente; PostgreSQL como servicio de CI; movimiento
 stop-motion con `prefers-reduced-motion` y control «Reducir movimiento».
 
+**Ronda 4 (24-oct-2026):** revisión 3 (prompt maestro final) cerrada — F01–F14
+corregidos con pruebas (`docs/09_CIERRE_FINAL.md`, matriz A01–A64); upstream/main
+fusionado; dominio multi-categoría (6 físicas + digital + servicio reservable);
+contrato de intención `intent-v1`, ranking auditable `ranking-v1` y **202 casos**
+de evaluación; pagos y envíos por contrato de adaptador (fake sólo-tests, manual
+operativo, proveedores reales bloqueados por credenciales y declarados); respaldo
+con restauración verificada; `/salud/`; página de componentes. **493 tests OK.**
+
 - **Tienda 1:** Wiener Kingdom (catálogo real histórico) — `/s/wiener-kingdom/`
 - **Tienda 2:** Estudio Nube Demo (papelería ficticia de demostración, sin cobros) — `/s/estudio-nube/`
 - **Directorio:** `/tiendas/` · **Para negocios:** `/para-negocios/`

@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from .. import services_commerce as commerce
 from .. import services_fit, services_memory
+from .. import services_visibility as visibility
 from ..models import (
     ActionToken, KnowledgeDocument, Order, Product, ShippingZone, Variant,
 )
@@ -57,7 +58,7 @@ def run_tool(name, args, ctx: ToolContext):
 
 
 def _search_products(args, ctx):
-    qs = Product.objects.filter(store=ctx.store, status=Product.Status.PUBLISHED)
+    qs = visibility.visible_products(store=ctx.store)
     query = (args.get("query") or "").lower().strip()
     if query:
         qs = [p for p in qs if query in p.title.lower()

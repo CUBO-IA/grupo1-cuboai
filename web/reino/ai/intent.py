@@ -87,3 +87,23 @@ def validate(payload: dict) -> tuple[IntentContract, list[str]]:
         errors.append("para garantizar un total con envío necesito la ubicación "
                       "(destination_scope); sin ella lo marco como «envío por confirmar»")
     return c, errors
+
+
+def intent_from_text(text, store_slug=""):
+    """Convierte lenguaje natural en un contrato VALIDADO (§6.2).
+
+    Reutiliza el parseo de búsqueda (presupuesto, categoría, cues) y lo pasa
+    por `validate`: la conversación entera queda gobernada por el contrato —
+    visible y editable por la persona, nunca una inferencia silenciosa.
+    """
+    from .. import services_search as search
+    parsed = search.parse_query(text or "")
+    payload = {"query": text, "store_scope": store_slug}
+    if parsed.get("max_price") is not None:
+        payload["budget"] = str(parsed["max_price"])
+        payload["budget_scope"] = "products"
+    if parsed.get("category"):
+        payload["category_ids"] = [parsed["category"]]
+    if parsed.get("must_have"):
+        payload["must_have"] = parsed["must_have"]
+    return validate(payload)

@@ -50,6 +50,9 @@ def theme_css_vars(config):
     radius = shapes.get((config or {}).get("shape", "rounded"), "22px")
     parts = [f"--rk-{k}:{v}" for k, v in colors.items() if isinstance(v, str)]
     parts.append(f"--rk-radius:{radius}")
+    # Forma de botones elegida en el estudio: cambia la interfaz REAL (A40).
+    btn_radii = {"pill": "999px", "rounded": "14px", "square": "4px"}
+    parts.append(f"--rk-btn-radius:{btn_radii.get((config or {}).get('buttons', 'pill'), '999px')}")
     parts.append(f"--rk-font-display:'{pairs['display']}',sans-serif")
     parts.append(f"--rk-font-body:'{pairs['body']}',sans-serif")
     return ";".join(parts)

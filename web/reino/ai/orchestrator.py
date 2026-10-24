@@ -181,9 +181,15 @@ def _validate_answer(answer_text, evidence_blobs):
 
 def respond(conversation, user_text, ctx: ToolContext):
     """Procesa un turno del cliente y devuelve el contrato de respuesta a UI."""
+    from . import intent as intent_mod
     request_id = uuid.uuid4().hex[:12]
-    AIMessage.objects.create(conversation=conversation, role="user", content=user_text,
-                             request_id=request_id)
+    # Contrato de intención VALIDADO (§6.2): gobierna el turno y viaja en la
+    # respuesta para que la persona pueda verlo y corregirlo.
+    contract, intent_errors = intent_mod.intent_from_text(user_text, ctx.store.slug)
+    conversation.refresh_from_db(fields=["memory_off"])
+    if not conversation.memory_off:
+        AIMessage.objects.create(conversation=conversation, role="user",
+                                 content=user_text, request_id=request_id)
 
     if not adapter.available():
         reply = fallback.respond(user_text, ctx)
@@ -191,12 +197,25 @@ def respond(conversation, user_text, ctx: ToolContext):
         reply["mode_note"] = ("El asesor con IA no está disponible ahora. "
                               "Estás usando la selección guiada de la tienda.")
         reply.setdefault("proposed_actions", [])
+        reply["intent"] = {"version": contract.version, "query": contract.query,
+                           "budget": str(contract.budget) if contract.budget else "",
+                           "budget_scope": contract.budget_scope,
+                           "categories": contract.category_ids,
+                           "errors": intent_errors}
+        if intent_errors:
+            reply["warnings"] = reply.get("warnings", []) + intent_errors
+        if conversation.memory_off:
+            reply["mode_note"] = (reply.get("mode_note", "") +
+                                  " Modo «sin guardar» activo: esta conversación no se guarda.").strip()
         _persist(conversation, reply, request_id)
         return reply
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT.format(
             store_name=ctx.store.name, memory_context=_memory_context(ctx))},
+        {"role": "system", "content": "Contrato de intención validado del turno "
+            f"(versión {contract.version}): {contract!r}. Respetá presupuesto, "
+            "categorías y exclusiones; si falta un dato del contrato, preguntalo."},
     ]
     # Historial elegible para el proveedor (N08, §8.3): el historial VISIBLE
     # para el cliente se conserva, pero tras revocar un consentimiento los
@@ -204,7 +223,11 @@ def respond(conversation, user_text, ctx: ToolContext):
     # sello se relee de la base: una revocación puede ocurrir después de que
     # esta instancia fue cargada.
     conversation.refresh_from_db(fields=["history_sealed_before", "mode"])
-    history_qs = conversation.messages.order_by("-created_at", "-pk")
+    if conversation.memory_off:
+        history = []  # efímero: el proveedor sólo ve el turno actual
+        history_qs = conversation.messages.none()
+    else:
+        history_qs = conversation.messages.order_by("-created_at", "-pk")
     if conversation.history_sealed_before is not None:
         history_qs = history_qs.filter(created_at__gt=conversation.history_sealed_before)
     history = list(history_qs[:MAX_HISTORY])
@@ -394,6 +417,9 @@ def _dedupe_cards(cards):
 
 
 def _persist(conversation, reply, request_id):
+    conversation.refresh_from_db(fields=["memory_off"])
+    if conversation.memory_off:
+        return  # «sin guardar»: ni mensajes ni modo quedan en la base
     conversation.mode = reply.get("mode", conversation.mode)
     conversation.save(update_fields=["mode"])
     AIMessage.objects.create(
