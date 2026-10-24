@@ -1,28 +1,38 @@
 {% extends "reino/base.html" %}
-{% block title %}Reino Commerce · Directorio de tiendas{% endblock %}
+{% block title %}Tiendas de Reino · Elegí una marca{% endblock %}
 {% block content %}
 <section class="section container">
-    <p class="eyebrow">Comercios de demostración</p>
-    <h1>Elegí tu tienda.</h1>
-    <p class="lede">Reino Commerce es la tecnología; cada tienda tiene su catálogo,
-    su identidad y sus pedidos, completamente separados.</p>
+    <p class="eyebrow">Tiendas</p>
+    <h1>Elegí una marca con mundo propio.</h1>
+    <p class="lede">Cada tienda tiene su identidad, su catálogo y sus pedidos, completamente separados.</p>
 
-    <div class="grid grid--2" style="margin-top:36px">
-        {% for store in stores %}
-        <article class="store-card">
-            <div class="store-card__logo" aria-hidden="true">♛<br><span style="font-size:1rem;font-family:var(--font-body)">{{ store.name }}</span></div>
-            <div class="store-card__body">
-                <h2 class="mt-0">{{ store.name }}{% if store.is_demo %}<span class="badge-demo">Demo</span>{% endif %}</h2>
-                <p class="muted">{{ store.tagline }}</p>
-                <p class="small">{{ store.description }}</p>
-                <p class="small muted">Categoría: {{ store.category }} · Moneda: {{ store.currency }}</p>
-                <a class="btn btn--primary" href="{% url 'reino_store_home' store.slug %}">Entrar a la tienda</a>
-            </div>
-        </article>
-        {% endfor %}
+    <form method="get" class="pill-row" style="margin-top:20px" role="search">
+        <label class="sr-only" for="dq">Buscar tienda por nombre</label>
+        <input type="text" id="dq" name="q" value="{{ q }}" placeholder="Buscar por nombre"
+               style="min-height:48px;padding:10px 16px;border:2px solid var(--rk-ink);border-radius:999px;font:inherit">
+        <select name="categoria" aria-label="Filtrar por categoría"
+                style="min-height:48px;padding:10px 14px;border:2px solid var(--rk-ink);border-radius:999px;font:inherit;background:var(--rk-surface)">
+            <option value="">Todas las categorías</option>
+            {% for cat in categories %}
+            <option value="{{ cat }}" {% if cat == category %}selected{% endif %}>{{ cat|capfirst }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn--primary btn--sm" type="submit">Filtrar</button>
+        {% if q or category %}<a class="btn btn--ghost btn--sm" href="{% url 'reino_directory' %}">Limpiar</a>{% endif %}
+    </form>
+
+    {% if stores %}
+    <div class="grid grid--2" style="margin-top:30px">
+        {% for store in stores %}{% include "reino/_store_card.html" with store=store %}{% endfor %}
     </div>
+    {% else %}
+    <div class="empty-state" style="margin-top:30px">
+        <h2>Sin resultados para esa búsqueda</h2>
+        <p class="lede" style="margin-inline:auto">Probá quitar filtros o <a href="{% url 'reino_directory' %}">ver todas las tiendas</a>.</p>
+    </div>
+    {% endif %}
 
-    <p class="small muted" style="margin-top:32px">Cada carrito y cada pedido se completan por tienda.
-    Cambiar de tienda conserva tus carritos separados.</p>
+    <p class="fine" style="margin-top:28px">Cada bolsa y cada pedido se completan por tienda.
+    Cambiar de tienda conserva tus bolsas separadas. Las tiendas demo se identifican antes de entrar.</p>
 </section>
 {% endblock %}

@@ -9,11 +9,20 @@
 
 from django.urls import path
 
-from . import views_account, views_looklab, views_merchant, views_platform, views_storefront, views_stylist
+from . import (
+    views_account, views_design, views_explore, views_looklab, views_merchant,
+    views_platform, views_storefront, views_stylist,
+)
 
 urlpatterns = [
     # NOTA: "/" la sirve la app histórica `tienda` (home preservada, tests en verde).
     # La plataforma nueva vive en /tiendas/ y /s/<slug>/ (redirección documentada en docs/01).
+    # Plataforma: descubrimiento, búsqueda y comparación (P01/P04/P06, §11).
+    path("explorar/", views_explore.explore, name="reino_explore"),
+    path("buscar/", views_explore.search, name="reino_search"),
+    path("comparar/", views_explore.compare, name="reino_compare"),
+    path("comparar/agregar/", views_explore.compare_add, name="reino_compare_add"),
+    path("comparar/quitar/", views_explore.compare_remove, name="reino_compare_remove"),
     path("tiendas/", views_platform.directory, name="reino_directory"),
     path("para-negocios/", views_platform.for_business, name="reino_for_business"),
     path("plataforma/", views_platform.platform_admin, name="reino_platform"),
@@ -85,4 +94,18 @@ urlpatterns = [
          name="reino_merchant_team_save"),
     path("negocio/<slug:slug>/configuracion/equipo/<int:member_id>/quitar/",
          views_merchant.team_remove, name="reino_merchant_team_remove"),
+
+    # Estudio de diseño + medios + pruebas de integración (§13/§14, AC11/12/25)
+    path("negocio/<slug:slug>/diseno/", views_design.design_studio,
+         name="reino_merchant_diseno"),
+    path("negocio/<slug:slug>/diseno/guardar/", views_design.design_save,
+         name="reino_merchant_diseno_save"),
+    path("negocio/<slug:slug>/diseno/publicar/", views_design.design_publish,
+         name="reino_merchant_diseno_publish"),
+    path("negocio/<slug:slug>/diseno/restaurar/<int:version>/",
+         views_design.design_restore, name="reino_merchant_diseno_restore"),
+    path("negocio/<slug:slug>/medios/subir/", views_design.media_upload,
+         name="reino_merchant_media_upload"),
+    path("negocio/<slug:slug>/integraciones/<slug:key>/probar/",
+         views_design.integration_probe, name="reino_merchant_probe"),
 ]
