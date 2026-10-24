@@ -158,3 +158,69 @@
     });
   }
 })();
+
+/* === Revisión 2: control de movimiento y estados === */
+(function () {
+  "use strict";
+/* Menú móvil */
+  var toggle = document.querySelector("[data-menu-toggle]");
+  if (toggle) {
+    var nav = document.getElementById(toggle.getAttribute("aria-controls"));
+    toggle.addEventListener("click", function () {
+      var open = nav.classList.toggle("open");
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && nav.classList.contains("open")) {
+        nav.classList.remove("open");
+        toggle.setAttribute("aria-expanded", "false");
+        toggle.focus();
+      }
+    });
+  }
+
+  /* Control «Reducir movimiento» persistente (§10) */
+  var motion = document.querySelector("[data-motion-toggle]");
+  var stored = null;
+  try { stored = window.localStorage.getItem("reino_rm"); } catch (e) {}
+  if (stored === "1" || (stored === null &&
+      window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches)) {
+    document.documentElement.classList.add("rm");
+    if (motion) motion.setAttribute("aria-pressed", "true");
+  }
+  if (motion) {
+    motion.addEventListener("click", function () {
+      var on = document.documentElement.classList.toggle("rm");
+      motion.setAttribute("aria-pressed", on ? "true" : "false");
+      try { window.localStorage.setItem("reino_rm", on ? "1" : "0"); } catch (e) {}
+    });
+  }
+
+  /* Detener animaciones fuera de pantalla / pestaña oculta (§10) */
+  if ("IntersectionObserver" in window) {
+    var animated = document.querySelectorAll(".stopmotion--loop");
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        en.target.style.animationPlayState = en.isIntersecting ? "running" : "paused";
+      });
+    });
+    animated.forEach(function (el) { io.observe(el); });
+    document.addEventListener("visibilitychange", function () {
+      var state = document.hidden ? "paused" : "running";
+      animated.forEach(function (el) { el.style.animationPlayState = state; });
+    });
+  }
+
+  /* Botones con estado pendiente real: solo confirman éxito tras el servidor.
+     Aquí solo marcamos «enviando» para feedback inmediato del clic. */
+  document.querySelectorAll("form[data-busy]").forEach(function (form) {
+    form.addEventListener("submit", function () {
+      var btn = form.querySelector("button[type=submit]");
+      if (btn && !btn.disabled) {
+        btn.dataset.label = btn.textContent;
+        btn.textContent = "Procesando…";
+        btn.setAttribute("aria-busy", "true");
+      }
+    });
+  });
+})();

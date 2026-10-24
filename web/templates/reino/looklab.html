@@ -5,11 +5,9 @@
 <section class="section container" style="max-width:1100px">
 
     {% if step != "revelacion" %}
-    <div class="progress" aria-label="Progreso de LookLab">
-        <ol>
-            {% for s in "1234" %}<li class="{% if forloop.counter < step_index %}done{% endif %}"></li>{% endfor %}
-        </ol>
-        <span class="step-n">{{ step_index }} de 4</span>
+    <div class="progress" role="group" aria-label="Progreso de LookLab: paso {{ step_index }} de 4">
+        {% for s in "1234" %}<i class="{% if forloop.counter <= step_index %}done{% endif %}"></i>{% endfor %}
+        <span class="step-n" style="background:none;color:var(--ink-soft);font-weight:700">{{ step_index }} de 4</span>
     </div>
     {% endif %}
 
@@ -201,8 +199,8 @@
     {# ============ REVELACIÓN (§6.6: la pantalla más cuidada) ============ #}
     {% if step == "revelacion" %}
     {% load reino_tags %}
-    <div class="reveal">
-        <p class="eyebrow" style="color:#E8A596">LookLab</p>
+    <div class="reveal-wrap">
+        <p class="eyebrow">LookLab</p>
         {% if alias %}<h1 class="reveal__title">¡{{ alias }} ya tiene su look!</h1>
         {% else %}<h1 class="reveal__title">Tu pequeño rey ya tiene su look.</h1>{% endif %}
         {% if budget and budget_scope == "total" %}
@@ -213,15 +211,20 @@
         </p>
 
         {% if main %}
-        <form method="post" action="{% url 'reino_looklab_add' reino_store.slug %}" data-reveal-form>
+        <form method="post" action="{% url 'reino_looklab_add' reino_store.slug %}" data-reveal-form class="reveal">
             {% csrf_token %}
 
+            {# ----- P08: la foto principal DOMINA; etiquetas mínimas ----- #}
+            <div class="reveal__photo pop-in">
+                {% with media=main.product.media.first %}
+                {% if media %}<img src="{% static media.path %}" alt="{{ media.alt }}">{% endif %}
+                {% endwith %}
+            </div>
+
+            <div class="reveal__panel">
             {# ----- Pieza principal (claramente elegida) ----- #}
             <div class="reveal__card reveal__card--main">
                 <div class="reveal__line">
-                    {% with media=main.product.media.first %}
-                    {% if media %}<img src="{% static media.path %}" alt="{{ media.alt }}">{% endif %}
-                    {% endwith %}
                     <div style="flex:1">
                         <strong>{{ main.product.short_title }}</strong>
                         {% if main.variant %} · {{ main.variant.option_label }}{% endif %}
@@ -231,7 +234,7 @@
                         <span class="badge-fit-pendiente">Elegí la talla</span>
                         {% endif %}
                         <div class="reveal__reasons">
-                            {% for reason in main.reasons %}{% with label=reason|reason_label %}{% if label %}<span class="pill" style="margin:4px 4px 0 0">{{ label }}</span>{% endif %}{% endwith %}{% endfor %}
+                            {% for reason in main.reasons %}{% with label=reason|reason_label %}{% if label %}<span class="tag">{{ label }}</span>{% endif %}{% endwith %}{% endfor %}
                         </div>
                         {% if main.size_pending %}
                         <div class="field" style="max-width:220px;margin-top:10px;margin-bottom:0">
@@ -306,10 +309,11 @@
             </div>
             <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:22px">
                 <button class="btn btn--primary" type="submit">Agregar selección al carrito</button>
-                <button class="btn btn--on-navy" type="submit"
+                <button class="btn btn--secondary" type="submit"
                         formaction="{% url 'reino_looklab_save' reino_store.slug %}">Guardar look</button>
-                <a class="btn btn--on-navy" href="?paso=ocasion">Editar preferencias</a>
+                <a class="btn btn--ghost" href="?paso=ocasion">Editar preferencias</a>
             </div>
+            </div>{# /reveal__panel #}
         </form>
 
         {# ----- Alternativas para la pieza principal (no se suman) ----- #}
@@ -330,23 +334,23 @@
 
         {# ----- Talla agotada: honestidad visible, nunca sustitución ----- #}
         {% if unavailable %}
-        <div class="reveal__card" style="border-left:4px solid var(--carmin)">
+        <div class="reveal__card" style="border-left:4px solid var(--error)">
             {% for u in unavailable %}
             <p class="mb-0"><strong>{{ u.product.short_title }}</strong>: {{ u.note }}
-            <a href="{% url 'reino_product' reino_store.slug u.product.slug %}" style="color:#fff">Ver la pieza</a></p>
+            <a href="{% url 'reino_product' reino_store.slug u.product.slug %}">Ver la pieza</a></p>
             {% endfor %}
         </div>
         {% endif %}
 
         {% else %}
-        <div class="reveal__card">
+        <div class="reveal__card" style="padding:22px">
             <h3 class="mt-0">No hay una opción completa para esos criterios.</h3>
             <p class="mb-0">Preferimos decírtelo a inventarte un look.
             {% if excluded %}Motivos: {% for e in excluded %}{{ e.product }} — {{ e.reason|excluded_label }}{% if not forloop.last %}; {% endif %}{% endfor %}.{% endif %}</p>
         </div>
         <div style="margin-top:22px;display:flex;gap:12px;flex-wrap:wrap">
-            <a class="btn btn--on-navy" href="?paso=ocasion">Cambiar criterios</a>
-            <a class="btn btn--on-navy" href="{% url 'reino_collection' reino_store.slug %}">Explorar la colección</a>
+            <a class="btn btn--secondary" href="?paso=ocasion">Cambiar criterios</a>
+            <a class="btn btn--ghost" href="{% url 'reino_collection' reino_store.slug %}">Explorar la colección</a>
         </div>
         {% endif %}
     </div>

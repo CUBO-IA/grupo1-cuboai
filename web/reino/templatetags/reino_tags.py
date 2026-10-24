@@ -43,3 +43,12 @@ def reason_label(code):
 @register.filter
 def excluded_label(code):
     return EXCLUDED_LABELS.get(code, code)
+
+
+@register.filter
+def module_visible(modules, key):
+    """Marca el checkbox si el módulo está visible en la config del tema."""
+    for module in (modules or []):
+        if module.get("key") == key:
+            return 'checked="checked"' if module.get("visible") else ""
+    return 'checked="checked"'  # módulo nuevo: visible por defecto

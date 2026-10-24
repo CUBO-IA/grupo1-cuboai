@@ -12,6 +12,7 @@ from decimal import Decimal, InvalidOperation
 from django.shortcuts import redirect, render
 from django.views.decorators.http import require_POST
 
+from . import services_analytics
 from . import services_fit, services_memory, tenancy
 from .models import Consent, Product, Variant
 from .services_recommend import compose_bundle, normalize_intent, recommend, variants_with_fit
@@ -44,6 +45,9 @@ def looklab(request, store):
     draft = tenancy.looklab_draft(request, store)
     step = _step(request, store)
     errors = {}
+    if step == 1 and request.method == "GET":
+        services_analytics.track("looklab_started", store=store,
+                                 session_key=session_key or "")
 
     if request.method == "POST":
         action = request.POST.get("action", "")
@@ -221,6 +225,9 @@ def _pick_variant(product, measurement, needs_fit):
 
 
 def _reveal(request, store, draft, profile):
+    if request is not None:  # las pruebas de unidad llaman con request=None
+        services_analytics.track("looklab_completed", store=store,
+                                 session_key=request.session.session_key or "")
     """Calcula la revelación: UNA pieza principal + complementos coherentes.
 
     - Precedencia de medidas de esta visita sobre las guardadas (R09).

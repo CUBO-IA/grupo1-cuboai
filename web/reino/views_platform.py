@@ -58,12 +58,25 @@ def sitemap_xml(request):
 
 
 def directory(request):
-    """P01 · Directorio de tiendas de la demostración.
+    """P02 · Directorio: elegir una marca por categoría y estilo.
 
-    Texto honesto: comercios de demostración; la marca activa siempre visible.
+    Filtros por categoría y búsqueda por nombre; la demo identificada antes
+    de entrar; las tiendas en borrador no aparecen. Cada tarjeta muestra
+    identidad propia y muestra real de productos (AC10).
     """
+    from . import services_search
+    q = request.GET.get("q", "").strip()
+    category = request.GET.get("categoria", "").strip()
     stores = Store.objects.exclude(status=Store.Status.DRAFT).select_related("merchant")
-    return render(request, "reino/directory.html", {"stores": stores})
+    if q:
+        stores = [s for s in stores if q.lower() in s.name.lower()]
+    if category:
+        stores = [s for s in stores if s.category == category]
+    stores = services_search.annotate_stores(list(stores))
+    categories = sorted({s.category for s in Store.objects.exclude(status=Store.Status.DRAFT)})
+    return render(request, "reino/directory.html", {
+        "stores": stores, "q": q, "category": category, "categories": categories,
+    })
 
 
 def for_business(request):
@@ -72,7 +85,10 @@ def for_business(request):
 
 
 def _is_operator(user):
-    return user.is_superuser or user.is_staff
+    """Operador GLOBAL de plataforma (N11, §8.4): permiso explícito
+    `reino.operate_platform`. Ser dueño/empleado/logística de un comercio —
+    incluso con is_staff=True — NO concede administración global."""
+    return user.is_authenticated and user.has_perm("reino.operate_platform")
 
 
 @login_required(login_url="panel_login")
@@ -108,15 +124,20 @@ def merchant_onboard(request):
         request.session["reino_flash"] = " ".join(errors)
         return redirect("reino_platform")
 
-    merchant = Merchant.objects.create(name=name, status="onboarding")
+    merchant = Merchant.objects.create(name=name, status=Merchant.Status.DRAFT)
     store = Store.objects.create(
         merchant=merchant, slug=slug, name=name, category=category,
         is_demo=is_demo, status=Store.Status.DEMO if is_demo else Store.Status.DRAFT,
     )
     user, created = User.objects.get_or_create(username=username)
+    temp_password = None
     if created:
-        user.set_unusable_password()
-        user.is_staff = True
+        # Alta operable (§14): contraseña temporal usable mostrada UNA vez al
+        # operador; sin ella la tienda nacería sin acceso real del responsable.
+        import secrets
+        temp_password = secrets.token_urlsafe(9)
+        user.set_password(temp_password)
+        user.is_staff = True  # acceso al panel de SU tienda; NO a plataforma (N11)
         user.save()
     MerchantMember.objects.create(user=user, merchant=merchant, role="owner")
     ShippingZone.objects.create(store=store, name="Retiro en taller", mode="pickup", fee=0)
@@ -125,10 +146,14 @@ def merchant_onboard(request):
         body="Política de cambios pendiente de aprobación del negocio.",
         audience="customer", is_published=False,
     )
-    request.session["reino_flash"] = (
+    flash = (
         f"«{name}» creado en borrador con {username} como propietario. "
         "Completá el checklist antes de activar."
     )
+    if temp_password:
+        flash += (f" Contraseña temporal (mostrada solo esta vez): {temp_password} — "
+                  "pedile que la cambie al entrar.")
+    request.session["reino_flash"] = flash
     return redirect("reino_platform")
 
 
