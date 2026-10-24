@@ -1,0 +1,141 @@
+{% extends "reino/merchant_base.html" %}
+{% load static reino_tags %}
+{% block title %}Diseño de tienda · {{ store.name }}{% endblock %}
+{% block panel %}
+<p class="eyebrow">Estudio de diseño</p>
+<h1>Apariencia y contenido de {{ store.name }}</h1>
+<p class="lede">Borrador y versión publicada separados. Publicar exige validación
+(legibilidad, parejas tipográficas, módulos). Otra tienda nunca se toca.</p>
+
+<div class="studio" style="margin-top:22px">
+    <div class="studio__controls">
+        <form method="post" action="{% url 'reino_merchant_diseno_save' store.slug %}" class="looklab-card">
+            {% csrf_token %}
+            <h2 style="font-size:1.2rem">Colores</h2>
+            {% with draft.config.colors as colors %}
+            <div class="swatches">
+                <label class="swatch"><input type="color" name="color_ink" value="{{ colors.ink|default:'#15172E' }}"> Tinta</label>
+                <label class="swatch"><input type="color" name="color_bg" value="{{ colors.bg|default:'#FFF8ED' }}"> Fondo</label>
+                <label class="swatch"><input type="color" name="color_surface" value="{{ colors.surface|default:'#FFFFFF' }}"> Tarjetas</label>
+                <label class="swatch"><input type="color" name="color_primary" value="{{ colors.primary|default:'#2C3FFF' }}"> Acción principal</label>
+                <label class="swatch"><input type="color" name="color_accent" value="{{ colors.accent|default:'#D6F85A' }}"> Acento</label>
+                <label class="swatch"><input type="color" name="color_soft" value="{{ colors.soft|default:'#F1EDE3' }}"> Suave</label>
+            </div>
+            {% endwith %}
+
+            <h2 style="font-size:1.2rem;margin-top:20px">Tipografía y formas</h2>
+            <div class="grid grid--2">
+                <div class="field"><label for="font_pair">Pareja tipográfica</label>
+                    <select id="font_pair" name="font_pair">
+                        {% for key, pair in font_pairs.items %}
+                        <option value="{{ key }}" {% if draft.config.font_pair == key %}selected{% endif %}>{{ pair.display }} + {{ pair.body }}</option>
+                        {% endfor %}
+                    </select></div>
+                <div class="field"><label for="shape">Intensidad de formas</label>
+                    <select id="shape" name="shape">
+                        <option value="rounded" {% if draft.config.shape == "rounded" %}selected{% endif %}>Redondeada</option>
+                        <option value="soft" {% if draft.config.shape == "soft" %}selected{% endif %}>Suave</option>
+                        <option value="sharp" {% if draft.config.shape == "sharp" %}selected{% endif %}>Marcada</option>
+                    </select></div>
+                <div class="field"><label for="buttons">Botones</label>
+                    <select id="buttons" name="buttons">
+                        <option value="pill" {% if draft.config.buttons == "pill" %}selected{% endif %}>Píldora</option>
+                        <option value="rounded" {% if draft.config.buttons == "rounded" %}selected{% endif %}>Redondeado</option>
+                    </select></div>
+                <div class="field"><label for="hero_product">Pieza del hero</label>
+                    <select id="hero_product" name="hero_product">
+                        <option value="">La primera destacada</option>
+                        {% for p in products %}
+                        <option value="{{ p.public_id }}" {% if draft.config.hero.product_id == p.public_id|stringformat:"s" %}selected{% endif %}>{{ p.short_title }}</option>
+                        {% endfor %}
+                    </select></div>
+            </div>
+            <div class="field"><label for="hero_headline">Titular del hero</label>
+                <input type="text" id="hero_headline" name="hero_headline" maxlength="80"
+                       value="{{ draft.config.hero.headline }}" placeholder="Pequeño perro. Mucha actitud."></div>
+            <div class="field"><label for="hero_sub">Bajada del hero</label>
+                <input type="text" id="hero_sub" name="hero_sub" maxlength="140"
+                       value="{{ draft.config.hero.sub }}" placeholder="Descripción corta de la tienda"></div>
+
+            <h2 style="font-size:1.2rem;margin-top:20px">Módulos de la portada</h2>
+            <div class="pill-row">
+                {% for key in module_keys %}
+                <label class="pill">
+                    <input type="checkbox" name="modules" value="{{ key }}"
+                           {% if key in visible_modules %}checked{% endif %}>
+                    {{ key }}
+                </label>
+                {% endfor %}
+            </div>
+
+            <div style="display:flex;gap:12px;margin-top:22px;flex-wrap:wrap">
+                <button class="btn btn--secondary" type="submit">Guardar borrador</button>
+        </form>
+                <form method="post" action="{% url 'reino_merchant_diseno_publish' store.slug %}">
+                    {% csrf_token %}
+                    <button class="btn btn--primary" type="submit">Publicar versión</button>
+                </form>
+            </div>
+
+        <div class="looklab-card">
+            <h2 style="font-size:1.2rem">Imágenes de la tienda</h2>
+            <p class="small muted">Subí un archivo real (JPG/PNG/WebP, máx. 3 MB). Se valida el contenido.</p>
+            <form method="post" action="{% url 'reino_merchant_media_upload' store.slug %}" enctype="multipart/form-data">
+                {% csrf_token %}
+                <div class="field"><label for="file">Archivo</label>
+                    <input type="file" id="file" name="file" accept="image/jpeg,image/png,image/webp" required></div>
+                <div class="field"><label for="alt">Texto alternativo</label>
+                    <input type="text" id="alt" name="alt" maxlength="160" required></div>
+                <div class="field"><label for="origin">Origen / derechos (dato editorial)</label>
+                    <input type="text" id="origin" name="origin" maxlength="160" placeholder="Foto propia del negocio"></div>
+                <button class="btn btn--secondary btn--sm" type="submit">Subir imagen</button>
+            </form>
+            {% if media %}
+            <div class="media-grid" style="margin-top:16px">
+                {% for m in media %}<img src="{{ m.file.url }}" alt="{{ m.alt }}" loading="lazy">{% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="looklab-card">
+            <h2 style="font-size:1.2rem">Historial de versiones</h2>
+            {% if versions %}
+            <table>
+                <thead><tr><th>Versión</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
+                <tbody>
+                {% for v in versions %}
+                <tr>
+                    <td>v{{ v.version }}</td>
+                    <td><span class="state-chip {% if v.status == 'published' %}state-chip--ok{% else %}state-chip--pending{% endif %}">{{ v.get_status_display }}</span></td>
+                    <td>{{ v.created_at|date:"Y-m-d H:i" }}</td>
+                    <td>
+                        {% if v.status != "published" %}
+                        <form method="post" action="{% url 'reino_merchant_diseno_restore' store.slug v.version %}">
+                            {% csrf_token %}
+                            <button class="btn btn--ghost btn--sm" type="submit">Restaurar</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+            {% else %}<p class="muted">Todavía no hay versiones guardadas.</p>{% endif %}
+        </div>
+    </div>
+
+    <div class="studio__preview">
+        <div class="studio__switch" role="group" aria-label="Tamaño de vista previa">
+            <button type="button" aria-pressed="true" onclick="const f=document.getElementById('preview-frame');f.style.maxWidth='none';this.setAttribute('aria-pressed','true');this.nextElementSibling.setAttribute('aria-pressed','false')">Escritorio</button>
+            <button type="button" aria-pressed="false" onclick="const f=document.getElementById('preview-frame');f.style.maxWidth='390px';this.setAttribute('aria-pressed','true');this.previousElementSibling.setAttribute('aria-pressed','false')">Móvil</button>
+        </div>
+        <div class="studio__frame" id="preview-frame">
+            <iframe src="{% url 'reino_store_home' store.slug %}" title="Vista previa de la tienda" loading="lazy"></iframe>
+        </div>
+        <p class="fine" style="margin-top:10px">La vista previa muestra la versión PUBLICADA.
+        Publicá el borrador para ver tus cambios.</p>
+        {% if published %}<p class="small">Publicada: v{{ published.version }} · {{ published.published_at|date:"Y-m-d H:i" }}</p>
+        {% else %}<p class="small">Aún no hay versión publicada: la tienda usa el tema neutral.</p>{% endif %}
+    </div>
+</div>
+{% endblock %}

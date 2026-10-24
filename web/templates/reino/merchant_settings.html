@@ -110,15 +110,26 @@
 </div>
 
 <h2 style="margin-top:32px">Integraciones</h2>
-<div class="table-wrap" style="max-width:760px">
+<p class="small muted" style="max-width:70ch">El estado refleja COMPROBACIONES reales con fecha,
+nunca la sola presencia de una clave (AC25). «Evaluación aprobada» exige el dataset con proveedor real.</p>
+<div class="table-wrap" style="max-width:900px">
 <table class="data">
-    <thead><tr><th>Integración</th><th>Estado</th><th>Detalle</th></tr></thead>
+    <thead><tr><th>Integración</th><th>Estado</th><th>Última comprobación</th><th>Detalle</th><th></th></tr></thead>
     <tbody>
         {% for i in integrations %}
         <tr>
             <td><strong>{{ i.name }}</strong></td>
-            <td><span class="state-chip {% if i.state == "Sin configurar" %}state-chip--cancelled{% elif i.state == "Prueba" %}state-chip--pending{% else %}state-chip--paid{% endif %}">{{ i.state }}</span></td>
-            <td class="small muted">{{ i.detail }}</td>
+            <td><span class="state-chip {% if i.row.state == 'no_configurada' %}state-chip--off{% elif i.row.state == 'error' %}state-chip--error{% elif i.row.state == 'configurada' or i.row.state == 'degradada' %}state-chip--pending{% else %}state-chip--ok{% endif %}">{{ i.row.get_state_display }}</span></td>
+            <td class="small muted">{% if i.row.checked_at %}{{ i.row.checked_at|date:"Y-m-d H:i" }}{% else %}Nunca{% endif %}</td>
+            <td class="small muted">{{ i.row.detail }}</td>
+            <td>
+                {% if i.key == "ai" or i.key == "email" %}
+                <form method="post" action="{% url 'reino_merchant_probe' store.slug i.key %}">
+                    {% csrf_token %}
+                    <button class="btn btn--ghost btn--sm" type="submit">Probar conexión</button>
+                </form>
+                {% endif %}
+            </td>
         </tr>
         {% endfor %}
     </tbody>

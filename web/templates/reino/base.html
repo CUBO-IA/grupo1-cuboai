@@ -11,7 +11,7 @@
     {% block structured_data %}{% endblock %}
     <link rel="stylesheet" href="{% static 'reino/css/reino.css' %}">
 </head>
-<body>
+<body{% if reino_theme_css %} style="{{ reino_theme_css }}"{% endif %}>
 <a class="skip-link" href="#contenido">Saltar al contenido</a>
 
 {% comment %}Auditoría §6.2: «Sin perfil activo» no es lo primero que lee una
@@ -50,10 +50,16 @@ aviso de tienda demo se mantiene siempre visible.{% endcomment %}
             <a href="{% url 'reino_help' reino_store.slug %}">Ayuda</a>
         </nav>
         {% else %}
-        <a class="rk-logo" href="{% url 'reino_directory' %}">
+        <a class="rk-logo" href="{% url 'reino_explore' %}">
             <span class="crown" aria-hidden="true">♛</span>
-            <span>Reino Commerce<small>Tu tienda entiende mejor</small></span>
+            <span>Reino<small>Cosas con personalidad</small></span>
         </a>
+        <nav class="rk-nav" aria-label="Plataforma">
+            <a href="{% url 'reino_explore' %}">Explorar</a>
+            <a href="{% url 'reino_directory' %}">Tiendas</a>
+            <a href="{% url 'reino_search' %}">Buscar</a>
+            <a href="{% url 'reino_compare' %}">Comparar</a>
+        </nav>
         {% endif %}
         <div class="rk-header__actions">
             {% if reino_store %}
@@ -66,8 +72,12 @@ aviso de tienda demo se mantiene siempre visible.{% endcomment %}
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 20c1.4-3.4 4.2-5 7.5-5s6.1 1.6 7.5 5"/></svg>
                 <span class="sr-only">Cuenta</span>
             </a>
+            <a class="rk-iconbtn" href="{% url 'reino_compare' %}" aria-label="Comparar piezas">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 4v16M15 4v16M4 9h5M4 15h5M15 9h5M15 15h5"/></svg>
+                {% if reino_compare_count %}<span class="badge">{{ reino_compare_count }}</span>{% endif %}
+            </a>
             {% if reino_store %}
-            <a class="rk-iconbtn" href="{% url 'reino_cart' reino_store.slug %}" aria-label="Carrito">
+            <a class="rk-iconbtn" href="{% url 'reino_cart' reino_store.slug %}" aria-label="Bolsa">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3.5 5h2.2l2 11h10.8l1.9-8H7.1"/><circle cx="9.5" cy="19.5" r="1.6"/><circle cx="17" cy="19.5" r="1.6"/></svg>
                 {% if reino_cart_units %}<span class="badge">{{ reino_cart_units }}</span>{% endif %}
             </a>
@@ -90,7 +100,10 @@ aviso de tienda demo se mantiene siempre visible.{% endcomment %}
         <a href="{% url 'reino_help' reino_store.slug %}">Ayuda</a>
         <a href="{% url 'reino_cart' reino_store.slug %}">Carrito{% if reino_cart_units %} ({{ reino_cart_units }}){% endif %}</a>
         {% else %}
+        <a href="{% url 'reino_explore' %}">Explorar</a>
         <a href="{% url 'reino_directory' %}">Tiendas</a>
+        <a href="{% url 'reino_search' %}">Buscar</a>
+        <a href="{% url 'reino_compare' %}">Comparar</a>
         <a href="{% url 'reino_for_business' %}">Para negocios</a>
         <a href="{% url 'reino_account' %}">Cuenta</a>
         {% endif %}
@@ -101,6 +114,11 @@ aviso de tienda demo se mantiene siempre visible.{% endcomment %}
 {% if reino_flash %}<div class="container" style="margin-top:18px"><p class="flash-ok" role="status">{{ reino_flash }}</p></div>{% endif %}
 {% block content %}{% endblock %}
 </main>
+
+{% comment %}Control de movimiento persistente (§10): el usuario puede
+reducir las animaciones; se respeta además prefers-reduced-motion.{% endcomment %}
+<button type="button" class="motion-toggle" data-motion-toggle aria-pressed="false"
+        title="Reducir movimiento">Reducir movimiento</button>
 
 <footer class="rk-footer">
     <div class="container">

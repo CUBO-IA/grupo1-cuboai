@@ -8,6 +8,7 @@
         <a href="{% url 'reino_merchant_customers' store.slug %}" {% if request.resolver_match.url_name == "reino_merchant_customers" %}aria-current="page"{% endif %}>Clientes</a>
         <a href="{% url 'reino_merchant_finance' store.slug %}" {% if request.resolver_match.url_name == "reino_merchant_finance" %}aria-current="page"{% endif %}>Finanzas</a>
         <a href="{% url 'reino_merchant_logistics' store.slug %}" {% if request.resolver_match.url_name == "reino_merchant_logistics" %}aria-current="page"{% endif %}>Logística</a>
+        <a href="{% url 'reino_merchant_diseno' store.slug %}" {% if "diseno" in request.resolver_match.url_name %}aria-current="page"{% endif %}>Diseño</a>
         <a href="{% url 'reino_merchant_settings' store.slug %}" {% if "settings" in request.resolver_match.url_name %}aria-current="page"{% endif %}>Configuración</a>
         <a href="{% url 'reino_store_home' store.slug %}" style="opacity:.7">← Ver tienda</a>
     </nav>
