@@ -105,8 +105,13 @@ class CatalogEditorTests(ReinoTestCase):
 
 class OnboardingTests(ReinoTestCase):
     def setUp(self):
+        # Operador global: permiso EXPLÍCITO de plataforma (N11); is_staff
+        # solo nunca basta (caso cubierto en test_round2.test_11).
+        from django.contrib.auth.models import Permission
         self.operator = User.objects.create_user(username="op", password="x",
                                                  is_staff=True)
+        self.operator.user_permissions.add(Permission.objects.get(
+            codename="operate_platform", content_type__app_label="reino"))
         self.client.force_login(self.operator)
 
     def test_alta_asistida_crea_borrador_con_propietario(self):
@@ -140,12 +145,15 @@ class OutboxTests(ReinoTestCase):
         OutboxEvent.objects.create(type="metric", payload={"event": "test"})
         OutboxEvent.objects.create(type="order_confirmation_email", payload={})
         call_command("process_outbox")
-        done = OutboxEvent.objects.filter(status="done")
-        self.assertEqual(done.count(), 2)
+        # Métrica: procesada. Correo sin habilitar: BLOQUEADO con causa
+        # precisa (nunca marcado como enviado/procesado, AC19).
+        self.assertEqual(OutboxEvent.objects.filter(status="done").count(), 1)
         email = OutboxEvent.objects.get(type="order_confirmation_email")
-        self.assertIn("no configurado", email.payload["result"])  # honesto
-        call_command("process_outbox")  # segunda pasada: no repite
-        self.assertEqual(OutboxEvent.objects.filter(status="done").count(), 2)
+        self.assertEqual(email.status, "blocked")
+        self.assertIn("no habilitado", email.last_error)
+        call_command("process_outbox")  # segunda pasada: no repite ni cambia estados
+        self.assertEqual(OutboxEvent.objects.filter(status="done").count(), 1)
+        self.assertEqual(OutboxEvent.objects.filter(status="blocked").count(), 1)
 
 
 class SeedSafetyTests(ReinoTestCase):

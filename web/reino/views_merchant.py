@@ -388,21 +388,18 @@ def logistics(request, store):
 
 @merchant_view
 def settings_view(request, store):
-    """M10: identidad, integraciones con estado real comprobado y uso de IA."""
-    from django.conf import settings as djsettings
-    integrations = [
-        {"name": "Pasarela de pagos", "state": "Sin configurar",
-         "detail": "Pago manual con verificación del equipo (flujo aprobado P0)."},
-        {"name": "Bitcoin (manual)", "state": "Prueba",
-         "detail": "Descuento 15 % sobre piezas participantes, pendiente de verificación."},
-        {"name": "Correo transaccional", "state": "Sin configurar",
-         "detail": "La pantalla de pedido no promete envío de correo."},
-        {"name": "IA (Royal Stylist)",
-         "state": "Producción" if djsettings.REINO_AI.get("API_KEY") else "Sin configurar",
-         "detail": "Sin clave el asesor opera en selección guiada etiquetada."},
-        {"name": "Operador logístico", "state": "Sin configurar",
-         "detail": "Matriz de zonas manual (retiro y tarifas por zona)."},
-    ]
+    """M10: identidad, integraciones con estado real COMPROBADO (AC25).
+
+    Ninguna integración se declara «producción» por la presencia de una
+    clave: estados no_configurada/configurada/conexion_comprobada/
+    evaluacion_aprobada/degradada/error con fecha de última prueba real y
+    detalle accionable; nunca se muestran secretos.
+    """
+    from . import services_integrations
+    names = {"ai": "IA (Royal Stylist)", "email": "Correo transaccional",
+             "payments": "Pasarela de pagos", "postgres": "PostgreSQL"}
+    integrations = [{"key": s.key, "name": names.get(s.key, s.key), "row": s}
+                    for s in services_integrations.all_states()]
     return render(request, "reino/merchant_settings.html", {
         "store": store, "integrations": integrations,
         "zones": ShippingZone.objects.filter(store=store),
