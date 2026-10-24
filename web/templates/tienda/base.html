@@ -5,17 +5,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Weiner Kingdom{% endblock %}</title>
-    <link rel="stylesheet" href="{% static 'tienda/css/style.css' %}">
+    <link rel="stylesheet" href="{% static 'tienda/css/style.css' %}?v={{ asset_version }}">
 </head>
 <body>
 <header class="site-header">
-    <a class="logo" href="{% url 'inicio' %}">Weiner Kingdom</a>
-    <nav>
-        <a href="{% url 'inicio' %}">Home</a>
+    <a class="logo" href="{% url 'inicio' %}" aria-label="Weiner Kingdom, go to the home page">
+        <img src="{% static 'tienda/img/WeinerKingdom_icon.png' %}" alt="Weiner Kingdom" width="94" height="91">
+    </a>
+    <nav class="site-nav" aria-label="Main navigation">
+        <a class="nav-icon" href="{% url 'inicio' %}" aria-label="Home">
+            <img src="{% static 'tienda/img/Home_icon.png' %}" alt="" width="28" height="28">
+        </a>
         <a href="{% url 'productos' %}">Products</a>
-        <a href="{% url 'smart_fit' %}">Smart Fit</a>
+        <a href="{% url 'smart_fit' %}">My Dog</a>
         <a href="{% url 'assistant' %}">Guide</a>
-        <a href="{% url 'cart' %}">Cart{% if cart_units %} ({{ cart_units }}){% endif %}</a>
+        <a class="nav-icon nav-cart" href="{% url 'cart' %}"
+           aria-label="Cart{% if cart_units %}, {{ cart_units }} item{{ cart_units|pluralize }}{% endif %}">
+            <img src="{% static 'tienda/img/Cart_icon.png' %}" alt="" width="30" height="30">
+            {% if cart_units %}<span class="cart-badge" aria-hidden="true">{{ cart_units }}</span>{% endif %}
+        </a>
     </nav>
 </header>
 
@@ -33,7 +41,7 @@
         </a>
     </p>
 </footer>
-<script src="{% static 'tienda/js/script.js' %}"></script>
+<script src="{% static 'tienda/js/script.js' %}?v={{ asset_version }}"></script>
 </body>
 </html>
 

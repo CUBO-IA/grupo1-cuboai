@@ -76,6 +76,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "tienda.context.cart_summary",
+                "tienda.context.asset_version",
                 "reino.context.reino_context",
             ]
         },

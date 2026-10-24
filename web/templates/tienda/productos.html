@@ -15,6 +15,13 @@
             <h2>{{ item.nombre }}</h2>
             <p class="price">{{ item.precio }}</p>
             <a class="button" href="{% url 'detalle' key %}">View Product</a>
+            <form method="post" action="{% url 'cart_add' %}" class="card-cart">
+                {% csrf_token %}
+                <input type="hidden" name="producto" value="{{ key }}">
+                <input type="hidden" name="quantity" value="1">
+                {% if saved_dog %}<input type="hidden" name="dog" value="{{ saved_dog.public_id }}">{% endif %}
+                <button class="button" type="submit">Add to Cart</button>
+            </form>
         </div>
     </article>
 {% endfor %}

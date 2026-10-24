@@ -20,7 +20,12 @@ def inicio(request):
     return render(request, "tienda/inicio.html", {"featured": featured})
 
 def productos(request):
-    return render(request, "tienda/productos.html", {"productos": PRODUCTOS})
+    saved = _saved_dogs(request)
+    return render(
+        request,
+        "tienda/productos.html",
+        {"productos": PRODUCTOS, "saved_dog": saved[0] if saved else None},
+    )
 
 def detalle(request, producto):
     item = PRODUCTOS.get(producto)
@@ -100,6 +105,17 @@ def _save_dog(request, form):
     return dog
 
 
+def _pending_line(request):
+    """Linea del carrito de la sesion sin medidas, indicada con ?line=<id>."""
+    line_id = _uuid_or_none(request.GET.get("line"))
+    cart = _session_cart(request)
+    if line_id is None or cart is None:
+        return None
+    return Quote.objects.filter(
+        public_id=line_id, cart=cart, dog__isnull=True, status=Quote.Status.DRAFT
+    ).first()
+
+
 def smart_fit(request):
     from . import services
 
@@ -115,6 +131,11 @@ def smart_fit(request):
                 form.add_error(None, SAVE_ERROR)
             else:
                 request.session[FLASH] = "Measurements saved."
+                line = _pending_line(request)
+                if line is not None:
+                    line.dog = dog
+                    line.save(update_fields=["dog"])
+                    return redirect("cart")
                 url = reverse("smart_fit_resultado", args=[dog.public_id])
                 return redirect(url + (f"?producto={producto}" if producto else ""))
     else:
@@ -257,6 +278,8 @@ def smart_quote(request, public_id):
     quote = get_object_or_404(Quote.objects.select_related("dog"), public_id=public_id)
     if quote.product_slug not in PRODUCTOS:
         return _unavailable(request)
+    if quote.dog_id is None:
+        return redirect("cart")
     return render(request, "tienda/smartquote.html", _quote_context(quote))
 
 
@@ -266,6 +289,8 @@ def smart_quote_cantidad(request, public_id):
     quote = get_object_or_404(Quote.objects.select_related("dog"), public_id=public_id)
     if quote.product_slug not in PRODUCTOS:
         return _unavailable(request)
+    if quote.dog_id is None:
+        return redirect("cart")
     if request.method != "POST":
         return redirect("smart_quote", public_id=quote.public_id)
     try:
@@ -286,6 +311,8 @@ def checkout(request, public_id):
         return redirect("order_detail", public_id=existing.public_id)
     if quote.product_slug not in PRODUCTOS:
         return _unavailable(request)
+    if quote.dog_id is None:
+        return redirect("cart")
     if quote.status == Quote.Status.CANCELLED:
         return render(request, "tienda/checkout.html", {"cancelled": True}, status=400)
 
@@ -347,45 +374,38 @@ def _cart_context(cart, payment_method="unspecified"):
 
 def cart_view(request):
     cart = _session_cart(request)
-    return render(request, "tienda/cart.html", _cart_context(cart))
+    context = _cart_context(cart)
+    context["saved_dogs"] = _saved_dogs(request)
+    return render(request, "tienda/cart.html", context)
 
 
 def cart_add(request):
-    """Añade un producto al carrito. Solo se leen perfil, producto, cantidad y
-    talla; el precio sale del catálogo."""
+    """Anade un producto al carrito (catalogo, ficha o guia). Solo se leen
+    producto, cantidad, talla y perfil opcional; el precio sale del catalogo.
+    Sin perfil la linea queda con medidas pendientes: Smart Fit solo se abre
+    cuando el cliente lo pide desde el carrito."""
     from . import services
 
     if request.method != "POST":
         return redirect("cart")
     dog = DogProfile.objects.filter(public_id=_uuid_or_none(request.POST.get("dog"))).first()
-    if dog is None:
-        return redirect("smart_fit")
     slug = request.POST.get("producto", "")
+    cart = _session_cart(request, create=True)
 
     def _error(message):
-        return render(
-            request,
-            "tienda/smartfit_resultado.html",
-            {"dog": dog, "productos": PRODUCTOS, "quote_error": message,
-             "max_quantity": services.MAX_QUANTITY, "size_options": services.size_options(),
-             "preselect": slug if slug in PRODUCTOS else ""},
-            status=400,
-        )
+        context = _cart_context(cart)
+        context["add_error"] = message
+        return render(request, "tienda/cart.html", context, status=400)
 
     if slug not in PRODUCTOS:
         return _error("Please choose a product.")
-    if services.missing_measurements(dog, slug):
-        url = reverse("smart_fit_editar", args=[dog.public_id])
-        return redirect(f"{url}?producto={slug}")
     try:
         quantity = services.normalize_quantity(request.POST.get("quantity", "1"))
-        services.add_to_cart(
-            _session_cart(request, create=True), dog, slug, quantity,
-            request.POST.get("size", ""),
-        )
+        services.add_to_cart(cart, dog, slug, quantity, request.POST.get("size", ""))
     except (services.QuantityError, services.CartError, services.UnknownProduct,
             services.InvalidCatalogPrice) as exc:
         return _error(str(exc) or "That product cannot be added.")
+    request.session[FLASH] = PRODUCTOS[slug]["nombre"] + " added to your cart."
     return redirect("cart")
 
 
@@ -421,7 +441,15 @@ def cart_line_update(request, public_id):
             return render(request, "tienda/cart.html", context, status=400)
         quote.quantity = quantity
         quote.size_label = size
-        quote.save(update_fields=["quantity", "size_label"])
+        fields = ["quantity", "size_label"]
+        dog = DogProfile.objects.filter(
+            public_id=_uuid_or_none(request.POST.get("dog")),
+            public_id__in=request.session.get(SESSION_DOGS, []),
+        ).first()
+        if dog is not None:
+            quote.dog = dog
+            fields.append("dog")
+        quote.save(update_fields=fields)
     return redirect("cart")
 
 

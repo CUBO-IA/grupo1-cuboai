@@ -112,16 +112,30 @@ class HomeTests(TestCase):
         page = self.client.get(reverse("inicio"))
         self.assertEqual(page.status_code, 200)
         html = page.content.decode()
-        self.assertIn("tienda/img/home-render.jpg", html)
-        self.assertIsNotNone(finders.find("tienda/img/home-render.jpg"))
+        self.assertIn("tienda/img/home-render-remix.png", html)
+        self.assertIsNotNone(finders.find("tienda/img/home-render-remix.png"))
         section = re.search(r'<section class="home-render".*?</section>', html, flags=re.S).group(0)
-        # Dentro del render solo hay la imagen y la cinta de navegación.
+        # Dentro del banner solo hay la imagen: sin texto ni botones encima.
         self.assertEqual(section.count("<img"), 1)
-        self.assertEqual(section.count("<nav"), 1)
-        for tag in ("<h1", "<h2", "<p", "<button", "class=\"card\"", "class=\"button\""):
+        for tag in ("<nav", "<h1", "<h2", "<p", "<button", "class=\"card\"", "class=\"button\""):
             self.assertNotIn(tag, section)
-        self.assertIn(reverse("productos"), section)
-        self.assertIn(reverse("smart_fit"), section)
+
+    def test_top_strip_links_and_icons(self):
+        html = self.client.get(reverse("inicio")).content.decode()
+        header = re.search(r"<header.*?</header>", html, flags=re.S).group(0)
+        for name in ("WeinerKingdom_icon.png", "Home_icon.png", "Cart_icon.png"):
+            self.assertIn(name, header)
+            self.assertIsNotNone(finders.find("tienda/img/" + name))
+        for url in (reverse("inicio"), reverse("productos"), reverse("smart_fit"),
+                    reverse("assistant"), reverse("cart")):
+            self.assertIn(f'href="{url}"', header)
+        self.assertIn("My Dog", header)
+
+    def test_home_text_is_preserved(self):
+        page = self.client.get(reverse("inicio"))
+        self.assertContains(page, "Made for the little dachshunds.")
+        self.assertContains(page, "we turn")
+        self.assertContains(page, "Explore our collection in La Madriguera Caf")
 
     def test_home_links_to_products_and_smart_fit(self):
         page = self.client.get(reverse("inicio"))

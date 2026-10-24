@@ -1,3 +1,17 @@
+import os
+
+from django.conf import settings
+
+
+def asset_version(request):
+    """Version del CSS/JS (fecha del archivo) para que el navegador no use una copia vieja."""
+    path = os.path.join(settings.BASE_DIR, "static", "tienda", "css", "style.css")
+    try:
+        return {"asset_version": int(os.path.getmtime(path))}
+    except OSError:
+        return {"asset_version": 0}
+
+
 def cart_summary(request):
     """Número de unidades en el carrito de la sesión (para la cabecera)."""
     from . import services

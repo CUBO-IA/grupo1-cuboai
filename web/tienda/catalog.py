@@ -168,8 +168,8 @@ PRODUCTOS = {
         "nombre": "Beige Sophisticated Sausage Dachshund Anti-Rub Dog Harness",
         "nombre_corto": "Beige Anti-Rub Harness",
         "precio": "$63.00",
-        "imagen": "tienda/img/beige-harness-1.jpg",
-        "imagenes": ["tienda/img/beige-harness-1.jpg", "tienda/img/beige-harness-2.jpg"],
+        "imagen": "tienda/img/beige-harness-2.jpg",
+        "imagenes": ["tienda/img/beige-harness-2.jpg", "tienda/img/beige-harness-1.jpg"],
         "tagline": "Padded comfort with soft edges.",
         "descripcion": "Padded beige harness with soft edges and durable hardware.",
         "caracteristicas": [

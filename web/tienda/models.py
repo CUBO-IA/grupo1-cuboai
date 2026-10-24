@@ -52,8 +52,9 @@ class Quote(models.Model):
         CANCELLED = "cancelled", "Cancelled"
 
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    # Nulo = linea de carrito con medidas pendientes (aun sin perfil de perro).
     dog = models.ForeignKey(
-        DogProfile, on_delete=models.PROTECT, related_name="quotes"
+        DogProfile, on_delete=models.PROTECT, related_name="quotes", null=True, blank=True
     )
     # El catálogo vive en tienda.views.PRODUCTOS; se referencia por su clave.
     product_slug = models.CharField(max_length=50)
