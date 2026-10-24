@@ -217,7 +217,7 @@
             {# ----- P08: la foto principal DOMINA; etiquetas mínimas ----- #}
             <div class="reveal__photo pop-in">
                 {% with media=main.product.media.first %}
-                {% if media %}<img src="{% static media.path %}" alt="{{ media.alt }}">{% endif %}
+                {% if media %}<img src="{{ media.url }}" alt="{{ media.alt }}">{% endif %}
                 {% endwith %}
             </div>
 
@@ -266,7 +266,7 @@
             <div class="reveal__card">
                 <div class="reveal__line">
                     {% with media=entry.product.media.first %}
-                    {% if media %}<img src="{% static media.path %}" alt="{{ media.alt }}">{% endif %}
+                    {% if media %}<img src="{{ media.url }}" alt="{{ media.alt }}">{% endif %}
                     {% endwith %}
                     <div style="flex:1">
                         <strong>{{ entry.product.short_title }}</strong>
@@ -323,7 +323,7 @@
             {% for entry in alternatives %}
             <a class="reveal__alt" href="{% url 'reino_product' reino_store.slug entry.product.slug %}">
                 {% with media=entry.product.media.first %}
-                {% if media %}<img src="{% static media.path %}" alt="{{ media.alt }}">{% endif %}
+                {% if media %}<img src="{{ media.url }}" alt="{{ media.alt }}">{% endif %}
                 {% endwith %}
                 <strong>{{ entry.product.short_title }}</strong>
                 <span class="small">${{ entry.unit_price }}</span>

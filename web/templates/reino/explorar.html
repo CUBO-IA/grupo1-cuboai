@@ -32,7 +32,7 @@
         <div class="hero__media pop-in pop-in--2">
             <a href="{% url 'reino_product' first.store.slug first.product.slug %}" aria-label="Ver {{ first.product.short_title }}">
                 {% with media=first.product.media.first %}
-                {% if media %}<img src="{% static media.path %}" alt="{{ media.alt }}" fetchpriority="high">
+                {% if media %}<img src="{{ media.url }}" alt="{{ media.alt }}" fetchpriority="high">
                 {% else %}<img src="{% static 'reino/img/placeholder.svg' %}" alt="">{% endif %}
                 {% endwith %}
             </a>

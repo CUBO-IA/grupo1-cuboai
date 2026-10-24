@@ -4,7 +4,7 @@
 <article class="card">
     <a class="card__media" href="{% url 'reino_product' reino_store.slug product.slug %}" tabindex="-1" aria-hidden="true">
         {% with media=product.media.first %}
-        {% if media %}<img src="{% static media.path %}" alt="{{ media.alt }}" loading="lazy">
+        {% if media %}<img src="{{ media.url }}" alt="{{ media.alt }}" loading="lazy">
         {% else %}<img src="{% static 'reino/img/placeholder.svg' %}" alt="">{% endif %}
         {% endwith %}
     </a>

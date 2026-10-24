@@ -13,7 +13,7 @@
             {% for line in summary.lines %}
             <div class="cart-line">
                 {% with media=line.item.variant.product.media.first %}
-                {% if media %}<img src="{% static media.path %}" alt="{{ media.alt }}">{% endif %}
+                {% if media %}<img src="{{ media.url }}" alt="{{ media.alt }}">{% endif %}
                 {% endwith %}
                 <div>
                     <strong>{{ line.item.variant.product.short_title }}</strong><br>

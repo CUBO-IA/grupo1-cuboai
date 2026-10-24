@@ -57,6 +57,34 @@
         </dl>
     </div>
 
+    {% if digital_grants %}
+    <div class="looklab-card" style="border-color:var(--rk-primary)">
+        <h2 style="font-size:1.3rem" class="mt-0">Tus descargas</h2>
+        {% for grant in digital_grants %}
+        <div class="reveal__line">
+            <div style="flex:1"><strong>{{ grant.asset.product.short_title }}</strong>
+            <span class="small muted">· v{{ grant.asset.version }} · quedan {{ grant.max_downloads|add:"-1" }} descargas como máximo</span></div>
+            <a class="btn btn--primary btn--sm" href="{% url 'reino_digital_download' reino_store.slug grant.token %}">Descargar</a>
+        </div>
+        {% endfor %}
+        {% if grant.asset.license_note %}<p class="small muted">{{ grant.asset.license_note }}</p>{% endif %}
+    </div>
+    {% endif %}
+
+    {% if bookings %}
+    <div class="looklab-card">
+        <h2 style="font-size:1.3rem" class="mt-0">Tu reserva</h2>
+        {% for b in bookings %}
+        <div class="reveal__line">
+            <div style="flex:1"><strong>{{ b.slot.product.short_title }}</strong><br>
+            <span class="small">{{ b.slot.starts_at|date:"l j \d\e F, H:i" }}h · {{ b.slot.duration_minutes }} min ·
+            {% if b.status == "confirmed" %}<span class="state-chip state-chip--ok">confirmada</span>{% else %}<span class="state-chip">cancelada</span>{% endif %}</span></div>
+        </div>
+        {% endfor %}
+        <p class="small muted">Para cambiar la hora escribinos con tu número de pedido.</p>
+    </div>
+    {% endif %}
+
     {% if order.events.exists %}
     <div class="section--tight">
         <h2 style="font-size:1.2rem">Seguimiento</h2>

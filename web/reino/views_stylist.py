@@ -40,7 +40,25 @@ def stylist(request, store):
         "examples": EXAMPLES,
         "ai_available": adapter.available(),
         "profile": _ctx(request, store).profile,
+        "memory_off": conversation.memory_off,
     })
+
+
+@_store_view
+@require_POST
+def stylist_memory_mode(request, store):
+    """Activa/desactiva el modo «sin guardar» (§10): al activarlo, la
+    conversación deja de persistirse y el proveedor sólo ve el turno actual;
+    al desactivarlo vuelve el historial normal. La elección es visible."""
+    conversation = get_conversation(store, request.session.session_key)
+    conversation.memory_off = request.POST.get("memory_off") == "1"
+    conversation.save(update_fields=["memory_off"])
+    if conversation.memory_off:
+        # Lo ya guardado queda fuera del alcance del proveedor a partir de ahora.
+        from django.utils import timezone
+        conversation.history_sealed_before = timezone.now()
+        conversation.save(update_fields=["history_sealed_before"])
+    return redirect("reino_stylist", slug=store.slug)
 
 
 @_store_view

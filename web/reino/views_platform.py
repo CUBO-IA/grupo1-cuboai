@@ -45,10 +45,11 @@ def sitemap_xml(request):
     from .models import Product
     base = f"{request.scheme}://{request.get_host()}"
     urls = [f"{base}/tiendas/"]
-    for store in Store.objects.exclude(status=Store.Status.DRAFT):
+    from . import services_visibility as visibility
+    for store in visibility.visible_stores():
         urls.append(f"{base}/s/{store.slug}/")
         urls.append(f"{base}/s/{store.slug}/coleccion/")
-        for product in Product.objects.filter(store=store, status="published"):
+        for product in visibility.visible_products(store=store):
             urls.append(f"{base}/s/{store.slug}/producto/{product.slug}/")
     body = "\n".join(f"  <url><loc>{u}</loc></url>" for u in urls)
     xml = ('<?xml version="1.0" encoding="UTF-8"?>\n'
@@ -179,5 +180,22 @@ def store_activate(request, slug):
     else:
         store.status = Store.Status.ACTIVE if not store.is_demo else Store.Status.DEMO
         store.save(update_fields=["status"])
+        # F06: la visibilidad exige negocio piloto/activo; activar la tienda
+        # activa también su negocio (si no, nacería invisible).
+        if store.merchant.status == Merchant.Status.DRAFT:
+            store.merchant.status = Merchant.Status.PILOT
+            store.merchant.save(update_fields=["status"])
         request.session["reino_flash"] = f"«{store.name}» está {store.get_status_display()}."
     return redirect("reino_platform")
+
+
+def components_showcase(request):
+    """Galería viva del sistema visual Reino (G5): todos los componentes con
+    datos reales de demostración — referencia de implementación y revisión."""
+    from .models import Product, Store
+    store = Store.objects.filter(status="active").first()
+    products = Product.objects.filter(status="published").select_related(
+        "store").prefetch_related("media", "variants")[:3]
+    return render(request, "reino/plataforma_componentes.html", {
+        "store": store, "products": products,
+    })
