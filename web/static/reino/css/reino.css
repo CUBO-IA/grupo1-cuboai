@@ -165,9 +165,10 @@ strong { font-weight: 700; }
 
 /* ---------------------------------------------------------- botones ------ */
 .btn {
+  border-radius: var(--rk-btn-radius, 999px);
   display: inline-flex; align-items: center; justify-content: center; gap: 10px;
   min-height: 48px; padding: 13px 26px;
-  border-radius: 999px; border: 2px solid var(--rk-ink);
+  border: 2px solid var(--rk-ink);
   font: inherit; font-weight: 800; font-size: 1rem; text-decoration: none;
   cursor: pointer; transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
   background: var(--rk-surface); color: var(--rk-ink);
@@ -175,8 +176,11 @@ strong { font-weight: 700; }
 .btn:hover { transform: translateY(-2px); box-shadow: 0 6px 0 -2px color-mix(in srgb, var(--rk-ink) 22%, transparent); }
 .btn:active { transform: translateY(0); box-shadow: none; }
 .btn--primary { background: var(--rk-primary); border-color: var(--rk-primary); }
-.btn--primary, .btn--primary:visited { color: #fff; }
-.btn--primary:hover { color: #fff; filter: brightness(.94); }
+.btn--primary, .btn--primary:visited { color: var(--rk-on_primary, #fff); }
+.btn--primary:hover, .btn--primary:focus-visible {
+  background: var(--rk-primary); color: var(--rk-on_primary, #fff);
+  transform: translateY(-1px); box-shadow: 3px 3px 0 var(--rk-ink);
+}
 .btn--secondary { background: transparent; }
 .btn--accent { background: var(--rk-accent); border-color: var(--rk-accent); color: var(--rk-ink); }
 .btn--ghost { border-color: transparent; background: transparent; color: var(--ink-soft); min-height: 44px; }
@@ -578,3 +582,12 @@ body.has-tray main { padding-bottom: 96px; }
   border: 2px solid var(--rk-ink); border-radius: var(--rk-radius);
   display: flex; justify-content: space-between; align-items: center; }
 .reveal__panel .reveal__line img { width: 72px; height: 88px; }
+
+/* Biblioteca de medios del estudio (A37) */
+.media-lib { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 8px; }
+.media-lib__item { margin: 0; border: 2px solid var(--rk-ink); border-radius: 14px; overflow: hidden; background: var(--rk-surface); }
+.media-lib__item img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+.media-lib__item figcaption { padding: 6px 8px 0; }
+.media-lib__item form { padding: 6px 8px 10px; }
+.media-lib__item select { max-width: 100%; }
+.mod-move { border: 0; background: transparent; cursor: pointer; font-size: .9rem; padding: 2px 5px; }

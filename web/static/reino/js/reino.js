@@ -224,3 +224,53 @@
     });
   });
 })();
+
+
+// Compartir comparación: URL ya construida en servidor; si el portapapeles
+// falla (permiso denegado), ofrece copia manual con el enlace visible (A17).
+document.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest("[data-share-url]");
+    if (!btn) return;
+    const url = btn.getAttribute("data-share-url");
+    try {
+        await navigator.clipboard.writeText(url);
+        btn.textContent = "¡Enlace copiado!";
+    } catch (err) {
+        const manual = document.createElement("input");
+        manual.value = url;
+        manual.readOnly = true;
+        manual.style.cssText = "width:100%;margin-top:8px";
+        btn.after(manual);
+        manual.select();
+        btn.textContent = "Copiá el enlace:";
+    }
+});
+
+
+// La comparación desde la ficha usa la variante ELEGIDA en los radios,
+// no la primera del formulario (A18).
+document.addEventListener("change", (ev) => {
+    if (ev.target.matches('input[name="variant"]')) {
+        const hidden = document.querySelector("[data-compare-variant]");
+        if (hidden) hidden.value = ev.target.value;
+    }
+});
+
+
+// Orden de módulos del estudio: botones ↑/↓ actualizan el campo oculto que
+// el servidor persiste EXACTAMENTE (A40; alternativa accesible al arrastre).
+document.addEventListener("click", (ev) => {
+    const btn = ev.target.closest(".mod-move");
+    if (!btn) return;
+    const item = btn.closest("[data-module]");
+    const row = document.getElementById("module_row");
+    const order = document.getElementById("module_order");
+    if (!item || !row || !order) return;
+    if (btn.dataset.dir === "-1" && item.previousElementSibling) {
+        row.insertBefore(item, item.previousElementSibling);
+    } else if (btn.dataset.dir === "1" && item.nextElementSibling) {
+        row.insertBefore(item.nextElementSibling, item);
+    }
+    order.value = [...row.querySelectorAll("[data-module]")]
+        .map((el) => el.dataset.module).join(",");
+});

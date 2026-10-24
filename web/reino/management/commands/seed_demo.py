@@ -20,9 +20,9 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from reino.models import (
-    AttributeDefinition, AttributeValue, CategorySchema, FitRule, KnowledgeDocument,
-    Merchant, MerchantMember, Product, ProductMedia, ShippingZone, Store,
-    StoreThemeVersion, Variant,
+    AttributeDefinition, AttributeValue, CategorySchema, DigitalAsset, FitRule,
+    KnowledgeDocument, Merchant, MerchantMember, Product, ProductMedia, ServiceSlot,
+    ShippingZone, Store, StoreThemeVersion, Variant,
 )
 
 # Tabla de tallas histórica del negocio (tienda/migrations/0011): subset dachshund.
@@ -252,6 +252,7 @@ class Command(BaseCommand):
                           m.AnalyticsEvent, m.ComparisonSession, m.MediaAsset,
                           m.AttributeValue, m.AttributeDefinition, m.CategorySchema,
                           m.StoreThemeVersion, m.IntegrationState,
+                          m.Booking, m.ServiceSlot, m.DigitalGrant, m.DigitalAsset,
                           m.Store, m.Merchant):
                 model.objects.all().delete()
         elif Store.objects.filter(slug__in=("wiener-kingdom", "estudio-nube")).exists():
@@ -303,6 +304,7 @@ class Command(BaseCommand):
         # esquemas de categoría con atributos tipados para el comparador (§15).
         self._seed_themes(wk, nube)
         self._seed_schemas(wk, nube)
+        self._seed_demo_market()
 
         self.stdout.write(self.style.SUCCESS(
             f"Seed OK: {wk.products.count()} productos WK, {nube.products.count()} Nube. "
@@ -354,6 +356,78 @@ class Command(BaseCommand):
             attr(p, materiales, material)
         for p in nube.products.all():
             attr(p, tamano, "A5")
+
+    def _seed_demo_market(self):
+        """Entorno DEMO separado (§5): seis categorías físicas, un digital
+        descargable y un servicio reservable — todo identificado como prueba,
+        sin cobros reales y sin mezclarse con el catálogo histórico de WK."""
+        from datetime import timedelta
+
+        from django.core.files.base import ContentFile
+        from django.utils import timezone as tz
+
+        merchant = Merchant.objects.create(
+            name="Reino Demo Market", country="El Salvador", status=Merchant.Status.PILOT)
+        store = Store.objects.create(
+            merchant=merchant, slug="mercado-demo", name="Mercado Demo",
+            tagline="Vitrina de categorías de demostración.",
+            description="Productos FICTICIOS para demostrar las capacidades de "
+                        "Reino Commerce por categoría. Sin cobros reales.",
+            currency="USD", locale="es-SV", category="varios",
+            status=Store.Status.DEMO, is_demo=True,
+            pickup_address="Retiro coordinado (demo)",
+        )
+        ShippingZone.objects.create(store=store, name="Retiro", mode="pickup", fee=0)
+
+        def prod(slug, title, price, category, offer="physical", **kw):
+            p = Product.objects.create(
+                store=store, slug=slug, title=title, short_title=title,
+                base_price=price, status="published", category=category,
+                offer_type=offer, reason="Producto ficticio de demostración",
+                description=f"Producto de demostración de la categoría {category}. "
+                            "Contenido ficticio, sin venta real.",
+                **kw)
+            Variant.objects.create(product=p, sku=f"{slug[:10].upper()}-STD",
+                                   option_label=kw.get("option", "Estándar"), stock=8)
+            return p
+
+        # Seis categorías FÍSICAS (§5)
+        prod("lampara-mesa-demo", "Lámpara de mesa Demo", "32.00", "hogar",
+             materials=["metal"], shipping_note="Caja 30×18×18 cm (demo)")
+        prod("cable-usbc-demo", "Cable USB-C trenzado Demo", "12.50", "tecnologia")
+        prod("jabon-avena-demo", "Jabón de avena Demo", "6.00", "cuidado personal")
+        prod("cuaderno-puntos-demo", "Cuaderno de puntos Demo", "14.00", "papeleria")
+        prod("camiseta-crema-demo", "Camiseta crema Demo", "18.00", "moda humana")
+        prod("rompecabezas-mapa-demo", "Rompecabezas mapa Demo", "21.00", "juguetes")
+
+        # Un producto DIGITAL descargable (tras pago exigido; token+expira)
+        guia = prod("guia-cartas-demo", "Guía de caligrafía (PDF) Demo", "9.00",
+                    "digital", offer="digital")
+        DigitalAsset.objects.create(
+            product=guia, version="1.0-demo",
+            file=ContentFile(b"%PDF-1.4\n% Guia de caligrafia DEMO (ficticia)\n",
+                             name="guia-caligrafia-demo.pdf"),
+            license_note="Contenido ficticio de demostración; sin licencia real.")
+
+        # Un SERVICIO reservable con franjas de capacidad 2
+        taller = prod("taller-lettering-demo", "Taller de lettering (cupo) Demo", "25.00",
+                      "servicio", offer="service")
+        v = taller.variants.get()
+        v.sku = "TALLER-DEMO"
+        v.save(update_fields=["sku"])
+        for days, hour in ((3, 15), (10, 15)):
+            ServiceSlot.objects.create(
+                product=taller, starts_at=tz.now() + timedelta(days=days),
+                duration_minutes=90, capacity=2)
+
+        # Tema neutral publicado (sin herencia de WK/Nube, AC10)
+        from reino import services_theme
+        draft = StoreThemeVersion.objects.create(
+            store=store, version=1, status=StoreThemeVersion.Status.DRAFT,
+            config=services_theme.default_config("neutral"))
+        services_theme.publish(store, draft)
+        self.stdout.write(self.style.SUCCESS(
+            f"Demo market: {store.products.count()} ofertas de prueba (6 físicas + digital + servicio)."))
 
     def _seed_wk(self, store):
         from tienda.models import ProductPaymentRule
