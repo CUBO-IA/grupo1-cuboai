@@ -27,6 +27,7 @@ from .models import (
     Cart, CartItem, CheckoutSession, Order, OrderEvent, OrderItem, OutboxEvent,
     StockReservation, Store, Variant,
 )
+from . import services_fulfillment
 from .money import BITCOIN_DISCOUNT_RATE, money
 
 RESERVATION_MINUTES = 10
@@ -107,11 +108,20 @@ def cart_summary(cart, payment_method="manual"):
     }
 
 
-def add_item(cart, variant: Variant, quantity=1, recipient=None):
+def add_item(cart, variant: Variant, quantity=1, recipient=None, service_slot=None):
     """Añade una variante válida. Revalida precio; no duplica (misma variante
-    y destinatario actualizan cantidad). Una variante inexistente no entra."""
+    y destinatario actualizan cantidad). Una variante inexistente no entra.
+
+    Servicio con cita: la franja es obligatoria, de ESTE producto y con cupo
+    (la ocupación definitiva se toma al confirmar el pedido, bajo bloqueo).
+    """
     if not variant.is_active or variant.product.status != "published":
         raise CartError("Esa variante ya no está disponible.")
+    if variant.product.offer_type == "service":
+        if service_slot is None or service_slot.product_id != variant.product_id                 or not service_slot.is_active:
+            raise CartError("Elegí una franja válida para reservar.")
+        if service_slot.booked + quantity > service_slot.capacity:
+            raise CartError("Esa franja ya no tiene cupo; elegí otra hora.")
     if variant.product.store_id != cart.store_id:
         raise CartError("La variante no pertenece a esta tienda.")
     try:
@@ -136,6 +146,7 @@ def add_item(cart, variant: Variant, quantity=1, recipient=None):
             CartItem.objects.create(
                 cart=cart, variant=variant, quantity=quantity,
                 recipient=recipient, unit_price=variant.price,
+                service_slot=service_slot,
             )
         _bump(cart)
     return cart
@@ -166,11 +177,15 @@ def _bump(cart):
 
 # ------------------------------------------------------------- checkout ----
 
-def validate_shipping(store, delivery_mode, zone):
+def validate_shipping(store, delivery_mode, zone, cart=None):
     """Validación de envío en SERVIDOR (R06). El navegador nunca es la autoridad.
 
     Devuelve (modalidad_normalizada, zona_validada, tarifa Decimal).
+    G2: un carrito SIN líneas físicas (digital/servicio) no cobra ni exige
+    transporte — la modalidad queda «sin envío».
     """
+    if cart is not None and not cart_requires_shipping(cart):
+        return "none", None, money(0)
     if delivery_mode not in DELIVERY_MODES:
         raise CartError("Elegí una modalidad de entrega válida.")
     if delivery_mode == "pickup":
@@ -181,6 +196,12 @@ def validate_shipping(store, delivery_mode, zone):
     if zone.store_id != store.id or not zone.is_active or zone.mode != "local":
         raise CartError("Esa zona no corresponde a la modalidad elegida.")
     return "local", zone, money(zone.fee)
+
+
+def cart_requires_shipping(cart):
+    """¿El carrito contiene al menos una línea física? (G2, §12.2)"""
+    return any(item.variant.product.offer_type == "physical"
+               for item in cart.items.select_related("variant__product"))
 
 
 def _summary_hash(summary):
@@ -213,7 +234,8 @@ def prepare_checkout(cart, payment_method, delivery_mode="pickup", zone=None,
             [l["item"].variant.sku for l in summary["lines"] if not l["ok"]],
         )
 
-    delivery_mode, zone, shipping_amount = validate_shipping(cart.store, delivery_mode, zone)
+    delivery_mode, zone, shipping_amount = validate_shipping(
+        cart.store, delivery_mode, zone, cart=cart)
 
     content = {
         "subtotal": str(summary["subtotal"]),
@@ -224,6 +246,7 @@ def prepare_checkout(cart, payment_method, delivery_mode="pickup", zone=None,
         "zone": zone.name if zone else "",
         "lines": [
             {"variant_id": l["item"].variant_id, "quantity": l["item"].quantity,
+             "service_slot_id": l["item"].service_slot_id,
              "unit_price": str(l["current_price"]),
              "discount_eligible": l["discount_eligible"],
              # Destinatario por ID (§8.1): el alias es solo presentación.
@@ -363,6 +386,7 @@ def confirm_checkout(checkout, customer, idempotency_key):
             v.save(update_fields=["stock"])
             OrderItem.objects.create(
                 order=order, position=i, variant=v, sku=v.sku,
+                service_slot_id=line.get("service_slot_id"),
                 title=v.product.short_title, option_label=v.option_label,
                 recipient_alias=line.get("recipient_alias", ""),
                 quantity=line["quantity"],
@@ -378,6 +402,9 @@ def confirm_checkout(checkout, customer, idempotency_key):
         cart.save(update_fields=["status", "updated_at"])
         OrderEvent.objects.create(order=order, field="status", to_value=Order.Status.PLACED,
                                   note="Pedido registrado")
+        # A34: las franjas de servicio se reservan al crear el pedido, con
+        # capacidad verificada bajo bloqueo (última franja = una reserva).
+        services_fulfillment.reserve_service_slots(order)
         # Trabajo diferido recuperable: correo de confirmación (si hay sistema
         # transaccional configurado) y métricas. Se dispara una sola vez.
         OutboxEvent.objects.create(type="order_confirmation_email",
@@ -407,6 +434,8 @@ TRANSITIONS = {
         Order.PaymentStatus.PAID: [Order.PaymentStatus.REFUNDED,
                                    Order.PaymentStatus.PARTIALLY_REFUNDED,
                                    Order.PaymentStatus.DISPUTED],
+        Order.PaymentStatus.PARTIALLY_REFUNDED: [Order.PaymentStatus.REFUNDED,
+                                                 Order.PaymentStatus.DISPUTED],
     },
     "prep_status": {
         Order.PrepStatus.NOT_STARTED: [Order.PrepStatus.PREPARING, Order.PrepStatus.CANCELLED],
@@ -506,6 +535,12 @@ def apply_transition(order, field, to_value, user=None, note="", member=None,
         if should_restock:
             _restock_once(order, user=user,
                           reason="Cancelación" if field == "status" else "Pago vencido/fallido")
+            services_fulfillment.release_service_slots(
+                order, user=user,
+                reason="Cancelación" if field == "status" else "Pago vencido/fallido")
+        # A33: el acceso digital nace sólo con el cobro confirmado.
+        if field == "payment_status" and to_value == Order.PaymentStatus.PAID:
+            services_fulfillment.grant_digital_entitlements(order, user=user)
     return order
 
 

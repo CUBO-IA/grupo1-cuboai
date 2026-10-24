@@ -31,11 +31,16 @@ _load_dotenv()
 REINO_ENV = os.environ.get("REINO_ENV", "dev")
 _IS_PROD = REINO_ENV in ("staging", "prod")
 
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "" if _IS_PROD else "dev-only-weiner-kingdom")
+# Contrato de entorno UNIFICADO (F01): los nombres canónicos son DJANGO_*;
+# se aceptan los alias SECRET_KEY/ALLOWED_HOSTS por compatibilidad, pero CI,
+# .env.example y docs usan siempre la forma DJANGO_*.
+SECRET_KEY = (os.environ.get("DJANGO_SECRET_KEY") or os.environ.get("SECRET_KEY")
+              or ("" if _IS_PROD else "dev-only-weiner-kingdom"))
 if not SECRET_KEY:
     raise RuntimeError("DJANGO_SECRET_KEY es obligatoria en staging/prod.")
 DEBUG = os.environ.get("DJANGO_DEBUG", "0" if _IS_PROD else "1") == "1"
-ALLOWED_HOSTS = [h.strip() for h in os.environ.get("DJANGO_ALLOWED_HOSTS", "").split(",") if h.strip()]
+_allowed = os.environ.get("DJANGO_ALLOWED_HOSTS") or os.environ.get("ALLOWED_HOSTS", "")
+ALLOWED_HOSTS = [h.strip() for h in _allowed.split(",") if h.strip()]
 if _IS_PROD and not ALLOWED_HOSTS:
     raise RuntimeError("DJANGO_ALLOWED_HOSTS es obligatorio en staging/prod.")
 if not _IS_PROD and not ALLOWED_HOSTS:

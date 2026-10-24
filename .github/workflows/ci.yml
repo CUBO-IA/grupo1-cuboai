@@ -22,8 +22,9 @@ jobs:
         working-directory: web
         env:
           REINO_ENV: prod
-          SECRET_KEY: ci-secret
-          ALLOWED_HOSTS: example.com
+          # Secreto exclusivo de CI (sin valor real); el contrato canónico es DJANGO_*
+          DJANGO_SECRET_KEY: ci-only-secret-9f2c1c7eab4d4f6f8e5a3b2c1d0e9f8a
+          DJANGO_ALLOWED_HOSTS: example.com
           DATABASE_URL: sqlite:///deploy-check.sqlite3
         run: python manage.py check --deploy
       - name: Suite completa en SQLite (histórica + reino + auditorías)

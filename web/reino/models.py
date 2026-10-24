@@ -101,9 +101,16 @@ class Product(models.Model):
         PUBLISHED = "published", "Publicado"
         ARCHIVED = "archived", "Archivado"
 
+    class OfferType(models.TextChoices):
+        PHYSICAL = "physical", "Físico"
+        DIGITAL = "digital", "Digital"
+        SERVICE = "service", "Servicio con cita"
+
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name="products")
     slug = models.SlugField(max_length=80)
+    offer_type = models.CharField(max_length=10, choices=OfferType.choices,
+                                  default=OfferType.PHYSICAL)
     legacy_slug = models.CharField(max_length=50, blank=True)  # enlace con catálogo histórico
     title = models.CharField(max_length=160)
     short_title = models.CharField(max_length=80)
@@ -190,7 +197,11 @@ class Variant(models.Model):
 
 
 class ProductMedia(models.Model):
-    """Imagen pública de producto (ruta estática) con alt y origen/licencia."""
+    """Imagen pública de producto (ruta estática) con alt y origen/licencia.
+
+    A37: también puede respaldarse en un MediaAsset subido por el comerciante
+    (archivo real); `url` resuelve el origen correcto en ambos casos.
+    """
 
     class Kind(models.TextChoices):
         PRODUCT = "product", "Producto"
@@ -200,6 +211,8 @@ class ProductMedia(models.Model):
         EDITORIAL = "editorial", "Ilustración editorial"
 
     product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name="media")
+    asset = models.ForeignKey("MediaAsset", on_delete=models.SET_NULL,
+                              null=True, blank=True, related_name="product_uses")
     path = models.CharField(max_length=200)  # ruta dentro de static/
     alt = models.CharField(max_length=200)
     kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.PRODUCT)
@@ -214,6 +227,14 @@ class ProductMedia(models.Model):
 
 
 # ------------------------------------------------------------- compra (P0) --
+
+    @property
+    def url(self):
+        """URL pública de la imagen: archivo subido o recurso estático."""
+        from django.templatetags.static import static
+        if self.asset_id and self.asset.file:
+            return self.asset.file.url
+        return static(self.path)
 
 class Cart(models.Model):
     """Carrito por tienda y sesión. Abrirlo no reserva inventario."""
@@ -238,6 +259,9 @@ class CartItem(models.Model):
     cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name="items")
     variant = models.ForeignKey(Variant, on_delete=models.PROTECT, related_name="+")
     quantity = models.PositiveSmallIntegerField(default=1)
+    # Servicio con cita: la franja elegida viaja con la línea (G2).
+    service_slot = models.ForeignKey(
+        "ServiceSlot", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     recipient = models.ForeignKey(
         "RecipientProfile", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
     )
@@ -383,6 +407,8 @@ class OrderItem(models.Model):
     quantity = models.PositiveSmallIntegerField(default=1)
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
+    service_slot = models.ForeignKey("ServiceSlot", null=True, blank=True,
+                                     on_delete=models.SET_NULL, related_name="+")
 
     class Meta:
         ordering = ["position", "pk"]
@@ -613,7 +639,7 @@ class AIMessage(models.Model):
     role = models.CharField(max_length=10)  # user | assistant | system
     content = models.TextField()
     cards = models.JSONField(default=list)   # tarjetas renderizadas desde IDs validados
-    request_id = models.CharField(max_length=40, blank=True)
+    request_id = models.CharField(max_length=64, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -624,7 +650,7 @@ class RecommendationEvent(models.Model):
     """Trazabilidad de recomendaciones: candidatos, exclusiones, razones, versión."""
 
     store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name="recommendation_events")
-    request_id = models.CharField(max_length=40, db_index=True)
+    request_id = models.CharField(max_length=64, db_index=True)
     kind = models.CharField(max_length=20, default="looklab")  # looklab | stylist | search
     intent = models.JSONField(default=dict)
     candidates = models.JSONField(default=list)
@@ -740,6 +766,10 @@ class MediaAsset(models.Model):
     alt = models.CharField(max_length=160)
     focal_x = models.FloatField(default=0.5)  # 0..1 punto focal horizontal
     focal_y = models.FloatField(default=0.5)
+
+    @property
+    def focal_css(self):
+        return f"{self.focal_x * 100:.1f}% {self.focal_y * 100:.1f}%"
     origin = models.CharField(max_length=160, blank=True)  # derechos/origen (dato editorial)
     uploaded_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL,
                                     null=True, blank=True)
@@ -765,6 +795,10 @@ class StoreThemeVersion(models.Model):
     store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name="theme_versions")
     version = models.PositiveIntegerField()
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT)
+    # F09: una versión PUBLICADA es inmutable y queda en el historial; la
+    # vigente se marca con is_current (publicar NO convierte la anterior en
+    # borrador editable).
+    is_current = models.BooleanField(default=False)
     config = models.JSONField(default=dict)
     created_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL,
                                    null=True, blank=True)
@@ -798,7 +832,7 @@ class AnalyticsEvent(models.Model):
                               related_name="analytics", null=True, blank=True)
     session_key = models.CharField(max_length=64, db_index=True)
     name = models.CharField(max_length=40, db_index=True)  # ver services_analytics.EVENTS
-    request_id = models.CharField(max_length=40, unique=True)
+    request_id = models.CharField(max_length=64, unique=True)
     payload = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -829,3 +863,169 @@ class IntegrationState(models.Model):
     detail = models.CharField(max_length=200, blank=True)
     checked_at = models.DateTimeField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+
+class DigitalAsset(models.Model):
+    """Archivo descargable de un producto digital (§5, §12.2).
+
+    El acceso nace UNA sola vez tras el estado de pago exigido y se sirve
+    con token autorizado + expiración; jamás un enlace público permanente.
+    """
+    product = models.ForeignKey(Product, on_delete=models.CASCADE,
+                                related_name="digital_assets")
+    file = models.FileField(upload_to="reino/digital/%Y/%m")
+    version = models.CharField(max_length=40, default="1.0")
+    license_note = models.CharField(max_length=200, blank=True)
+    is_active = models.BooleanField(default=True)
+
+
+class DigitalGrant(models.Model):
+    """Derecho de descarga creado exactamente una vez por línea pagada."""
+    asset = models.ForeignKey(DigitalAsset, on_delete=models.CASCADE, related_name="grants")
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="digital_grants")
+    token = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    downloads = models.PositiveIntegerField(default=0)
+    max_downloads = models.PositiveIntegerField(default=5)
+    expires_at = models.DateTimeField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("asset", "order")
+
+
+class ServiceSlot(models.Model):
+    """Franja reservable de un producto-servicio (capacidad acotada)."""
+    product = models.ForeignKey(Product, on_delete=models.CASCADE,
+                                related_name="slots")
+    starts_at = models.DateTimeField()
+    duration_minutes = models.PositiveIntegerField(default=60)
+    capacity = models.PositiveIntegerField(default=1)
+    booked = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+
+class Booking(models.Model):
+    """Reserva confirmada de una franja; única por pedido+franja (§13)."""
+
+    class Status(models.TextChoices):
+        CONFIRMED = "confirmed", "Confirmada"
+        CANCELLED = "cancelled", "Cancelada"
+
+    slot = models.ForeignKey(ServiceSlot, on_delete=models.PROTECT, related_name="bookings")
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="bookings")
+    buyer_email = models.EmailField()
+    status = models.CharField(max_length=10, choices=Status.choices,
+                              default=Status.CONFIRMED)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("slot", "order")
+
+
+class PaymentAttempt(models.Model):
+    """Intento de cobro de UN pedido de UNA tienda (§11.5).
+
+    Pedido ≠ pago ≠ cumplimiento: un pedido puede tener varios intentos
+    (fallidos y luego uno exitoso); los estados del proveedor se mapean a
+    este contrato sin perder el original. Efectos de dominio exactamente una
+    vez: (attempt, efecto) deduplicado por diseño del servicio.
+    """
+
+    class State(models.TextChoices):
+        CREATED = "created", "Creado"
+        REQUIRES_ACTION = "requires_action", "Requiere acción del comprador"
+        PENDING = "pending", "Pendiente"
+        AUTHORIZED = "authorized", "Autorizado"
+        CAPTURED = "captured", "Capturado/confirmado"
+        FAILED = "failed", "Fallido"
+        CANCELLED = "cancelled", "Cancelado"
+        EXPIRED = "expired", "Expirado"
+        REFUND_PENDING = "refund_pending", "Reembolso pendiente"
+        PARTIALLY_REFUNDED = "partially_refunded", "Parcialmente reembolsado"
+        REFUNDED = "refunded", "Reembolsado"
+        DISPUTED = "disputed", "Disputado"
+
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="payment_attempts")
+    provider = models.CharField(max_length=20)       # manual | paypal | btcpay | wompi | fake
+    account_ref = models.CharField(max_length=80, blank=True)  # cuenta/tienda/entorno
+    environment = models.CharField(max_length=10, default="test")  # test | live
+    state = models.CharField(max_length=20, choices=State.choices, default=State.CREATED)
+    provider_state = models.CharField(max_length=60, blank=True)  # estado original
+    external_ref = models.CharField(max_length=120, blank=True, db_index=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    currency = models.CharField(max_length=6, default="USD")
+    idempotency_key = models.CharField(max_length=64, unique=True)
+    captured_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    refunded_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    redirect_url = models.CharField(max_length=300, blank=True)
+    qr_payload = models.CharField(max_length=300, blank=True)
+    safe_payload = models.JSONField(default=dict)    # minimizado y redactado
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+
+
+class PaymentEvent(models.Model):
+    """Evento de pago (webhook/consulta/acción): deduplicado por referencia."""
+
+    attempt = models.ForeignKey(PaymentAttempt, on_delete=models.CASCADE,
+                                related_name="events")
+    provider_event_id = models.CharField(max_length=120, db_index=True)
+    kind = models.CharField(max_length=30)
+    payload = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("attempt", "provider_event_id", "kind")
+
+
+class Shipment(models.Model):
+    """Envío de (parte de) un pedido (§12.1): paquete, referencia, etiqueta,
+    tracking y estado por líneas/cantidades. Manual y automático separados."""
+
+    class Status(models.TextChoices):
+        PREPARING = "preparing", "En preparación"
+        READY = "ready", "Listo para despacho"
+        LABEL_CREATED = "label_created", "Etiqueta creada"
+        PICKED_UP = "picked_up", "Recogido"
+        IN_TRANSIT = "in_transit", "En tránsito"
+        ISSUE = "issue", "Incidencia"
+        DELIVERED = "delivered", "Entregado"
+        RETURNED = "returned", "Devuelto"
+        CANCELLED = "cancelled", "Cancelado"
+
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="shipments")
+    provider = models.CharField(max_length=20, default="manual")
+    service = models.CharField(max_length=60, blank=True)
+    status = models.CharField(max_length=15, choices=Status.choices,
+                              default=Status.PREPARING)
+    external_ref = models.CharField(max_length=120, blank=True, db_index=True)
+    tracking = models.CharField(max_length=120, blank=True)
+    label_ref = models.CharField(max_length=200, blank=True)
+    amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    currency = models.CharField(max_length=6, default="USD")
+    lines = models.JSONField(default=list)  # [{order_item_id, quantity}] parciales
+    address_snapshot = models.JSONField(default=dict)  # privado (§12.4)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class ShipmentEvent(models.Model):
+    """Evento de tracking deduplicado; fuera de orden no rompe la línea de
+    tiempo (§12.4.8)."""
+
+    shipment = models.ForeignKey(Shipment, on_delete=models.CASCADE,
+                                 related_name="events")
+    code = models.CharField(max_length=40)
+    detail = models.CharField(max_length=200, blank=True)
+    occurred_at = models.DateTimeField()
+    provider_event_id = models.CharField(max_length=120, blank=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("shipment", "provider_event_id", "code")
+        ordering = ["occurred_at", "pk"]

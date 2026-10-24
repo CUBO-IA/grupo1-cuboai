@@ -12,10 +12,10 @@
 import copy
 from decimal import Decimal
 
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 
-from .models import StoreThemeVersion
+from .models import Store, StoreThemeVersion
 
 # Parejas tipográficas probadas (licencias OFL vendoradas en static/reino/fonts).
 FONT_PAIRS = {
@@ -35,7 +35,7 @@ def default_config(identity="neutral"):
         "identity": identity,
         "colors": {
             "ink": "#15172E", "bg": "#FFF8ED", "surface": "#FFFFFF",
-            "primary": "#2C3FFF", "accent": "#D6F85A", "soft": "#F1EDE3",
+            "primary": "#2C3FFF", "on_primary": "#FFFFFF", "accent": "#D6F85A", "soft": "#F1EDE3",
         },
         "font_pair": "manrope",
         "shape": "rounded",
@@ -53,11 +53,11 @@ def default_config(identity="neutral"):
         ],
     }
     if identity == "wiener-kingdom":
-        base["colors"].update({"primary": "#FF4D9D", "accent": "#FFB548",
+        base["colors"].update({"primary": "#FF4D9D", "on_primary": "#15172E", "accent": "#FFB548",
                                "bg": "#FFF8ED", "ink": "#15172E", "soft": "#FFE9F2"})
         base["font_pair"] = "manrope-fraunces"
     elif identity == "estudio-nube":
-        base["colors"].update({"primary": "#B9A5FF", "accent": "#FBE58A",
+        base["colors"].update({"primary": "#B9A5FF", "on_primary": "#23234A", "accent": "#FBE58A",
                                "bg": "#F7F8FF", "ink": "#23234A", "soft": "#EAE6FF"})
     return base
 
@@ -89,7 +89,7 @@ def validate_config(config):
     """Valida el borrador antes de publicar (§13). Devuelve lista de errores."""
     errors = []
     colors = config.get("colors") or {}
-    for key in ("ink", "bg", "surface", "primary", "accent"):
+    for key in ("ink", "bg", "surface", "primary", "accent", "on_primary"):
         value = colors.get(key, "")
         if not isinstance(value, str) or not value.startswith("#") or len(value) != 7:
             errors.append(f"Color «{key}» inválido: usá formato #RRGGBB.")
@@ -102,10 +102,23 @@ def validate_config(config):
                       f"({contrast_ratio(colors['ink'], colors['bg']):.2f}:1; mínimo 4.5:1).")
     if contrast_ratio(colors["ink"], colors["surface"]) < 4.5:
         errors.append("Texto/tarjeta con contraste insuficiente (mínimo 4.5:1).")
-    # El botón principal usa tinta o blanco sobre primary: alguno debe pasar.
-    if max(contrast_ratio("#FFFFFF", colors["primary"]),
-           contrast_ratio(colors["ink"], colors["primary"])) < 4.5:
-        errors.append("El color de acción no tiene un texto legible posible (AA).")
+    # F07: el navegador pinta SIEMPRE on_primary sobre primary (botones,
+    # chips). Ese par concreto debe pasar AA; no basta con que "algún texto
+    # sería posible" si luego el CSS usa blanco fijo.
+    on_primary = colors.get("on_primary") or ""
+    if on_primary:
+        ratio = contrast_ratio(on_primary, colors["primary"])
+        if ratio < 4.5:
+            errors.append(f"Texto de acción sobre el color de acción con contraste "
+                          f"insuficiente ({ratio:.2f}:1; mínimo 4.5:1). Corregí "
+                          f"«texto sobre acción» o el color de acción.")
+    else:
+        # Derivar el mejor par posible si el editor no lo fijó.
+        best = max((("#FFFFFF", contrast_ratio("#FFFFFF", colors["primary"])),
+                    (colors["ink"], contrast_ratio(colors["ink"], colors["primary"]))),
+                   key=lambda t: t[1])
+        if best[1] < 4.5:
+            errors.append("El color de acción no tiene un texto legible posible (AA).")
     if config.get("font_pair") not in FONT_PAIRS:
         errors.append("Pareja tipográfica no probada.")
     if config.get("shape") not in SHAPES:
@@ -121,7 +134,7 @@ def validate_config(config):
 def current_theme(store):
     """Tema PUBLICADO vigente (o el neutral por defecto si nunca se publicó)."""
     published = store.theme_versions.filter(
-        status=StoreThemeVersion.Status.PUBLISHED).first()
+        status=StoreThemeVersion.Status.PUBLISHED, is_current=True).first()
     if published:
         return published
     identity = (store.slug if store.slug in ("wiener-kingdom", "estudio-nube")
@@ -131,17 +144,29 @@ def current_theme(store):
                              status=StoreThemeVersion.Status.DRAFT, config=config)
 
 
+def _next_version(store):
+    """Numeración bajo bloqueo de la tienda (nunca count()+1 a ciegas)."""
+    Store.objects.select_for_update().get(pk=store.pk)
+    last = store.theme_versions.aggregate(m=models.Max("version"))["m"] or 0
+    return last + 1
+
+
 def get_or_create_draft(store, user=None):
-    """Borrador de trabajo: copia del publicado vigente o del tema actual."""
+    """Borrador de trabajo: copia del publicado vigente o del tema actual.
+
+    F09: un borrador es una versión NUNCA publicada; las publicadas son
+    inmutables y no se reutilizan como borrador.
+    """
     draft = store.theme_versions.filter(status=StoreThemeVersion.Status.DRAFT).first()
     if draft:
         return draft
     current = current_theme(store)
-    next_version = (store.theme_versions.count() + 1)
-    return StoreThemeVersion.objects.create(
-        store=store, version=next_version, status=StoreThemeVersion.Status.DRAFT,
-        config=copy.deepcopy(current.config), created_by=user,
-    )
+    with transaction.atomic():
+        return StoreThemeVersion.objects.create(
+            store=store, version=_next_version(store),
+            status=StoreThemeVersion.Status.DRAFT,
+            config=copy.deepcopy(current.config), created_by=user,
+        )
 
 
 def publish(store, draft, user=None):
@@ -150,13 +175,18 @@ def publish(store, draft, user=None):
     errors = validate_config(draft.config)
     if errors:
         raise ThemeError(" ".join(errors))
+    if draft.status != StoreThemeVersion.Status.DRAFT:
+        raise ThemeError("Sólo se puede publicar un borrador; las versiones "
+                         "publicadas son inmutables.")
     with transaction.atomic():
-        store.theme_versions.select_for_update().filter(
-            status=StoreThemeVersion.Status.PUBLISHED).update(
-            status=StoreThemeVersion.Status.DRAFT)
+        # F09: la versión anterior NO se convierte en borrador: queda
+        # publicada e inmutable en el historial; sólo deja de ser la vigente.
+        store.theme_versions.select_for_update().filter(is_current=True).update(
+            is_current=False)
         draft.status = StoreThemeVersion.Status.PUBLISHED
+        draft.is_current = True
         draft.published_at = timezone.now()
-        draft.save(update_fields=["status", "published_at"])
+        draft.save(update_fields=["status", "is_current", "published_at"])
     return draft
 
 
@@ -166,9 +196,21 @@ def restore(store, version_number, user=None):
     source = store.theme_versions.filter(version=version_number).first()
     if source is None:
         raise ThemeError("Esa versión no existe.")
-    draft = StoreThemeVersion.objects.create(
-        store=store, version=store.theme_versions.count() + 1,
-        status=StoreThemeVersion.Status.DRAFT,
-        config=copy.deepcopy(source.config), created_by=user,
-    )
-    return publish(store, draft, user=user)
+    with transaction.atomic():
+        draft = StoreThemeVersion.objects.create(
+            store=store, version=_next_version(store),
+            status=StoreThemeVersion.Status.DRAFT,
+            config=copy.deepcopy(source.config), created_by=user,
+        )
+        return publish(store, draft, user=user)
+
+
+def save_draft_config(draft, config):
+    """Guarda un borrador validando que NO sea una versión publicada (F09)."""
+    draft.refresh_from_db()
+    if draft.status != StoreThemeVersion.Status.DRAFT:
+        raise ThemeError("Esa versión ya fue publicada y es inmutable; "
+                         "se creó un borrador nuevo para tus cambios.")
+    draft.config = config
+    draft.save(update_fields=["config"])
+    return draft

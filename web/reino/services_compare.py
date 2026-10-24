@@ -15,6 +15,7 @@ Reglas del contrato:
 
 from decimal import Decimal
 
+from . import services_visibility as visibility
 from .models import AttributeValue, ComparisonSession, Variant
 from .money import fmt
 
@@ -50,7 +51,9 @@ def add_item(session_key, variant_id):
     if len(items) >= MAX_ITEMS:
         return tray, "Ya hay 4 piezas: quitá una para comparar otra."
     variant = Variant.objects.filter(public_id=vid).select_related("product__store").first()
-    if variant is None:
+    if variant is None or not visibility.is_variant_buyable(variant):
+        # F06: una pieza de un negocio en borrador no entra al comparador
+        # público (el mensaje no revela su existencia).
         raise CompareError("Esa pieza ya no existe en el catálogo.")
     items.append({"variant_id": vid})
     tray.items = items
@@ -137,7 +140,7 @@ def build_comparison(session_key=None, public_id=None):
             "store": p.store, "product_slug": p.slug,
             "price": fmt(price, p.store.currency), "price_raw": price,
             "stock": v.stock,
-            "image": media.path if media else "",
+            "image": media.url if media else "",
             "alt": media.alt if media else p.short_title,
         })
 
@@ -156,10 +159,16 @@ def build_comparison(session_key=None, public_id=None):
 
     common_only = len(categories) > 1
     rows = [] if common_only else _attribute_rows(variants)
+    # F05: encabezados y celdas quedan ligados por ID ESTABLE de variante.
+    # Las columnas siguen el orden de la bandeja; las celdas DEBEN usar ese
+    # mismo orden (no el orden accidental del queryset), o los atributos de
+    # B aparecen bajo el encabezado de A al agregar en orden inverso.
+    pk_by_vid = {str(v.public_id): v.pk for v in variants}
+    ordered_pks = [pk_by_vid.get(i["variant_id"]) for i in tray.items]
     return {
         "tray": tray, "columns": columns,
         "rows": [{"label": r["label"], "unit": r["unit"],
-                  "cells": [r["cells"].get(v.pk, "—") for v in variants]}
+                  "cells": [r["cells"].get(pk, "—") for pk in ordered_pks]}
                  for r in sorted(rows.values(), key=lambda x: x["label"])] if not common_only else [],
         "common_only": common_only,
         "currencies": currencies,
