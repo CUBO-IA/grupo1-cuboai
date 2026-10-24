@@ -101,10 +101,36 @@
     {% else %}<p class="small muted">Sin tabla publicada: Smart Fit informará «datos insuficientes» (honesto).</p>{% endif %}
     <form method="post" action="{% url 'reino_merchant_fit_rule' store.slug product.pk %}">
         {% csrf_token %}
-        <div class="field"><label for="ranges">Nueva versión (JSON de rangos en cm)</label>
-        <textarea id="ranges" name="ranges" rows="4" placeholder='[{"label":"S","neck_min":22,"neck_max":27,"chest_min":33,"chest_max":40,"back_min":25,"back_max":32}]'></textarea></div>
-        <label style="display:flex;gap:8px;align-items:center;margin-bottom:12px">
-            <input type="checkbox" name="requires_neck" value="1"> Requiere medida de cuello
+        {# F11: editor de FILAS — nunca JSON. Errores por fila/celda. #}
+        <p class="small muted">Una fila por talla. Rangos en centímetros; el mínimo debe ser menor que el máximo.</p>
+        {% if fit_form_errors %}
+        <div class="form-errors" role="alert">
+            {% for e in fit_form_errors %}<p class="mb-0">⚠️ {{ e }}</p>{% endfor %}
+        </div>
+        {% endif %}
+        <div class="table-wrap">
+        <table class="data fit-rows">
+            <thead><tr>
+                <th>Talla</th><th>Cuello mín</th><th>Cuello máx</th>
+                <th>Pecho mín</th><th>Pecho máx</th><th>Lomo mín</th><th>Lomo máx</th>
+            </tr></thead>
+            <tbody>
+            {% for row in fit_rows %}
+            <tr>
+                <td><input name="row_label" value="{{ row.label }}" placeholder="S" aria-label="Talla fila {{ forloop.counter }}"></td>
+                <td><input name="row_neck_min" value="{{ row.neck_min }}" inputmode="decimal" size="5"></td>
+                <td><input name="row_neck_max" value="{{ row.neck_max }}" inputmode="decimal" size="5"></td>
+                <td><input name="row_chest_min" value="{{ row.chest_min }}" inputmode="decimal" size="5" required></td>
+                <td><input name="row_chest_max" value="{{ row.chest_max }}" inputmode="decimal" size="5" required></td>
+                <td><input name="row_back_min" value="{{ row.back_min }}" inputmode="decimal" size="5"></td>
+                <td><input name="row_back_max" value="{{ row.back_max }}" inputmode="decimal" size="5"></td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        <label style="display:flex;gap:8px;align-items:center;margin:12px 0">
+            <input type="checkbox" name="requires_neck" value="1" {% if fit_requires_neck %}checked{% endif %}> Requiere medida de cuello
         </label>
         <button class="btn btn--secondary" type="submit">Publicar nueva versión</button>
     </form>

@@ -18,6 +18,7 @@
                 <label class="swatch"><input type="color" name="color_bg" value="{{ colors.bg|default:'#FFF8ED' }}"> Fondo</label>
                 <label class="swatch"><input type="color" name="color_surface" value="{{ colors.surface|default:'#FFFFFF' }}"> Tarjetas</label>
                 <label class="swatch"><input type="color" name="color_primary" value="{{ colors.primary|default:'#2C3FFF' }}"> Acción principal</label>
+                <label class="swatch"><input type="color" name="color_on_primary" value="{{ colors.on_primary|default:'#FFFFFF' }}"> Texto sobre acción</label>
                 <label class="swatch"><input type="color" name="color_accent" value="{{ colors.accent|default:'#D6F85A' }}"> Acento</label>
                 <label class="swatch"><input type="color" name="color_soft" value="{{ colors.soft|default:'#F1EDE3' }}"> Suave</label>
             </div>
@@ -58,13 +59,18 @@
                        value="{{ draft.config.hero.sub }}" placeholder="Descripción corta de la tienda"></div>
 
             <h2 style="font-size:1.2rem;margin-top:20px">Módulos de la portada</h2>
-            <div class="pill-row">
-                {% for key in module_keys %}
-                <label class="pill">
-                    <input type="checkbox" name="modules" value="{{ key }}"
-                           {% if key in visible_modules %}checked{% endif %}>
-                    {{ key }}
-                </label>
+            <p class="small muted">El orden se conserva tal como lo dejés. Ocultar no borra el contenido.</p>
+            <input type="hidden" name="module_order" id="module_order"
+                   value="{% for m in draft.config.modules %}{{ m.key }}{% if not forloop.last %},{% endif %}{% endfor %}">
+            <div class="pill-row" id="module_row">
+                {% for m in draft.config.modules %}
+                <span class="pill" data-module="{{ m.key }}">
+                    <input type="checkbox" name="modules" value="{{ m.key }}"
+                           {% if m.key in visible_modules %}checked{% endif %}>
+                    {{ m.key }}
+                    <button type="button" class="mod-move" data-dir="-1" aria-label="Subir {{ m.key }}">↑</button>
+                    <button type="button" class="mod-move" data-dir="1" aria-label="Bajar {{ m.key }}">↓</button>
+                </span>
                 {% endfor %}
             </div>
 
@@ -91,8 +97,26 @@
                 <button class="btn btn--secondary btn--sm" type="submit">Subir imagen</button>
             </form>
             {% if media %}
-            <div class="media-grid" style="margin-top:16px">
-                {% for m in media %}<img src="{{ m.file.url }}" alt="{{ m.alt }}" loading="lazy">{% endfor %}
+            <p class="small muted" style="margin-top:14px">Asigná cada imagen a un destino real: hero o producto (A37).</p>
+            <div class="media-lib">
+                {% for m in media %}
+                <figure class="media-lib__item">
+                    <img src="{{ m.file.url }}" alt="{{ m.alt }}" loading="lazy">
+                    <figcaption class="small">{{ m.alt|truncatewords:6 }}</figcaption>
+                    <form method="post" action="{% url 'reino_merchant_media_assign' store.slug m.pk %}">
+                        {% csrf_token %}
+                        <div style="display:flex;gap:6px;flex-wrap:wrap">
+                            <button class="btn btn--ghost btn--sm" type="submit" name="target" value="hero">Usar en hero</button>
+                        </div>
+                        <div style="display:flex;gap:6px;margin-top:6px">
+                            <select name="product_id" aria-label="Producto destino">
+                                {% for p in products %}<option value="{{ p.pk }}">{{ p.short_title|truncatewords:4 }}</option>{% endfor %}
+                            </select>
+                            <button class="btn btn--secondary btn--sm" type="submit" name="target" value="product">Asignar</button>
+                        </div>
+                    </form>
+                </figure>
+                {% endfor %}
             </div>
             {% endif %}
         </div>
@@ -130,7 +154,7 @@
             <button type="button" aria-pressed="false" onclick="const f=document.getElementById('preview-frame');f.style.maxWidth='390px';this.setAttribute('aria-pressed','true');this.previousElementSibling.setAttribute('aria-pressed','false')">Móvil</button>
         </div>
         <div class="studio__frame" id="preview-frame">
-            <iframe src="{% url 'reino_store_home' store.slug %}" title="Vista previa de la tienda" loading="lazy"></iframe>
+            <iframe src="{% url 'reino_merchant_diseno_preview' store.slug %}" title="Vista previa de la tienda" loading="lazy"></iframe>
         </div>
         <p class="fine" style="margin-top:10px">La vista previa muestra la versión PUBLICADA.
         Publicá el borrador para ver tus cambios.</p>

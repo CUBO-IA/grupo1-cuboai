@@ -21,15 +21,15 @@
         <div class="gallery">
             {% with first=media.0 %}
             <div class="gallery__main">
-                <img data-gallery-main src="{% static first.path %}" alt="{{ first.alt }}">
+                <img data-gallery-main src="{{ first.url }}" alt="{{ first.alt }}">
             </div>
             {% endwith %}
             {% if media|length > 1 %}
             <div class="gallery__thumbs" role="group" aria-label="Vistas del producto">
                 {% for m in media %}
-                <button type="button" data-gallery-thumb data-src="{% static m.path %}" data-alt="{{ m.alt }}"
+                <button type="button" data-gallery-thumb data-src="{{ m.url }}" data-alt="{{ m.alt }}"
                         aria-pressed="{% if forloop.first %}true{% else %}false{% endif %}" aria-label="Ver {{ m.alt }}">
-                    <img src="{% static m.path %}" alt="">
+                    <img src="{{ m.url }}" alt="">
                 </button>
                 {% endfor %}
             </div>
@@ -90,9 +90,9 @@
                 poder enviar: «Agregar» nunca envía sin opción elegida (P05).{% endcomment %}
                 <button class="btn btn--primary" type="submit" style="width:100%;max-width:420px">Agregar a la bolsa</button>
             </form>
-            <form method="post" action="{% url 'reino_compare_add' %}" style="margin-top:10px">
+            <form method="post" action="{% url 'reino_compare_add' %}" style="margin-top:10px" data-compare-form>
                 {% csrf_token %}
-                <input type="hidden" name="variant_id" value="{{ variant_rows.0.variant.public_id }}">
+                <input type="hidden" name="variant_id" value="{{ variant_rows.0.variant.public_id }}" data-compare-variant>
                 <input type="hidden" name="next" value="{{ request.path }}">
                 <button class="btn btn--ghost btn--sm" type="submit">Comparar esta pieza</button>
             </form>

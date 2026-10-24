@@ -22,7 +22,7 @@
     <div class="pill-row" style="margin-block:16px" role="group" aria-label="Vista de la tabla">
         <a class="pill {% if vista != 'diferencias' %}is-on{% endif %}" href="?vista=todos{% if shared %}&c={{ tray.public_id }}{% endif %}">Todos los atributos</a>
         <a class="pill {% if vista == 'diferencias' %}is-on{% endif %}" href="?vista=diferencias{% if shared %}&c={{ tray.public_id }}{% endif %}">Solo diferencias</a>
-        <button class="pill" type="button" onclick="navigator.clipboard&&navigator.clipboard.writeText('{{ request.build_absolute_uri }}?c={{ tray.public_id }}');this.textContent='¡Enlace copiado!'">Compartir comparación</button>
+        <button class="pill" type="button" data-share-url="{{ share_url }}">Compartir comparación</button>
     </div>
     {% if common_only %}
     <p class="flash-ok" role="note">Son categorías distintas: comparo solo los campos comunes.
@@ -38,7 +38,7 @@
             <th scope="col" class="col-head">
                 {% if col.store %}
                 <div class="{% if col.best_price %}best-price{% endif %}" style="padding:8px">
-                    {% if col.image %}<img src="{% static col.image %}" alt="{{ col.alt }}">{% endif %}
+                    {% if col.image %}<img src="{{ col.image }}" alt="{{ col.alt }}">{% endif %}
                     <p style="margin:8px 0 2px"><strong>{{ col.title }}</strong></p>
                     <p class="small muted" style="margin:0">{{ col.store.name }} · {{ col.option }}</p>
                     <p class="card__price" style="margin:6px 0">{{ col.price }}</p>

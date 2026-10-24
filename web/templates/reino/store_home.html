@@ -7,6 +7,11 @@
 
 {% comment %}================= HERO (P03) ================={% endcomment %}
 {% if module.key == "hero" %}
+{% if reino_preview %}
+<div style="position:sticky;top:0;z-index:60;background:var(--rk-ink);color:var(--rk-bg);text-align:center;padding:8px 14px;font-size:.85rem;font-weight:700">
+    Vista previa del borrador — sólo la ve el equipo de la tienda. Los enlaces están acotados.
+</div>
+{% endif %}
 <section class="hero scene {% if theme_config.identity == 'wiener-kingdom' %}scene--pink{% elif theme_config.identity == 'estudio-nube' %}scene--lilac{% else %}scene--cream{% endif %}" style="margin:18px 18px 0">
     {% comment %}Figuras de marca originales (SVG): corona + silueta dachshund
     para WK; papeles/sellos para Nube; estrella neutra para el resto. Nunca
@@ -51,11 +56,16 @@
             </div>
             <p class="hero__tertiary"><a href="{% url 'reino_stylist' reino_store.slug %}">Contale al asesor qué buscás →</a></p>
         </div>
-        {% if hero_product %}
+        {% if hero_asset %}
+        <div class="hero__media pop-in pop-in--2">
+            <img src="{{ hero_asset.file.url }}" alt="{{ hero_asset.alt }}" fetchpriority="high"
+                 style="object-position: {{ hero_asset.focal_css }}">
+        </div>
+        {% elif hero_product %}
         <div class="hero__media pop-in pop-in--2">
             {% with media=hero_product.media.first %}
             <a href="{% url 'reino_product' reino_store.slug hero_product.slug %}" aria-label="Ver {{ hero_product.short_title }}">
-            {% if media %}<img src="{% static media.path %}" alt="{{ media.alt }}" fetchpriority="high">
+            {% if media %}<img src="{{ media.url }}" alt="{{ media.alt }}" fetchpriority="high">
             {% else %}<img src="{% static 'reino/img/placeholder.svg' %}" alt="">{% endif %}
             </a>
             {% endwith %}

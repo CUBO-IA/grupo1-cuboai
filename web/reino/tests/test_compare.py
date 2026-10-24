@@ -113,3 +113,48 @@ class CompareViewTests(ReinoTestCase):
         self.client.post("/comparar/quitar/", {"variant_id": str(v2.public_id)})
         r3 = self.client.get("/comparar/")
         self.assertNotContains(r3, "Traje Gala")
+
+
+class StableIdAlignmentTests(ReinoTestCase):
+    """F05: encabezados y celdas ligados por ID estable de variante."""
+
+    def setUp(self):
+        from reino.models import AttributeDefinition, AttributeValue, CategorySchema
+        self.schema = CategorySchema.objects.create(slug="moda-canina", name="Moda canina")
+        self.peso = AttributeDefinition.objects.create(
+            schema=self.schema, key="peso", label="Peso", value_type="measure",
+            unit="g")
+        self.v1 = self.product.variants.get(option_label="Talla M")
+        self.v2 = self.product2.variants.get(option_label="Talla M")
+        AttributeValue.objects.create(
+            variant=self.v1, definition=self.peso, value={"raw": "113"},
+            normalized_number=113, source="ficha")
+        AttributeValue.objects.create(
+            variant=self.v2, definition=self.peso, value={"raw": "957"},
+            normalized_number=957, source="ficha")
+
+    def _aligned(self, key):
+        data = cmp.build_comparison(session_key=key)
+        peso = next(r for r in data["rows"] if r["label"] == "Peso")
+        return [(c["title"], cell) for c, cell in zip(data["columns"], peso["cells"])]
+
+    def test_orden_normal_alineado(self):
+        cmp.add_item("k1", str(self.v1.public_id))
+        cmp.add_item("k1", str(self.v2.public_id))
+        pairs = self._aligned("k1")
+        self.assertEqual(pairs, [("Arnés Real", "113 g"), ("Traje Gala", "957 g")])
+
+    def test_orden_inverso_no_intercambia_celdas(self):
+        # Orden inverso al de la base: la celda sigue a SU variante.
+        cmp.add_item("k2", str(self.v2.public_id))
+        cmp.add_item("k2", str(self.v1.public_id))
+        pairs = self._aligned("k2")
+        self.assertEqual(pairs, [("Traje Gala", "957 g"), ("Arnés Real", "113 g")])
+
+    def test_reordenar_y_quitar_mantienen_alineacion(self):
+        cmp.add_item("k3", str(self.v1.public_id))
+        cmp.add_item("k3", str(self.v2.public_id))
+        cmp.remove_item("k3", str(self.v1.public_id))
+        cmp.add_item("k3", str(self.v1.public_id))  # v1 queda al final
+        pairs = self._aligned("k3")
+        self.assertEqual(pairs, [("Traje Gala", "957 g"), ("Arnés Real", "113 g")])
