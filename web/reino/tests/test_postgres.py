@@ -30,17 +30,21 @@ IS_POSTGRES = settings.DATABASES["default"]["ENGINE"].endswith("postgresql")
 
 
 class _ConcurrencyBase(TransactionTestCase):
-    """Fixture confirmada (misma que ReinoTestCase) para hilos reales."""
+    """Fixture confirmada (misma que ReinoTestCase) para hilos reales.
+
+    F03: la fixture se recrea en `setUp` de CADA prueba — con
+    `TransactionTestCase` el flush posterior a cada test elimina lo creado
+    en `setUpClass`, y los hilos deben ver datos CONFIRMADOS y vigentes.
+    """
 
     reset_sequences = True
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
+    def setUp(self):
+        super().setUp()
         ReinoTestCase.setUpTestData()
         for name in ("merchant_a", "store_a", "merchant_b", "store_b",
                      "product", "product2", "product_b"):
-            setattr(cls, name, getattr(ReinoTestCase, name))
+            setattr(self, name, getattr(ReinoTestCase, name))
 
     def _variant(self):
         return self.product.variants.get(option_label="Talla M")

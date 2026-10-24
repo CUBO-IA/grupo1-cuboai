@@ -148,3 +148,32 @@ class RoundTwoProbes(ReinoTestCase):
         response = self.client.get("/plataforma/")
         self.assertNotEqual(response.status_code, 200,
                             "One merchant's staff can open platform-wide administration")
+
+    def test_12_entrega_hoy_con_zona_sin_confirmar_no_sustenta(self):
+        """F10: una zona NO vacía que dice «sin confirmar» tampoco sustenta
+        una promesa de entrega; sólo un hecho de fecha/confirmación concreta."""
+        _, errors = orchestrator._validate_answer(
+            "Entrega hoy garantizada.",
+            ['{"zones":[{"name":"Centro","delivery_date":"sin confirmar"}]}'])
+        self.assertIn("entrega_sin_fecha_confirmada", errors)
+        _, errors = orchestrator._validate_answer(
+            "Te llega hoy seguro.",
+            ['{"zones":[{"name":"Centro","available":true}]}'])
+        self.assertTrue(errors, "zona disponible sin fecha sustentó «te llega hoy»")
+        # Con fecha confirmada sí es respaldable (ámbito+fecha presentes).
+        _, errors = orchestrator._validate_answer(
+            "Entrega hoy garantizada.",
+            ['{"quote":{"zone":"Centro","delivery_date":"2026-10-23","currency":"USD"}}'])
+        self.assertEqual(errors, [])
+
+    def test_13_garantia_de_devolucion_exige_politica_real(self):
+        """F10: «devolución garantizada» requiere fragmento de política que
+        hable de devoluciones, no cualquier fragmento no vacío."""
+        _, errors = orchestrator._validate_answer(
+            "La devolución está garantizada.",
+            ['{"policies":{"fragments":["Envíos por la tarde."]}}'])
+        self.assertIn("devolucion_sin_politica", errors)
+        _, errors = orchestrator._validate_answer(
+            "La devolución está garantizada.",
+            ['{"policies":{"fragments":["Devoluciones hasta 7 días con etiqueta."]}}'])
+        self.assertEqual(errors, [])

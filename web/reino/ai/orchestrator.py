@@ -39,11 +39,19 @@ ACTION_TTL_MINUTES = 15
 
 _MONEY_RE = re.compile(r"\$\s*([0-9]+(?:[.,][0-9]{1,2})?)")
 _PERCENT_RE = re.compile(r"(\d{1,2})\s*%")
-_GUARANTEE_RE = re.compile(
-    r"garantizad|llega hoy|entrega hoy|entrega inmediata|lo recibís hoy|"
-    r"devolución asegurada|reembolso garantizado",
+_DELIVERY_PROMISE_RE = re.compile(
+    r"entrega[^.]{0,40}garantizad|llega hoy|entrega hoy|entrega inmediata|"
+    r"lo recibís hoy|te llega hoy|entrega garantizada",
     re.IGNORECASE,
 )
+_REFUND_PROMISE_RE = re.compile(
+    r"devoluci[oó]n[^.]{0,30}(asegurada|garantizada)|"
+    r"(asegurada|garantizada)[^.]{0,30}devoluci[oó]n|"
+    r"reembolso[^.]{0,30}garantizado|devolvemos seguro",
+    re.IGNORECASE,
+)
+_UNCONFIRMED = {"", "sin confirmar", "por confirmar", "a confirmar",
+                "unknown", "no confirmada", "pendiente", "none", "null"}
 
 ABSTENTION_TEXT = (
     "No puedo confirmar ese dato con la información publicada de la tienda. "
@@ -89,15 +97,32 @@ def _evidence_facts(evidence_blobs):
     """
     amounts, percents = set(), set()
     has_zones = has_policies = False
+    delivery_confirmed = refund_policy = False
+
+    def _norm(v):
+        return str(v).strip().lower()
 
     def walk(node):
-        nonlocal has_zones, has_policies
+        nonlocal has_zones, has_policies, delivery_confirmed, refund_policy
         if isinstance(node, dict):
             for k, v in node.items():
                 if k == "zones" and isinstance(v, list) and v:
                     has_zones = True
                 if k == "fragments" and isinstance(v, list) and v:
                     has_policies = True
+                    for frag in v:
+                        if isinstance(frag, str) and re.search(
+                                r"devol|reembols", frag, re.IGNORECASE):
+                            refund_policy = True
+                # F10: una promesa de entrega necesita un hecho CONCRETO:
+                # fecha/franja confirmada, ámbito y vigencia — jamás la sola
+                # presencia de una zona (que puede decir «sin confirmar»).
+                if k in ("delivery_date", "delivery_slot", "fecha_entrega",
+                         "eta", "guaranteed_date", "promised_date"):
+                    if _norm(v) not in _UNCONFIRMED:
+                        delivery_confirmed = True
+                if k in ("guaranteed", "garantizado") and v is True:
+                    delivery_confirmed = True
                 walk(v)
         elif isinstance(node, list):
             for item in node:
@@ -114,7 +139,9 @@ def _evidence_facts(evidence_blobs):
         except (json.JSONDecodeError, TypeError):
             continue  # un blob no parseable no aporta hechos
     return {"amounts": amounts, "percents": percents,
-            "zones": has_zones, "policies": has_policies}
+            "zones": has_zones, "policies": has_policies,
+            "delivery_confirmed": delivery_confirmed,
+            "refund_policy": refund_policy}
 
 
 _WORD_PRICE_RE = re.compile(
@@ -141,8 +168,12 @@ def _validate_answer(answer_text, evidence_blobs):
     for pct in _PERCENT_RE.findall(answer_text):
         if pct not in facts["percents"]:
             problems.append(f"porcentaje_sin_evidencia:{pct}")
-    if _GUARANTEE_RE.search(answer_text) and not (facts["zones"] or facts["policies"]):
-        problems.append("promesa_sin_evidencia")
+    # F10: cada tipo de promesa exige SU hecho concreto (ámbito/fecha/fuente),
+    # no la presencia genérica de una zona o política.
+    if _DELIVERY_PROMISE_RE.search(answer_text) and not facts["delivery_confirmed"]:
+        problems.append("entrega_sin_fecha_confirmada")
+    if _REFUND_PROMISE_RE.search(answer_text) and not facts["refund_policy"]:
+        problems.append("devolucion_sin_politica")
     if _WORD_PRICE_RE.search(answer_text):
         problems.append("precio_en_palabras_inverificable")
     return answer_text, problems
@@ -282,14 +313,31 @@ def _propose_action(tool, args, ctx):
     exige una nueva confirmación (N09/N10). Si la variante no existe en esta
     tienda, no hay propuesta que confirmar.
     """
+    # ACT-18: el asesor SÓLO puede proponer herramientas de la lista blanca
+    # (jamás pagos, estados, borrados ni operaciones del panel).
+    PROPOSABLE = {"add_item_to_cart"}
+    if tool not in PROPOSABLE:
+        return None
     payload = {k: v for k, v in (args or {}).items() if k != "action_id"}
     if tool == "add_item_to_cart":
+        from django.core.exceptions import ValidationError as DJValidationError
         from ..models import Variant
-        v = Variant.objects.filter(public_id=payload.get("variant_id"),
-                                   product__store=ctx.store, is_active=True).first()
+        try:
+            v = Variant.objects.filter(public_id=payload.get("variant_id"),
+                                       product__store=ctx.store, is_active=True).first()
+        except (DJValidationError, ValueError):
+            return None  # identificador malformado: no hay propuesta (ACT-11)
         if v is None:
             return None
-        qty = max(int(payload.get("quantity") or 1), 1)
+        # Límites de la operación al proponer: fuera de rango = sin propuesta.
+        from .. import services_commerce as _c
+        qty_raw = payload.get("quantity")
+        try:
+            qty = 1 if qty_raw in (None, "") else int(qty_raw)
+        except (TypeError, ValueError):
+            return None
+        if qty < 1 or qty > _c.MAX_QUANTITY:
+            return None
         payload.update({
             "quantity": qty,
             "variant_id": str(v.public_id),

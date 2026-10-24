@@ -147,7 +147,8 @@ def product_new(request, store):
     if request.method == "POST":
         data, errors = _product_form(request, store)
         if not errors:
-            base = data["short_title"].lower().replace(" ", "-")[:40]
+            from django.utils.text import slugify
+            base = slugify(data["short_title"])[:40] or "producto"
             slug, n = base, 1
             while Product.objects.filter(store=store, slug=slug).exists():
                 n += 1
@@ -193,6 +194,16 @@ def product_edit(request, store, pk):
         "store": store, "product": product, "data": data, "errors": errors,
         "variants": product.variants.order_by("pk"),
         "fit_rules": product.fit_rules.order_by("-version")[:3],
+        # F11: filas del editor (prellenadas desde la regla activa o desde el
+        # intento con errores); errores por fila/celda.
+        "fit_rows": request.session.pop("fit_form_rows", None) or (
+            product.fit_rules.filter(is_active=True).first().ranges
+            if product.fit_rules.filter(is_active=True).exists()
+            else [{}] * 4),
+        "fit_form_errors": request.session.pop("fit_form_errors", None),
+        "fit_requires_neck": request.session.pop("fit_requires_neck", None) or (
+            product.fit_rules.filter(is_active=True).first().requires_neck
+            if product.fit_rules.filter(is_active=True).exists() else False),
         "adjustments": StockAdjustment.objects.filter(variant__product=product)
         .select_related("variant", "by")[:20],
     })
@@ -511,23 +522,69 @@ def team_remove(request, store, member_id):
     return redirect("reino_merchant_settings", slug=store.slug)
 
 
+def _parse_fit_rows(post):
+    """Editor de filas (F11): lee las filas del formulario y devuelve
+    (ranges, errors, raw_rows). Errores POR CELDA, en español accionable."""
+    labels = post.getlist("row_label")
+    fields = ("neck_min", "neck_max", "chest_min", "chest_max", "back_min", "back_max")
+    cols = {f: post.getlist(f"row_{f}") for f in fields}
+    ranges, errors, raw = [], [], []
+    for i, label in enumerate(labels):
+        row = {"label": (label or "").strip()}
+        for f in fields:
+            row[f] = (cols[f][i] if i < len(cols[f]) else "").strip()
+        raw.append(row)
+        n = i + 1
+        if not any(row.values()):
+            raw.pop()
+            continue  # fila vacía: se ignora
+        if not row["label"]:
+            errors.append(f"Fila {n}: la talla es obligatoria (celda «Talla»).")
+        parsed = {}
+        for f in fields:
+            value = row[f]
+            if value == "":
+                parsed[f] = None
+                continue
+            try:
+                parsed[f] = float(value.replace(",", "."))
+            except ValueError:
+                errors.append(f"Fila {n}, celda «{f.replace('_', ' ')}»: «{value}» no es un número.")
+        for pair in (("neck", "cuello"), ("chest", "pecho"), ("back", "lomo")):
+            lo, hi = parsed.get(f"{pair[0]}_min"), parsed.get(f"{pair[0]}_max")
+            if lo is not None and hi is not None and not lo < hi:
+                errors.append(f"Fila {n}: el mínimo de {pair[1]} debe ser menor que el máximo.")
+        if parsed.get("chest_min") is None or parsed.get("chest_max") is None:
+            errors.append(f"Fila {n}: pecho mínimo y máximo son obligatorios.")
+        if row["label"] and not errors:
+            ranges.append({
+                "label": row["label"][:20],
+                "neck_min": parsed["neck_min"], "neck_max": parsed["neck_max"],
+                "chest_min": parsed["chest_min"], "chest_max": parsed["chest_max"],
+                "back_min": parsed["back_min"], "back_max": parsed["back_max"],
+            })
+    if not ranges and not errors:
+        errors.append("La tabla necesita al menos una fila de talla completa.")
+    return ranges, errors, raw
+
+
 @merchant_view
 @require_capability("catalog")
 @require_POST
 def fit_rule_new(request, store, pk):
-    """Nueva versión de la regla de talla (JSON de rangos validado)."""
-    import json
+    """Nueva versión de la tabla de tallas — editor de FILAS, sin JSON (F11)."""
     product = Product.objects.filter(store=store, pk=pk).first()
     if product is None:
         return redirect("reino_merchant_catalog", slug=store.slug)
-    try:
-        ranges = json.loads(request.POST.get("ranges", "[]"))
-        assert isinstance(ranges, list) and ranges
-        for row in ranges:
-            assert row["label"] and float(row["chest_min"]) < float(row["chest_max"])
-    except (ValueError, KeyError, AssertionError, TypeError):
-        _flash(request, "Rangos no válidos: revisá el formato JSON de la tabla.")
+    ranges, errors, raw = _parse_fit_rows(request.POST)
+    if errors:
+        # Conservar lo escrito y mostrar los errores por fila/celda.
+        request.session["fit_form_errors"] = errors
+        request.session["fit_form_rows"] = raw
+        request.session["fit_requires_neck"] = request.POST.get("requires_neck") == "1"
         return redirect("reino_merchant_product_edit", slug=store.slug, pk=pk)
+    request.session.pop("fit_form_errors", None)
+    request.session.pop("fit_form_rows", None)
     version = (product.fit_rules.count() or 0) + 1
     product.fit_rules.update(is_active=False)
     FitRule.objects.create(

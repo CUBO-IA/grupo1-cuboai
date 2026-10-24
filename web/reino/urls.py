@@ -11,10 +11,12 @@ from django.urls import path
 
 from . import (
     views_account, views_design, views_explore, views_looklab, views_merchant,
-    views_platform, views_storefront, views_stylist,
+    views_payments, views_platform, views_storefront, views_stylist,
 )
 
 urlpatterns = [
+    path("pagos/webhook/<str:provider>/", views_payments.payment_webhook,
+         name="reino_payment_webhook"),
     # NOTA: "/" la sirve la app histórica `tienda` (home preservada, tests en verde).
     # La plataforma nueva vive en /tiendas/ y /s/<slug>/ (redirección documentada en docs/01).
     # Plataforma: descubrimiento, búsqueda y comparación (P01/P04/P06, §11).
@@ -43,6 +45,8 @@ urlpatterns = [
     path("s/<slug:slug>/asesor/accion/", views_stylist.stylist_confirm_action,
          name="reino_stylist_action"),
     path("s/<slug:slug>/carrito/", views_storefront.cart_view, name="reino_cart"),
+    path("s/<slug:slug>/descargar/<uuid:token>/", views_storefront.digital_download,
+         name="reino_digital_download"),
     path("s/<slug:slug>/carrito/agregar/", views_storefront.cart_add, name="reino_cart_add"),
     path("s/<slug:slug>/carrito/linea/<int:item_id>/", views_storefront.cart_update, name="reino_cart_update"),
     path("s/<slug:slug>/carrito/linea/<int:item_id>/quitar/", views_storefront.cart_remove, name="reino_cart_remove"),
@@ -100,8 +104,14 @@ urlpatterns = [
          name="reino_merchant_diseno"),
     path("negocio/<slug:slug>/diseno/guardar/", views_design.design_save,
          name="reino_merchant_diseno_save"),
+    path("negocio/<slug:slug>/diseno/previsualizar/", views_design.design_preview,
+         name="reino_merchant_diseno_preview"),
     path("negocio/<slug:slug>/diseno/publicar/", views_design.design_publish,
          name="reino_merchant_diseno_publish"),
+    path("negocio/<slug:slug>/diseno/modulo/mover/", views_design.design_module_move,
+         name="reino_merchant_diseno_move"),
+    path("negocio/<slug:slug>/diseno/media/<int:asset_id>/asignar/", views_design.media_assign,
+         name="reino_merchant_media_assign"),
     path("negocio/<slug:slug>/diseno/restaurar/<int:version>/",
          views_design.design_restore, name="reino_merchant_diseno_restore"),
     path("negocio/<slug:slug>/medios/subir/", views_design.media_upload,
