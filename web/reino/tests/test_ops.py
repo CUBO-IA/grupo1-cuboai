@@ -29,6 +29,7 @@ class BackupTests(TestCase):
         py = venv_py if venv_py.exists() else sys.executable
         with tempfile.TemporaryDirectory() as tmp:
             env = dict(os.environ, REINO_SQLITE_PATH=os.path.join(tmp, "src.sqlite3"))
+            env.pop("DATABASE_URL", None)  # el respaldo es sqlite local aunque CI use Postgres
             r1 = subprocess.run(
                 [str(py), "manage.py", "migrate", "--run-syncdb"],
                 cwd=root, env=env, capture_output=True, text=True)

@@ -20,7 +20,7 @@ import json
 import uuid
 from datetime import timedelta
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from .models import (
@@ -341,6 +341,21 @@ def confirm_checkout(checkout, customer, idempotency_key):
     payment_method = s.get("payment_method", "manual")
     total = money(subtotal - discount + (shipping or 0))
 
+    try:
+        return _create_order(checkout, idempotency_key, s, subtotal, discount,
+                             shipping, payment_method, total, customer)
+    except IntegrityError:
+        # Doble confirmación del MISMO intento en concurrencia (Postgres): la
+        # restricción única de idempotency_key lo resguarda; el segundo hilo
+        # devuelve el pedido del primero — jamás un duplicado (R02/A49).
+        existing = Order.objects.filter(idempotency_key=idempotency_key).first()
+        if existing:
+            return existing
+        raise
+
+
+def _create_order(checkout, idempotency_key, s, subtotal, discount, shipping,
+                  payment_method, total, customer):
     with transaction.atomic():
         # Referencia única por tienda sin count()+1 al aire: la fila de la
         # tienda se bloquea dentro de la transacción (serializa por comercio) y
