@@ -15,6 +15,7 @@ Versión del motor: ENGINE_VERSION (se guarda en cada RecommendationEvent).
 import uuid
 from decimal import Decimal
 
+from . import services_ranking, services_visibility as visibility
 from .models import Product, RecommendationEvent, Variant
 from .services_fit import COMPATIBLE, EDGE, evaluate_for_profile
 
@@ -49,7 +50,7 @@ def normalize_intent(occasion="", style="", budget=None, budget_scope="products"
 
 def _candidates(store, intent):
     """Paso B: unión de atributos de ocasión/estilo y todo lo publicado."""
-    qs = Product.objects.filter(store=store, status=Product.Status.PUBLISHED)
+    qs = visibility.visible_products(store=store)
     if intent["occasion"]:
         preferred = [p for p in qs if intent["occasion"] in (p.occasions or [])]
         rest = [p for p in qs if p not in preferred]
@@ -155,8 +156,19 @@ def recommend(store, intent, measurement=None, limit=3, kind="looklab"):
                 reasons.append(BUDGET_TOTAL_OK)
         chosen.append({"product": product, "score": score, "reasons": reasons})
 
-    chosen.sort(key=lambda c: (-c["score"], c["product"].short_title))
-    selection = chosen[:limit]
+    # Orden final: política de ranking VERSIONADA (§6.4, ranking-v1). Los
+    # candidatos ya son elegibles; aquí sólo se ordenan con desglose.
+    ranked = services_ranking.score_candidates(
+        [{"product": c["product"],
+          "variant": c["product"].variants.filter(is_active=True).first(),
+          "price": c["product"].base_price,
+          "reasons": c["reasons"], "legacy_score": c["score"]} for c in chosen],
+        intent={**intent, "preferences": intent.get("preferences") or {}})
+    for c, r in zip(chosen, ranked):
+        c["rank_score"] = str(r["score"])
+        c["score_parts"] = r["score_parts"]
+    selection = [c for _, c in sorted(zip(ranked, chosen),
+                                      key=lambda p: -Decimal(p[0]["score"]))[:limit]]
 
     RecommendationEvent.objects.create(
         store=store,
@@ -169,7 +181,7 @@ def recommend(store, intent, measurement=None, limit=3, kind="looklab"):
         ],
         excluded=excluded,
         reasons=sorted({r for c in selection for r in c["reasons"]}),
-        engine_version=ENGINE_VERSION,
+        engine_version=ENGINE_VERSION + "+" + services_ranking.RANKING_VERSION,
     )
     return {"selection": selection, "excluded": excluded, "engine_version": ENGINE_VERSION}
 
@@ -192,7 +204,7 @@ def compose_bundle(store, main_product, measurement=None, budget=None, max_extra
     main_styles = set(main_product.styles or [])
 
     candidates = (
-        Product.objects.filter(store=main_product.store, status=Product.Status.PUBLISHED)
+        visibility.visible_products(store=main_product.store)
         .exclude(pk=main_product.pk)
         .exclude(category=main_product.category)  # sin duplicar función
     )

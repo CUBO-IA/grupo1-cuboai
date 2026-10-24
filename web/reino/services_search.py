@@ -13,6 +13,7 @@ import unicodedata
 from decimal import Decimal, InvalidOperation
 
 from .models import CategorySchema, Product, Store
+from . import services_visibility as visibility
 from .money import fmt
 
 
@@ -31,11 +32,11 @@ def parse_query(text):
     """Extrae intención estructurada de una consulta libre (reglas)."""
     raw = (text or "").strip()
     out = {"text": raw, "max_price": None, "occasion": None}
-    m = re.search(r"menos de \$?\s*(\d+(?:[.,]\d{1,2})?)", normalize(raw))
+    m = re.search(r"(?:menos de|hasta) \$?\s*(\d+(?:[.,]\d{1,2})?)", normalize(raw))
     if m:
         try:
             out["max_price"] = Decimal(m.group(1).replace(",", "."))
-            raw = re.sub(r"(?i)(por )?menos de \$?\s*\d+(?:[.,]\d{1,2})?", "", raw).strip()
+            raw = re.sub(r"(?i)(por )?(menos de|hasta) \$?\s*\d+(?:[.,]\d{1,2})?", "", raw).strip()
             out["text"] = raw
         except InvalidOperation:
             pass
@@ -52,12 +53,10 @@ def search_catalog(query="", store=None, occasion="", max_price=None,
     parsed = parse_query(query) if query else {"text": "", "max_price": None, "occasion": None}
     max_price = max_price or parsed["max_price"]
     occasion = occasion or parsed["occasion"] or ""
-    qs = (Product.objects.filter(status=Product.Status.PUBLISHED)
+    # F06: la visibilidad es la política CENTRALIZADA (negocio + tienda +
+    # publicación), no un filtro local de esta vista.
+    qs = (visibility.visible_products(store=store, include_demo=include_demo)
           .select_related("store").prefetch_related("media", "variants"))
-    if store is not None:
-        qs = qs.filter(store=store)
-    if not include_demo:
-        qs = qs.exclude(store__is_demo=True)
     if category:
         qs = qs.filter(store__category__icontains=category)
     if occasion:
@@ -66,7 +65,12 @@ def search_catalog(query="", store=None, occasion="", max_price=None,
         qs = [p for p in qs if p.base_price <= max_price]
     needle = normalize(parsed["text"])
     if needle:
-        terms = [t for t in needle.split() if len(t) > 2]
+        # Palabras de relleno frecuentes en consultas sugeridas («algo para
+        # paseo»): NO son criterio AND o eliminarían resultados válidos.
+        stop = {"algo", "para", "una", "unos", "unas", "con", "que", "del",
+                "los", "las", "por", "mis", "muy", "mas", "esto", "esta",
+                "este", "estos", "quiero", "busco", "necesito", "regalo"}
+        terms = [t for t in needle.split() if len(t) > 2 and t not in stop]
         if terms:
             qs = [p for p in qs if all(
                 t in normalize(" ".join([p.title, p.short_title, p.description or "",
@@ -96,7 +100,7 @@ def annotate_stores(stores):
     la escena neutra de su tema, nunca el activo de otra marca (AC10).
     """
     for store in stores:
-        sample = list(store.products.filter(status="published")
+        sample = list(visibility.visible_products(store=store)
                       .prefetch_related("media").order_by("-is_featured", "short_title")[:2])
         store.sample_products = sample
         store.cover_product = sample[0] if sample else None
@@ -107,13 +111,14 @@ def explore_home():
     """Datos del descubrimiento (P01): todo desde la base, nunca listas
     escondidas en plantillas. Demo separada; si hay una sola tienda activa se
     presenta con orgullo, sin fabricar escala."""
-    stores = annotate_stores(list(Store.objects.filter(status=Store.Status.ACTIVE)))
-    demo = annotate_stores(list(Store.objects.filter(status=Store.Status.DEMO, is_demo=True)))
+    stores = annotate_stores(list(visibility.visible_stores(include_demo=False)))
+    demo = annotate_stores(list(Store.objects.filter(status=Store.Status.DEMO, is_demo=True,
+                                                     merchant__status__in=("pilot", "active"))))
     featured = []
     for store in stores:
-        product = (store.products.filter(status="published", is_featured=True)
+        product = (visibility.visible_products(store=store).filter(is_featured=True)
                    .prefetch_related("media", "variants").first()
-                   or store.products.filter(status="published")
+                   or visibility.visible_products(store=store)
                    .prefetch_related("media", "variants").first())
         if product:
             featured.append({"store": store, "product": product})

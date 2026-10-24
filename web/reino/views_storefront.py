@@ -12,7 +12,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from . import services_analytics, services_commerce as commerce
+from . import services_analytics, services_commerce as commerce, services_fulfillment
 from . import services_fit, services_memory, services_theme, tenancy
 from .models import (
     KnowledgeDocument, Order, Product, ShippingZone, Variant,
@@ -47,18 +47,11 @@ def _measurement(request, store, profile):
 
 # ------------------------------------------------------------------- S01 ----
 
-@_store_view
-def store_home(request, store):
-    """S01 · Home de marca (P03): hero con foto real protagonista, módulos
-    del tema PUBLICADO (visibilidad/orden editables en el estudio §13).
-
-    Una tienda nueva muestra el tema neutral y sus propias fotos; jamás
-    hereda activos de otra marca (AC10). El hero evita el activo histórico
-    con el error «WEINER» embebido (validación de marca pendiente): usa la
-    pieza destacada configurada o la primera foto real del catálogo.
-    """
-    published = services_theme.current_theme(store)
-    config = published.config or {}
+def _store_home_context(request, store, theme_config=None):
+    """Contexto de la portada; con `theme_config` explícito sirve el preview
+    privado del borrador (F08)."""
+    config = theme_config if theme_config is not None else (
+        services_theme.current_theme(store).config or {})
     modules = [m for m in (config.get("modules") or []) if m.get("visible")]
 
     featured = list(
@@ -75,12 +68,34 @@ def store_home(request, store):
     if hero_product is None and featured:
         hero_product = featured[0]
     products_exist = Product.objects.filter(store=store, status=Product.Status.PUBLISHED).exists()
-    return render(request, "reino/store_home.html", {
+    hero_asset = None
+    if hero_cfg.get("media_asset_id"):
+        hero_asset = store.media_assets.filter(pk=hero_cfg["media_asset_id"]).first()
+    ctx = {
         "featured": featured, "hero_product": hero_product,
         "products_exist": products_exist, "theme_config": config,
-        "modules": modules, "hero_cfg": hero_cfg,
+        "modules": modules, "hero_cfg": hero_cfg, "hero_asset": hero_asset,
         "profile": _profile(request, store),
-    })
+    }
+    if theme_config is not None:
+        # Preview del borrador: sus variables CSS tienen prioridad sobre las
+        # del procesador de contexto (que trae la versión publicada).
+        from .context import theme_css_vars
+        ctx["reino_theme"] = config
+        ctx["reino_theme_css"] = theme_css_vars(config)
+    return ctx
+
+
+@_store_view
+def store_home(request, store):
+    """S01 · Home de marca: hero con foto real, módulos del tema PUBLICADO.
+
+    Una tienda nueva muestra el tema neutral y sus propias fotos; jamás
+    hereda activos de otra marca (AC10). El hero evita el activo histórico
+    con el error «WEINER» embebido (validación de marca pendiente).
+    """
+    return render(request, "reino/store_home.html",
+                  _store_home_context(request, store))
 
 
 # ------------------------------------------------------------------- S02 ----
@@ -292,6 +307,37 @@ def cart_view(request, store):
 
 
 @_store_view
+def digital_download(request, store, token):
+    """Descarga autorizada de un producto digital (A33, §12.2).
+
+    El enlace sale de la página de pedido del comprador; valida token,
+    vencimiento y límite — nunca es una URL pública permanente.
+    """
+    grant, error = services_fulfillment.authorized_download(token)
+    if error:
+        return render(request, "reino/download_error.html", {
+            "store": store, "error": error}, status=410)
+    # Autorización: el pedido del grant debe pertenecer a esta sesión.
+    session_orders = set(request.session.get(f"reino_orders_{store.slug}", []))
+    owns_cart = grant.order.cart and grant.order.cart.session_key == request.session.session_key
+    if not owns_cart and str(grant.order.public_id) not in session_orders:
+        return render(request, "reino/download_error.html", {
+            "store": store,
+            "error": "Esta descarga pertenece a otra compra. Abrila desde tu pedido."},
+            status=403)
+    services_fulfillment.register_download(grant)
+    from django.http import FileResponse
+    return FileResponse(grant.asset.file.open("rb"),
+                        as_attachment=True,
+                        filename=f"{grant.asset.product.slug}-v{grant.asset.version}{_ext(grant.asset.file.name)}")
+
+
+def _ext(name):
+    import os
+    return os.path.splitext(name)[1][:10] or ".bin"
+
+
+@_store_view
 @require_POST
 def cart_add(request, store):
     """Añade una variante válida; una inexistente nunca llega al carrito."""
@@ -302,9 +348,14 @@ def cart_add(request, store):
         request.session["reino_cart_error"] = "Esa variante ya no está disponible."
         return redirect("reino_cart", slug=store.slug)
     cart = commerce.get_open_cart(store, request.session.session_key, create=True)
+    slot = None
+    if variant.product.offer_type == "service":
+        from .models import ServiceSlot
+        slot = ServiceSlot.objects.filter(
+            pk=request.POST.get("slot"), product=variant.product, is_active=True).first()
     try:
         commerce.add_item(cart, variant, request.POST.get("quantity", 1),
-                          recipient=_profile(request, store))
+                          recipient=_profile(request, store), service_slot=slot)
     except (commerce.CartError, commerce.StockConflict) as exc:
         request.session["reino_cart_error"] = str(exc)
         return redirect("reino_cart", slug=store.slug)
@@ -370,9 +421,16 @@ def checkout(request, store):
             errors["name"] = "Ingresá tu nombre."
         if "@" not in data["email"]:
             errors["email"] = "Ingresá un correo válido."
+        # Carrito sin líneas físicas: no hay transporte que validar (G2).
+        if not commerce.cart_requires_shipping(cart):
+            data["delivery_mode"] = "none"
+            data["zone"] = ""
+            data["address"] = data["address"] or ""
         # Zona validada en servidor: tienda + activa + modalidad coherente (R06).
         zone = None
-        if data["delivery_mode"] == "local":
+        if data["delivery_mode"] == "none":
+            pass  # digital/servicio: sin envío (A33)
+        elif data["delivery_mode"] == "local":
             zone = zones.filter(name=data["zone"], mode="local").first()
             if zone is None:
                 errors["zone"] = "Elegí una zona de entrega válida."
@@ -430,6 +488,11 @@ def checkout(request, store):
                                              request_id=f"order-{order.public_id}",
                                              order=order.reference, total=str(order.total))
                     request.session.pop(idem_key, None)
+                    # La compra queda ligada a esta sesión: autoriza las
+                    # descargas digitales de ESTE pedido (A33).
+                    owned = request.session.get(f"reino_orders_{store.slug}", [])
+                    owned.append(str(order.public_id))
+                    request.session[f"reino_orders_{store.slug}"] = owned[-20:]
                     return redirect("reino_order_guest", slug=store.slug,
                                     public_id=order.public_id, token=order.access_token)
 
@@ -466,9 +529,14 @@ def order_detail(request, store, public_id, token=None):
     if not owner_session and str(order.access_token) != str(token):
         # Un número adivinado no autentica: sin datos privados (A25).
         return render(request, "reino/order.html", {"order": None}, status=404)
+    grants = []
+    if order.payment_status == Order.PaymentStatus.PAID:
+        grants = order.digital_grants.select_related("asset__product")
     return render(request, "reino/order.html", {
         "order": order,
         "payment_label": dict(Order.PaymentStatus.choices).get(order.payment_status),
+        "digital_grants": grants,
+        "bookings": order.bookings.select_related("slot"),
     })
 
 
