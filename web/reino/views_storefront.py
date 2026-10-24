@@ -12,8 +12,8 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
 
-from . import services_commerce as commerce
-from . import services_fit, services_memory, tenancy
+from . import services_analytics, services_commerce as commerce
+from . import services_fit, services_memory, services_theme, tenancy
 from .models import (
     KnowledgeDocument, Order, Product, ShippingZone, Variant,
 )
@@ -49,20 +49,36 @@ def _measurement(request, store, profile):
 
 @_store_view
 def store_home(request, store):
-    """S01 · Inicio: entrar a una boutique.
+    """S01 · Home de marca (P03): hero con foto real protagonista, módulos
+    del tema PUBLICADO (visibilidad/orden editables en el estudio §13).
 
-    Módulos en orden §6: hero, claridad de compra, selección de la casa,
-    LookLab, Smart Fit, editorial por ocasión, ayuda, cierre.
+    Una tienda nueva muestra el tema neutral y sus propias fotos; jamás
+    hereda activos de otra marca (AC10). El hero evita el activo histórico
+    con el error «WEINER» embebido (validación de marca pendiente): usa la
+    pieza destacada configurada o la primera foto real del catálogo.
     """
+    published = services_theme.current_theme(store)
+    config = published.config or {}
+    modules = [m for m in (config.get("modules") or []) if m.get("visible")]
+
     featured = list(
         Product.objects.filter(store=store, status=Product.Status.PUBLISHED)
         .prefetch_related("media", "variants")
-        .order_by("-is_featured", "short_title")[:3]
+        .order_by("-is_featured", "short_title")[:4]
     )
+    hero_product = None
+    hero_cfg = config.get("hero") or {}
+    if hero_cfg.get("product_id"):
+        hero_product = Product.objects.filter(
+            store=store, status=Product.Status.PUBLISHED,
+            public_id=hero_cfg["product_id"]).prefetch_related("media").first()
+    if hero_product is None and featured:
+        hero_product = featured[0]
     products_exist = Product.objects.filter(store=store, status=Product.Status.PUBLISHED).exists()
     return render(request, "reino/store_home.html", {
-        "featured": featured,
-        "products_exist": products_exist,
+        "featured": featured, "hero_product": hero_product,
+        "products_exist": products_exist, "theme_config": config,
+        "modules": modules, "hero_cfg": hero_cfg,
         "profile": _profile(request, store),
     })
 
@@ -187,6 +203,10 @@ def product_detail(request, store, product_slug):
         ],
     }, ensure_ascii=False)
 
+    services_analytics.track("product_view", store=store,
+                             session_key=request.session.session_key or "",
+                             request_id=request.GET.get("_r"),
+                             product=str(product.public_id))
     return render(request, "reino/product_detail.html", {
         "product": product, "variant_rows": variant_rows, "fit": fit,
         "profile": profile, "complements": complements,
@@ -288,6 +308,10 @@ def cart_add(request, store):
     except (commerce.CartError, commerce.StockConflict) as exc:
         request.session["reino_cart_error"] = str(exc)
         return redirect("reino_cart", slug=store.slug)
+    services_analytics.track("cart_added", store=store,
+                             session_key=request.session.session_key or "",
+                             variant=str(variant.public_id),
+                             quantity=int(request.POST.get("quantity", 1)))
     return redirect("reino_cart", slug=store.slug)
 
 
@@ -381,6 +405,9 @@ def checkout(request, store):
                     # confirmar un resumen obsoleto.
                     step = "review"
                 if step == "review":
+                    services_analytics.track("checkout_reviewed", store=store,
+                                             session_key=request.session.session_key or "",
+                                             revision=session.revision)
                     return render(request, "reino/checkout_review.html", {
                         "cart": cart, "summary": commerce.cart_summary(cart, payment_method),
                         "data": data, "session": session, "store": store,
@@ -398,6 +425,10 @@ def checkout(request, store):
                 except (commerce.CartError, commerce.StockConflict) as exc:
                     errors["confirm"] = str(exc)
                 else:
+                    services_analytics.track("order_placed", store=store,
+                                             session_key=request.session.session_key or "",
+                                             request_id=f"order-{order.public_id}",
+                                             order=order.reference, total=str(order.total))
                     request.session.pop(idem_key, None)
                     return redirect("reino_order_guest", slug=store.slug,
                                     public_id=order.public_id, token=order.access_token)

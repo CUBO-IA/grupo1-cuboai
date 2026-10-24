@@ -30,6 +30,12 @@ class Merchant(models.Model):
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.DRAFT)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        # Permiso global EXPLÍCITO de operador de plataforma (N11, §8.4): se
+        # concede solo al operador; is_staff o pertenecer a un comercio no lo
+        # otorgan ni lo heredan.
+        permissions = [("operate_platform", "Puede operar la administración global de la plataforma")]
+
     def __str__(self):
         return self.name
 
@@ -123,6 +129,14 @@ class Product(models.Model):
     class Meta:
         unique_together = ("store", "slug")
         ordering = ["-is_featured", "short_title"]
+
+    @property
+    def first_active_variant(self):
+        """Primera variante activa (acciones de tarjeta: comparar)."""
+        cache = getattr(self, "_prefetched_objects_cache", {})
+        if "variants" in cache:
+            return next((v for v in cache["variants"] if v.is_active), None)
+        return self.variants.filter(is_active=True).first()
 
     def __str__(self):
         return f"{self.short_title} ({self.store.slug})"
@@ -246,6 +260,11 @@ class CheckoutSession(models.Model):
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     cart = models.ForeignKey(Cart, on_delete=models.PROTECT, related_name="checkouts")
     cart_version = models.PositiveIntegerField()
+    # Identidad separada (§8.1, N02): intento estable + número de revisión +
+    # digest del contenido. `idempotency_key` interna es única por revisión;
+    # la identidad comercial del intento es `intent_key`.
+    intent_key = models.CharField(max_length=80, db_index=True, default="")
+    revision = models.PositiveIntegerField(default=0)
     idempotency_key = models.CharField(max_length=96, unique=True)
     summary = models.JSONField(default=dict)
     summary_hash = models.CharField(max_length=64, blank=True)  # contenido aprobado (R02)
@@ -424,17 +443,28 @@ class StockAdjustment(models.Model):
 
 
 class OutboxEvent(models.Model):
-    """Trabajo diferido recuperable tras fallo (emails, métricas, webhooks)."""
+    """Trabajo diferido recuperable tras fallo (emails, métricas, webhooks).
+
+    Claim con vencimiento (§18): el bloqueo de fila no se retiene durante la
+    llamada externa; si el proceso cae tras enviar y antes de persistir, el
+    evento se reclama de nuevo (al menos una vez, documentado). Un evento sin
+    proveedor configurado queda BLOCKED con causa precisa, nunca «enviado».
+    """
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pendiente"
         DONE = "done", "Procesado"
         FAILED = "failed", "Fallido"
+        BLOCKED = "blocked", "Bloqueado por configuración"
 
     type = models.CharField(max_length=40)
     payload = models.JSONField(default=dict)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
     retries = models.PositiveSmallIntegerField(default=0)
+    claim_token = models.CharField(max_length=40, blank=True)
+    claimed_until = models.DateTimeField(null=True, blank=True)
+    available_at = models.DateTimeField(null=True, blank=True)  # backoff de reintento
+    last_error = models.CharField(max_length=200, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     processed_at = models.DateTimeField(null=True, blank=True)
 
@@ -563,12 +593,18 @@ class KnowledgeDocument(models.Model):
 # ------------------------------------------------------------------- IA -----
 
 class AIConversation(models.Model):
-    """Conversación del asesor. Propietario = sesión (P0)."""
+    """Conversación del asesor. Propietario = sesión (P0).
+
+    `history_sealed_before` separa el historial VISIBLE del historial
+    elegible para el proveedor (N08, §8.3): al revocar un consentimiento se
+    sella y los mensajes anteriores no vuelven a enviarse al modelo.
+    """
 
     public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
     store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name="conversations")
     session_key = models.CharField(max_length=64, db_index=True)
     mode = models.CharField(max_length=12, default="rules")  # ai | rules (etiqueta honesta)
+    history_sealed_before = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
 
@@ -610,3 +646,186 @@ class ShippingZone(models.Model):
 
     class Meta:
         ordering = ["name"]
+
+
+# ============================================================ REVISIÓN 2 ====
+# Contratos de categoría, medios reales, tema versionado, comparación y
+# analítica (§13, §15, §21 del encargo de revisión 2).
+
+class CategorySchema(models.Model):
+    """Esquema de atributos tipados por categoría (§15): la categoría define
+    qué se puede comparar y con qué unidad canónica."""
+
+    slug = models.SlugField(max_length=60, unique=True)  # p. ej. "moda-canina"
+    name = models.CharField(max_length=80)
+
+    def __str__(self):
+        return self.name
+
+
+class AttributeDefinition(models.Model):
+    """Definición de un atributo comparable dentro de una categoría."""
+
+    class ValueType(models.TextChoices):
+        TEXT = "text", "Texto"
+        OPTION = "option", "Opción"
+        DECIMAL = "decimal", "Número"
+        MEASURE = "measure", "Medida con unidad"
+        BOOLEAN = "boolean", "Sí/No"
+        LIST = "list", "Lista controlada"
+
+    schema = models.ForeignKey(CategorySchema, on_delete=models.CASCADE,
+                               related_name="definitions")
+    key = models.SlugField(max_length=60)        # p. ej. "chest_cm", "paper_size"
+    label = models.CharField(max_length=80)
+    value_type = models.CharField(max_length=10, choices=ValueType.choices)
+    unit = models.CharField(max_length=12, blank=True)  # unidad canónica (cm, g, ml…)
+    options = models.JSONField(default=list)     # para option/list
+    is_variant_level = models.BooleanField(default=False)
+    position = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        unique_together = ("schema", "key")
+        ordering = ["position", "pk"]
+
+
+class AttributeValue(models.Model):
+    """Valor de atributo con estado y procedencia (§15).
+
+    «No aplica», «no informado» y un valor real son cosas distintas. Se
+    guarda el valor ORIGINAL con su unidad, el valor NORMALIZADO a la unidad
+    canónica de la definición y la procedencia del dato.
+    """
+
+    class Status(models.TextChoices):
+        INFORMED = "informed", "Informado"
+        NOT_APPLICABLE = "not_applicable", "No aplica"
+        UNKNOWN = "unknown", "No informado"
+
+    definition = models.ForeignKey(AttributeDefinition, on_delete=models.CASCADE,
+                                   related_name="values")
+    product = models.ForeignKey(Product, on_delete=models.CASCADE,
+                                related_name="attribute_values", null=True, blank=True)
+    variant = models.ForeignKey(Variant, on_delete=models.CASCADE,
+                                related_name="attribute_values", null=True, blank=True)
+    status = models.CharField(max_length=14, choices=Status.choices,
+                              default=Status.INFORMED)
+    value = models.JSONField(default=dict)             # {"raw": ..., "unit": "in"}
+    normalized_number = models.DecimalField(max_digits=12, decimal_places=3,
+                                            null=True, blank=True)  # unidad canónica
+    source = models.CharField(max_length=120, blank=True)  # procedencia verificable
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["definition", "product"], condition=models.Q(variant__isnull=True),
+                name="uniq_attribute_product"),
+            models.UniqueConstraint(
+                fields=["definition", "variant"], condition=models.Q(product__isnull=True),
+                name="uniq_attribute_variant"),
+        ]
+
+
+class MediaAsset(models.Model):
+    """Archivo de imagen REAL subido por el comerciante (§13).
+
+    Validado por tipo/tamaño en la vista; guarda dimensiones, punto focal y
+    texto alternativo. El origen/derechos es un dato editorial declarado.
+    """
+
+    store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name="media_assets")
+    file = models.ImageField(upload_to="reino/uploads/%Y/%m")
+    width = models.PositiveIntegerField(default=0)
+    height = models.PositiveIntegerField(default=0)
+    alt = models.CharField(max_length=160)
+    focal_x = models.FloatField(default=0.5)  # 0..1 punto focal horizontal
+    focal_y = models.FloatField(default=0.5)
+    origin = models.CharField(max_length=160, blank=True)  # derechos/origen (dato editorial)
+    uploaded_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL,
+                                    null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.store.slug}:{self.pk} {self.alt[:30]}"
+
+
+class StoreThemeVersion(models.Model):
+    """Versión de apariencia y contenido de una tienda (§13).
+
+    Borrador y publicación separados; publicar es una acción explícita con
+    validación; restaurar crea una NUEVA versión copiando una anterior (el
+    historial nunca se pisa). Solo una versión publicada por tienda, garantía
+    reforzada en el servicio dentro de una transacción.
+    """
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Borrador"
+        PUBLISHED = "published", "Publicada"
+
+    store = models.ForeignKey(Store, on_delete=models.CASCADE, related_name="theme_versions")
+    version = models.PositiveIntegerField()
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT)
+    config = models.JSONField(default=dict)
+    created_by = models.ForeignKey("auth.User", on_delete=models.SET_NULL,
+                                   null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    published_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ("store", "version")
+        ordering = ["-version"]
+
+
+class ComparisonSession(models.Model):
+    """Bandeja persistente de comparación (P06): 2–4 variantes por sesión,
+    compartible por ID público sin datos sensibles."""
+
+    public_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    session_key = models.CharField(max_length=64, db_index=True)
+    items = models.JSONField(default=list)  # [{"variant_id": "..."}]
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class AnalyticsEvent(models.Model):
+    """Evento de analítica con definición y deduplicación (§21).
+
+    `request_id` único: un reintento del cliente nunca cuenta dos veces.
+    Los pedidos creados, pagados y cobrados son eventos DISTINTOS.
+    """
+
+    store = models.ForeignKey(Store, on_delete=models.CASCADE,
+                              related_name="analytics", null=True, blank=True)
+    session_key = models.CharField(max_length=64, db_index=True)
+    name = models.CharField(max_length=40, db_index=True)  # ver services_analytics.EVENTS
+    request_id = models.CharField(max_length=40, unique=True)
+    payload = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-pk"]
+
+
+class IntegrationState(models.Model):
+    """Estado OBSERVABLE de una integración (AC25).
+
+    Nunca «producción» por la sola presencia de una clave: los estados
+    posibles son no_configurada / configurada / conexion_comprobada /
+    evaluacion_aprobada / degradada / error, con fecha de última comprobación
+    real y detalle accionable. Un botón «Probar conexión» ejecuta la prueba.
+    """
+
+    class State(models.TextChoices):
+        NOT_CONFIGURED = "no_configurada", "No configurada"
+        CONFIGURED = "configurada", "Configurada"
+        CONNECTION_OK = "conexion_comprobada", "Conexión comprobada"
+        EVAL_APPROVED = "evaluacion_aprobada", "Evaluación aprobada"
+        DEGRADED = "degradada", "Degradada"
+        ERROR = "error", "Error"
+
+    key = models.SlugField(max_length=40, unique=True)  # ai | email | payments | postgres
+    state = models.CharField(max_length=22, choices=State.choices,
+                             default=State.NOT_CONFIGURED)
+    detail = models.CharField(max_length=200, blank=True)
+    checked_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)

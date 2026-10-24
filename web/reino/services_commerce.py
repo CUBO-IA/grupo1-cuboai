@@ -226,24 +226,28 @@ def prepare_checkout(cart, payment_method, delivery_mode="pickup", zone=None,
             {"variant_id": l["item"].variant_id, "quantity": l["item"].quantity,
              "unit_price": str(l["current_price"]),
              "discount_eligible": l["discount_eligible"],
+             # Destinatario por ID (§8.1): el alias es solo presentación.
+             "recipient_id": l["item"].recipient_id or 0,
              "recipient_alias": l["item"].recipient.alias if l["item"].recipient else ""}
             for l in summary["lines"]
         ],
     }
     digest = _summary_hash(content)
 
-    # Idempotencia acotada a ESTE carrito (R01): una clave de otra tienda o de
-    # otro carrito nunca recupera el resumen ajeno.
+    # Identidad estable del intento (§8.1, N02): se reutiliza la revisión
+    # vigente si el contenido es idéntico, sin importar su número interno;
+    # una revisión vencida se RENUEVA con stock revalidado (N03) y el
+    # comprador vuelve a ver el nuevo resumen antes de confirmar.
     existing = CheckoutSession.objects.filter(
-        idempotency_key__startswith=key, cart=cart, is_current=True
-    ).order_by("-created_at").first()
-    if existing and existing.idempotency_key == key and existing.summary_hash == digest:
-        return existing  # reintento idéntico: mismo resultado aprobado
+        intent_key=key, cart=cart, is_current=True
+    ).order_by("-revision").first()
+    if existing and existing.summary_hash == digest and not existing.is_expired():
+        return existing  # reintento idéntico: misma revisión aprobada
 
     with transaction.atomic():
         if existing:
-            # Contenido distinto bajo la misma clave: invalidar el resumen
-            # anterior y liberar sus reservas de forma atómica (R02).
+            # Contenido distinto o revisión vencida bajo el mismo intento:
+            # invalidar la anterior y liberar sus reservas atómicamente (R02).
             existing.is_current = False
             existing.save(update_fields=["is_current"])
             StockReservation.objects.filter(
@@ -275,12 +279,13 @@ def prepare_checkout(cart, payment_method, delivery_mode="pickup", zone=None,
                     [v.sku],
                 )
 
-        seq = CheckoutSession.objects.filter(idempotency_key__startswith=key).count()
-        internal_key = key if seq == 0 else f"{key}#{seq}"
+        revision = CheckoutSession.objects.filter(intent_key=key).count()
+        internal_key = key if revision == 0 else f"{key}#{revision}"
         expires = now + timedelta(minutes=RESERVATION_MINUTES)
         checkout = CheckoutSession.objects.create(
-            cart=cart, cart_version=cart.version, idempotency_key=internal_key,
-            summary=content, summary_hash=digest, expires_at=expires,
+            cart=cart, cart_version=cart.version, intent_key=key, revision=revision,
+            idempotency_key=internal_key, summary=content, summary_hash=digest,
+            expires_at=expires,
         )
         for line in summary["lines"]:
             StockReservation.objects.create(
@@ -445,6 +450,10 @@ def apply_transition(order, field, to_value, user=None, note="", member=None,
                      refund_amount=None):
     """Cambio de estado validado con capacidad por rol (R13) y evidencia.
 
+    El pedido se BLOQUEA y se RELEE dentro de la transacción (N04): una
+    instancia vieja nunca decide sobre un estado que ya cambió. Si el pedido
+    ya está en el estado destino, la operación es un no-op idempotente.
+
     - Pedido cancelado: solo admite registrar el reembolso de un pago recibido;
       nunca preparación ni despacho (coherencia de estados comerciales).
     - Cancelar/vencer un pedido no expedido restituye inventario UNA vez (R04).
@@ -454,29 +463,34 @@ def apply_transition(order, field, to_value, user=None, note="", member=None,
     capability = FIELD_CAPABILITY.get(field)
     if member is not None and not member_can(member, capability):
         raise PermissionDenied("Tu rol no permite esta operación.")
-
-    if order.status == Order.Status.CANCELLED and field != "payment_status":
-        raise CartError("Un pedido cancelado no puede prepararse ni despacharse.")
-    if order.status == Order.Status.CANCELLED and field == "payment_status" and \
-            to_value not in (Order.PaymentStatus.REFUNDED, Order.PaymentStatus.PARTIALLY_REFUNDED):
-        raise CartError("A un pedido cancelado solo puede registrarse el reembolso.")
-
-    allowed = TRANSITIONS.get(field, {}).get(getattr(order, field), [])
-    if to_value not in [str(v) for v in allowed]:
-        raise CartError(f"Transición no permitida: {field} → {to_value}.")
     if (field, to_value) in NEEDS_EVIDENCE and not note.strip():
         raise CartError("Esta operación requiere una referencia o motivo (evidencia).")
 
-    from_value = getattr(order, field)
-    if from_value == to_value:
-        return order
-
     with transaction.atomic():
+        # Bloquear y releer: la autoridad es el estado actual en base de datos.
+        order = Order.objects.select_for_update().get(pk=order.pk)
+        from_value = getattr(order, field)
+        if from_value == to_value:
+            return order  # repetición de una transición ya aplicada: no-op
+
+        if order.status == Order.Status.CANCELLED and field != "payment_status":
+            raise CartError("Un pedido cancelado no puede prepararse ni despacharse.")
+        if order.status == Order.Status.CANCELLED and field == "payment_status" and \
+                to_value not in (Order.PaymentStatus.REFUNDED, Order.PaymentStatus.PARTIALLY_REFUNDED):
+            raise CartError("A un pedido cancelado solo puede registrarse el reembolso.")
+
+        allowed = TRANSITIONS.get(field, {}).get(from_value, [])
+        if to_value not in [str(v) for v in allowed]:
+            raise CartError(f"Transición no permitida: {field} → {to_value}.")
+
         setattr(order, field, to_value)
         update = [field]
         if field == "payment_status" and to_value in (
                 Order.PaymentStatus.REFUNDED, Order.PaymentStatus.PARTIALLY_REFUNDED):
-            order.refund_amount = money(refund_amount) if refund_amount is not None else order.total
+            amount = money(refund_amount) if refund_amount is not None else order.total
+            if amount <= 0 or amount > order.total:
+                raise CartError("El reembolso debe ser mayor que cero y no superar lo cobrado.")
+            order.refund_amount = amount
             order.refund_note = note.strip()[:200]
             update += ["refund_amount", "refund_note"]
         order.save(update_fields=update)
@@ -496,22 +510,28 @@ def apply_transition(order, field, to_value, user=None, note="", member=None,
 
 
 def _restock_once(order, user=None, reason=""):
-    """Devuelve el stock descontado al confirmar, una sola vez por pedido."""
-    if order.stock_restored_at is not None:
-        return False
-    if order.delivery_status in (Order.DeliveryStatus.SHIPPED, Order.DeliveryStatus.DELIVERED):
-        return False  # lo despachado no vuelve automáticamente: proceso de devolución
+    """Devuelve el stock descontado al confirmar, UNA sola vez por pedido (N04).
+
+    La comprobación se hace sobre la fila BLOQUEADA y releída dentro de la
+    transacción: dos instancias cargadas antes de la primera cancelación
+    jamás suman dos veces.
+    """
     with transaction.atomic():
-        for item in order.items.select_related("variant"):
+        locked = Order.objects.select_for_update().get(pk=order.pk)
+        if locked.stock_restored_at is not None:
+            return False  # ya restituido por otra solicitud
+        if locked.delivery_status in (Order.DeliveryStatus.SHIPPED, Order.DeliveryStatus.DELIVERED):
+            return False  # lo despachado no vuelve automáticamente: proceso de devolución
+        for item in locked.items.select_related("variant"):
             if item.variant_id is None:
                 continue
             v = Variant.objects.select_for_update().get(pk=item.variant_id)
             v.stock += item.quantity
             v.save(update_fields=["stock"])
-        order.stock_restored_at = timezone.now()
-        order.save(update_fields=["stock_restored_at"])
+        locked.stock_restored_at = timezone.now()
+        locked.save(update_fields=["stock_restored_at"])
         OrderEvent.objects.create(
-            order=order, field="stock", to_value="restored",
-            note=f"{reason}: inventario restituido ({order.reference})", by=user,
+            order=locked, field="stock", to_value="restored",
+            note=f"{reason}: inventario restituido ({locked.reference})", by=user,
         )
     return True
