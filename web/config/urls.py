@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.conf.urls.static import static
 from django.urls import include, path
 
 from reino import views_platform
@@ -11,3 +13,8 @@ urlpatterns = [
     path("", include("reino.urls")),
     path("", include("tienda.urls")),
 ]
+
+# En desarrollo Django sirve los medios subidos por comerciantes (§18); en
+# producción los sirve el servidor/plataforma configurada.
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

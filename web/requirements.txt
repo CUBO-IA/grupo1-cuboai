@@ -2,4 +2,5 @@ Django>=5.2,<5.3
 Pillow>=10.0
 gunicorn>=23.0,<27.0
 whitenoise>=6.0,<7.0
-# PostgreSQL (staging/prod): psycopg[binary]>=3.2
+# PostgreSQL (staging/prod y CI): driver con binarios incluidos.
+psycopg[binary]>=3.2

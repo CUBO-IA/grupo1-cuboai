@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  tests:
+  sqlite:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,10 +14,47 @@ jobs:
         with:
           python-version: "3.12"
       - name: Dependencias
-        run: pip install "Django>=5.2,<5.3" Pillow
+        run: pip install -r web/requirements.txt
       - name: Migraciones al día (sin cambios pendientes)
         working-directory: web
         run: python manage.py makemigrations --check --dry-run
-      - name: Suite completa (histórica + reino + regresiones de auditoría)
+      - name: check --deploy con configuración de producción
+        working-directory: web
+        env:
+          REINO_ENV: prod
+          SECRET_KEY: ci-secret
+          ALLOWED_HOSTS: example.com
+          DATABASE_URL: sqlite:///deploy-check.sqlite3
+        run: python manage.py check --deploy
+      - name: Suite completa en SQLite (histórica + reino + auditorías)
+        working-directory: web
+        run: python manage.py test
+
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: reino
+          POSTGRES_PASSWORD: reino-ci
+          POSTGRES_DB: reino_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U reino"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgres://reino:reino-ci@localhost:5432/reino_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dependencias (incluye psycopg)
+        run: pip install -r web/requirements.txt
+      - name: Migraciones aplican en PostgreSQL
+        working-directory: web
+        run: python manage.py migrate --noinput
+      - name: Suite completa en PostgreSQL (SIN skips de concurrencia, AC20)
         working-directory: web
         run: python manage.py test

@@ -91,6 +91,12 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # Archivos estáticos para producción
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
+# Medios subidos por comerciantes (editor de tienda, §13): archivos reales,
+# validados por tipo/tamaño; en dev los sirve Django, en prod el servidor.
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
+REINO_MEDIA_MAX_BYTES = int(os.environ.get("REINO_MEDIA_MAX_BYTES", str(3 * 1024 * 1024)))
+
 # Base de datos: SQLite local en dev; PostgreSQL cuando hay DATABASE_URL
 # o POSTGRES_* (staging/prod, auditoría §9.3).
 _DB_URL = os.environ.get("DATABASE_URL", "")
@@ -120,7 +126,10 @@ else:
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
-            "NAME": BASE_DIR / "db.sqlite3",
+            # REINO_SQLITE_PATH permite ubicar la base en disco local cuando el
+            # sistema de archivos del proyecto no soporta locks POSIX fiables
+            # (p. ej. FUSE de red en algunos sandboxes).
+            "NAME": os.environ.get("REINO_SQLITE_PATH", str(BASE_DIR / "db.sqlite3")),
             # Las escrituras simultáneas (p. ej. doble clic en checkout) esperan su
             # turno en vez de fallar con "database is locked".
             "OPTIONS": {"transaction_mode": "IMMEDIATE", "timeout": 20},
@@ -152,3 +161,27 @@ REINO_AI = {
 }
 # Reserva de stock durante el checkout (minutos).
 REINO_RESERVATION_MINUTES = int(os.environ.get("REINO_RESERVATION_MINUTES", "10"))
+
+# Correo transaccional (§18): backend configurable. Sin configuración real
+# habilitada, los eventos de correo quedan BLOQUEADOS con estado preciso —
+# nunca se marcan como enviados.
+EMAIL_BACKEND = os.environ.get(
+    "EMAIL_BACKEND", "django.core.mail.backends.console.EmailBackend")
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "1") == "1"
+EMAIL_TIMEOUT = int(os.environ.get("EMAIL_TIMEOUT", "10"))
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "DEFAULT_FROM_EMAIL", "Reino Commerce <no-reply@reino-commerce.local>")
+REINO_EMAIL_ENABLED = os.environ.get("REINO_EMAIL_ENABLED", "0") == "1"
+
+# Servicio real de estáticos en producción (§18): WhiteNoise sirve y comprime
+# lo recolectado por collectstatic. En dev/test sirven los finders de Django.
+if _IS_PROD:
+    MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
+    STORAGES = {
+        "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+        "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+    }
