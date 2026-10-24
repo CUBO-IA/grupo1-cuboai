@@ -94,8 +94,8 @@ def create_shipment(order, lines=None, provider="manual", service="",
     shipment.status = Shipment.Status.PREPARING
     shipment.save(update_fields=["external_ref", "status", "updated_at"])
     OrderEvent.objects.create(
-        order=order, field="shipment", to_value=str(shipment.public_id),
-        note=f"Envío creado ({provider}, {len(lines)} línea/s)", by=user)
+        order=order, field="shipment", to_value=f"envío-{shipment.pk}",
+        note=f"Envío {shipment.public_id} creado ({provider}, {len(lines)} línea/s)", by=user)
     return shipment
 
 
