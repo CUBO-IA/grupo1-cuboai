@@ -8,6 +8,7 @@ precios, confirmar cobros, reembolsar, enviar marketing ni SQL libre.
 
 from decimal import Decimal
 
+from django.db import transaction
 from django.utils import timezone
 
 from .. import services_commerce as commerce
@@ -171,55 +172,77 @@ def _get_customer_preferences(args, ctx):
 
 
 def _add_item_to_cart(args, ctx):
-    """Única escritura del asesor, por AUTORIZACIÓN verificable (R11).
+    """Única escritura del asesor, por AUTORIZACIÓN verificable (R11, §8.2).
 
-    Requiere un action_id (permiso de acción del comprador). El permiso es de
-    UN solo uso con alcance tienda+sesión y caducidad: repetir el mismo
-    action_id devuelve el resultado ya ejecutado, jamás duplica la acción.
-    Una llamada del modelo sin autorización del comprador nunca escribe.
+    El permiso (ActionToken) solo lo EMITE el servidor al proponer; la
+    ejecución NUNCA crea su propio permiso (N05): un action_id desconocido,
+    ajeno, vencido, de otra herramienta o malformado se rechaza sin escribir.
+
+    Vinculación (N09/N10): la propuesta lleva destinatario y cotización
+    aprobados (variante, precio, moneda, cantidad). Si el destinatario activo
+    o el precio cambiaron, se exige una nueva propuesta: no se aplica
+    silenciosamente el contexto nuevo.
+
+    Consumir permiso y escribir el carrito ocurren en UNA transacción con la
+    fila del permiso bloqueada: dos confirmaciones simultáneas agregan una
+    sola vez y los reintentos devuelven el resultado guardado.
     """
     action_id = (args.get("action_id") or "").strip()
     if not action_id:
         return {"error": "action_authorization_required"}
-    token = ActionToken.objects.filter(
-        action_id=action_id, store=ctx.store, session_key=ctx.session_key
-    ).first()
-    if token is None:
-        # Permiso externo ya aprobado por el comprador (vista de confirmación):
-        # se materializa con alcance de esta tienda y sesión.
-        token = ActionToken.objects.create(
-            action_id=action_id[:64], store=ctx.store, session_key=ctx.session_key,
-            tool="add_item_to_cart",
-            payload={k: v for k, v in args.items() if k != "action_id"},
-            expires_at=timezone.now() + timezone.timedelta(minutes=15),
-        )
-    if token.status == ActionToken.Status.EXECUTED:
-        return dict(token.result)  # idempotente: misma acción, mismo resultado
-    if token.status != ActionToken.Status.PROPOSED or token.expires_at <= timezone.now():
-        if token.status == ActionToken.Status.PROPOSED:
-            token.status = ActionToken.Status.EXPIRED
-            token.save(update_fields=["status"])
-        return {"error": "action_expired"}
 
-    v = Variant.objects.filter(public_id=token.payload.get("variant_id"),
-                               product__store=ctx.store, is_active=True).first()
-    if v is None:
-        return {"error": "unknown_variant"}
-    cart = ctx.cart or commerce.get_open_cart(ctx.store, ctx.session_key, create=True)
-    try:
-        commerce.add_item(cart, v, int(token.payload.get("quantity") or 1),
-                          recipient=ctx.profile)
-    except (commerce.CartError, commerce.StockConflict) as exc:
-        return {"error": "cart_rejected", "detail": str(exc)}
-    summary = commerce.cart_summary(cart)
-    result = {"ok": True,
-              "cart_units": sum(l["item"].quantity for l in summary["lines"]),
-              "subtotal": fmt(summary["subtotal"], ctx.store.currency)}
-    token.status = ActionToken.Status.EXECUTED
-    token.result = result
-    token.executed_at = timezone.now()
-    token.save(update_fields=["status", "result", "executed_at"])
-    return result
+    with transaction.atomic():
+        token = ActionToken.objects.select_for_update().filter(
+            action_id=action_id, store=ctx.store, session_key=ctx.session_key
+        ).first()
+        if token is None or token.tool != "add_item_to_cart":
+            return {"error": "action_unknown"}
+        if token.status == ActionToken.Status.EXECUTED:
+            return dict(token.result)  # idempotente: misma acción, mismo resultado
+        if token.status != ActionToken.Status.PROPOSED or token.expires_at <= timezone.now():
+            if token.status == ActionToken.Status.PROPOSED:
+                token.status = ActionToken.Status.EXPIRED
+                token.save(update_fields=["status"])
+            return {"error": "action_expired"}
+
+        payload = token.payload
+        # Destinatario vinculado a la propuesta (N09).
+        bound_profile = payload.get("profile_id")
+        if bound_profile:
+            current_profile = ctx.profile.id if ctx.profile is not None else None
+            if current_profile != bound_profile:
+                return {"error": "action_recipient_changed",
+                        "detail": "El destinatario cambió; pedí una nueva propuesta."}
+
+        v = Variant.objects.select_for_update().filter(
+            public_id=payload.get("variant_id"), product__store=ctx.store,
+            is_active=True).first()
+        if v is None:
+            return {"error": "unknown_variant"}
+        # Cotización vinculada (N10): precio/moneda/variante/cantidad aprobados.
+        approved_price = payload.get("unit_price")
+        if approved_price is not None and str(v.price) != str(approved_price):
+            return {"error": "action_quote_changed",
+                    "detail": f"El precio cambió de ${approved_price} a ${v.price}; "
+                              "pedí una nueva propuesta para revisarlo."}
+        if payload.get("currency") and payload["currency"] != ctx.store.currency:
+            return {"error": "action_quote_changed"}
+
+        cart = ctx.cart or commerce.get_open_cart(ctx.store, ctx.session_key, create=True)
+        try:
+            commerce.add_item(cart, v, int(payload.get("quantity") or 1),
+                              recipient=ctx.profile)
+        except (commerce.CartError, commerce.StockConflict) as exc:
+            return {"error": "cart_rejected", "detail": str(exc)}
+        summary = commerce.cart_summary(cart)
+        result = {"ok": True,
+                  "cart_units": sum(l["item"].quantity for l in summary["lines"]),
+                  "subtotal": fmt(summary["subtotal"], ctx.store.currency)}
+        token.status = ActionToken.Status.EXECUTED
+        token.result = result
+        token.executed_at = timezone.now()
+        token.save(update_fields=["status", "result", "executed_at"])
+        return result
 
 
 def _get_cart(args, ctx):

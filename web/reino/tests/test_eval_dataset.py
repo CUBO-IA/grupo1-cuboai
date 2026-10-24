@@ -102,9 +102,11 @@ class EvalDatasetTests(ReinoTestCase):
                 v = self._fresh_variant()
                 if op == "ai_action":
                     cart_key = f"eval-{case['id']}"
-                    args = {"variant_id": str(v.public_id), "quantity": 1,
-                            "action_id": f"eval-{case['id']}"}
                     ctx = ToolContext(self.store_a, cart_key)
+                    token = orchestrator._propose_action(
+                        "add_item_to_cart",
+                        {"variant_id": str(v.public_id), "quantity": 1}, ctx)
+                    args = {"action_id": token.action_id}
                     for _ in range(case["input"]["repeats"]):
                         run_tool("add_item_to_cart", args, ctx)
                     cart = c.get_open_cart(self.store_a, cart_key)
@@ -289,9 +291,10 @@ class EvalDatasetTests(ReinoTestCase):
                                           {"action_id": token.action_id}, ctx)
                         self.assertEqual(result["error"], case["expected"]["error"])
                     else:
-                        args = {"variant_id": str(variant.public_id), "quantity": 1,
-                                "action_id": f"eval-{case['id']}"}
-                        run_tool("add_item_to_cart", args, ctx)
+                        token = orchestrator._propose_action(
+                            "add_item_to_cart",
+                            {"variant_id": str(variant.public_id), "quantity": 1}, ctx)
+                        run_tool("add_item_to_cart", {"action_id": token.action_id}, ctx)
                         cart = c.get_open_cart(self.store_a, session)
                         self.assertEqual(cart.items.get().quantity,
                                          case["expected"]["units"])

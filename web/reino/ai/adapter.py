@@ -60,3 +60,26 @@ def chat(messages, tools=None):
         return data["choices"][0]["message"]
     except (KeyError, IndexError):
         raise ProviderError("Respuesta del proveedor sin choices.") from None
+
+
+def probe():
+    """Prueba REAL mínima de conexión con el proveedor (AC25).
+
+    Devuelve (ok, detalle). No registra secretos ni cuerpos completos.
+    """
+    cfg = settings.REINO_AI
+    if not cfg.get("API_KEY"):
+        return False, "Sin clave configurada."
+    req = urllib.request.Request(
+        f"{cfg['BASE_URL'].rstrip('/')}/models",
+        headers={"Authorization": f"Bearer {cfg['API_KEY']}"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=cfg["TIMEOUT_SECONDS"]) as resp:
+            resp.read()
+        return True, f"Conexión comprobada con el proveedor ({cfg['MODEL']})."
+    except urllib.error.HTTPError as exc:
+        return False, f"HTTP {exc.code} del proveedor (revisá clave/modelo)."
+    except (urllib.error.URLError, TimeoutError) as exc:
+        return False, f"Sin conexión con el proveedor: {exc}"[:200]

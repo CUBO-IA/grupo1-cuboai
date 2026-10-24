@@ -77,6 +77,14 @@ def grant_consent(store, session_key, purpose, profile=None, version="v1"):
 
 
 def revoke_consent(store, session_key, purpose, profile=None):
+    """Revoca un consentimiento y ejecuta su efecto completo (§8.3, N08).
+
+    Además de cerrar el permiso y borrar sus derivados, SELLA el historial de
+    la conversación: los mensajes anteriores dejan de ser elegibles para el
+    proveedor (el historial visible del cliente se conserva). No se intenta
+    un borrado selectivo por expresión regular: se excluye el historial
+    afectado completo.
+    """
     qs = Consent.objects.filter(
         store=store, session_key=session_key, purpose=purpose, status=Consent.Status.GRANTED
     )
@@ -90,6 +98,13 @@ def revoke_consent(store, session_key, purpose, profile=None):
         # Los derivados de ese permiso dejan de existir.
         Preference.objects.filter(consent=consent).delete()
         n += 1
+    if n:
+        # Sellar el historial de ESTA conversación (tienda+sesión): los datos
+        # revocados no se reenvían al modelo en ningún turno futuro.
+        from .models import AIConversation
+        now = timezone.now()
+        AIConversation.objects.filter(store=store, session_key=session_key).update(
+            history_sealed_before=now)
     return n
 
 

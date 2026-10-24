@@ -88,9 +88,14 @@ class AuditRegressions(ReinoTestCase):
         self.assertNotEqual(reply["answer_text"], fake)
 
     def test_07_duplicate_ai_action_must_not_double_quantity(self):
+        # Preparación corregida (revisión 2, §3): se EMITE una propuesta real
+        # y luego se repite su confirmación; un identificador inventado jamás
+        # constituye autorización.
         v = self.product.variants.get(option_label="Talla M")
-        args = {"variant_id": str(v.public_id), "quantity": 1, "action_id": "same-approved-action"}
         ctx = ToolContext(self.store_a, "audit")
+        token = orchestrator._propose_action("add_item_to_cart", {
+            "variant_id": str(v.public_id), "quantity": 1}, ctx)
+        args = {"action_id": token.action_id}
         run_tool("add_item_to_cart", args, ctx)
         run_tool("add_item_to_cart", args, ctx)
         self.assertEqual(c.get_open_cart(self.store_a, "audit").items.get().quantity, 1)

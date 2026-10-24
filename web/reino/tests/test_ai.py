@@ -95,33 +95,30 @@ class StylistAITests(ReinoTestCase):
     def test_a16_agregar_ambiguo_no_adivina(self):
         """A16: variante inexistente en add_item_to_cart => rechazo, no adivinanza.
 
-        Actualizado por R11: primero se exige autorización del comprador; con
-        ella, la variante inexistente sigue sin «adivinarse».
+        Contrato R11 revisión 2: sin autorización del comprador se exige
+        permiso; una variante inexistente NUNCA produce propuesta confirmable
+        (el servidor la resuelve contra el catálogo al proponer).
         """
         result = run_tool("add_item_to_cart",
                           {"variant_id": "00000000-0000-0000-0000-000000000000"},
                           self._ctx())
         self.assertEqual(result["error"], "action_authorization_required")
-        result = run_tool("add_item_to_cart",
-                          {"variant_id": "00000000-0000-0000-0000-000000000000",
-                           "action_id": "aprobada-por-el-comprador"},
-                          self._ctx())
-        self.assertEqual(result["error"], "unknown_variant")
+        propuesta = orchestrator._propose_action(
+            "add_item_to_cart",
+            {"variant_id": "00000000-0000-0000-0000-000000000000"}, self._ctx())
+        self.assertIsNone(propuesta)  # no hay propuesta que confirmar
 
     def test_a16_agregar_explicito_ejecuta_una_accion(self):
         """R11: la acción explícita AUTORIZADA ejecuta exactamente una vez."""
         variant = self.product.variants.get(option_label="Talla M")
-        result = run_tool("add_item_to_cart",
-                          {"variant_id": str(variant.public_id), "quantity": 1,
-                           "action_id": "accion-aprobada-a16"},
-                          self._ctx())
+        ctx = self._ctx()  # mismo comprador: propone y confirma con su perfil
+        token = orchestrator._propose_action(
+            "add_item_to_cart", {"variant_id": str(variant.public_id), "quantity": 1}, ctx)
+        result = run_tool("add_item_to_cart", {"action_id": token.action_id}, ctx)
         self.assertTrue(result["ok"])
         self.assertEqual(result["cart_units"], 1)
         # Reintentar la MISMA acción aprobada no duplica (idempotencia).
-        again = run_tool("add_item_to_cart",
-                         {"variant_id": str(variant.public_id), "quantity": 1,
-                          "action_id": "accion-aprobada-a16"},
-                         self._ctx())
+        again = run_tool("add_item_to_cart", {"action_id": token.action_id}, ctx)
         self.assertEqual(again["cart_units"], 1)
 
 

@@ -80,29 +80,71 @@ def get_conversation(store, session_key):
     return conv
 
 
-def _validate_answer(answer_text, evidence_blobs):
-    """Verificación de hechos comerciales del TEXTO libre (R12).
+def _evidence_facts(evidence_blobs):
+    """Hechos TIPADOS de la evidencia del turno (N06/N07, §8.3).
 
-    Precio, porcentaje, fecha o garantía solo pueden afirmarse con soporte en
-    resultados autorizados de herramientas de ESTE turno. Sin evidencia, la
-    respuesta se reemplaza por una abstención honesta (nunca se «pule» el
-    dato inventado).
+    Se parsea cada blob como JSON y se recogen valores concretos: importes,
+    porcentajes, zonas NO vacías y fragmentos de política NO vacíos. Una
+    cadena que contiene otra NO valida nada: la comparación es exacta.
+    """
+    amounts, percents = set(), set()
+    has_zones = has_policies = False
+
+    def walk(node):
+        nonlocal has_zones, has_policies
+        if isinstance(node, dict):
+            for k, v in node.items():
+                if k == "zones" and isinstance(v, list) and v:
+                    has_zones = True
+                if k == "fragments" and isinstance(v, list) and v:
+                    has_policies = True
+                walk(v)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+        elif isinstance(node, str):
+            for m in _MONEY_RE.findall(node):
+                amounts.add(m.replace(",", "."))
+            for p in _PERCENT_RE.findall(node):
+                percents.add(p)
+
+    for blob in evidence_blobs:
+        try:
+            walk(json.loads(blob))
+        except (json.JSONDecodeError, TypeError):
+            continue  # un blob no parseable no aporta hechos
+    return {"amounts": amounts, "percents": percents,
+            "zones": has_zones, "policies": has_policies}
+
+
+_WORD_PRICE_RE = re.compile(
+    r"(cuesta|vale|precio de|total de|por)\s+[a-záéíóúñ ]{3,30}\s+dólares", re.IGNORECASE)
+
+
+def _validate_answer(answer_text, evidence_blobs):
+    """Verificación de hechos comerciales del TEXTO libre (R12, §8.3).
+
+    Los hechos comerciales se comparan TIPADOS y EXACTOS contra la evidencia
+    del turno: un importe distinto aunque «casi igual» no valida (N06); una
+    lista de zonas vacía no sustenta una garantía de entrega (N07); un
+    importe escrito con palabras es inverificable y se abstienen. Sin
+    evidencia, la respuesta se reemplaza por una abstención honesta.
     """
     if not answer_text:
         return answer_text, []
     problems = []
-    evidence = " ".join(evidence_blobs)
+    facts = _evidence_facts(evidence_blobs)
 
     for amount in _MONEY_RE.findall(answer_text):
-        normalized = amount.replace(",", ".")
-        if normalized not in evidence:
+        if amount.replace(",", ".") not in facts["amounts"]:
             problems.append(f"precio_sin_evidencia:{amount}")
     for pct in _PERCENT_RE.findall(answer_text):
-        if pct not in evidence and f"{pct} %" not in evidence:
+        if pct not in facts["percents"]:
             problems.append(f"porcentaje_sin_evidencia:{pct}")
-    if _GUARANTEE_RE.search(answer_text) and '"fragments"' not in evidence \
-            and '"zones"' not in evidence:
+    if _GUARANTEE_RE.search(answer_text) and not (facts["zones"] or facts["policies"]):
         problems.append("promesa_sin_evidencia")
+    if _WORD_PRICE_RE.search(answer_text):
+        problems.append("precio_en_palabras_inverificable")
     return answer_text, problems
 
 
@@ -125,7 +167,16 @@ def respond(conversation, user_text, ctx: ToolContext):
         {"role": "system", "content": SYSTEM_PROMPT.format(
             store_name=ctx.store.name, memory_context=_memory_context(ctx))},
     ]
-    history = list(conversation.messages.order_by("-created_at", "-pk")[:MAX_HISTORY])
+    # Historial elegible para el proveedor (N08, §8.3): el historial VISIBLE
+    # para el cliente se conserva, pero tras revocar un consentimiento los
+    # mensajes anteriores al sello JAMÁS vuelven a enviarse al modelo. El
+    # sello se relee de la base: una revocación puede ocurrir después de que
+    # esta instancia fue cargada.
+    conversation.refresh_from_db(fields=["history_sealed_before", "mode"])
+    history_qs = conversation.messages.order_by("-created_at", "-pk")
+    if conversation.history_sealed_before is not None:
+        history_qs = history_qs.filter(created_at__gt=conversation.history_sealed_before)
+    history = list(history_qs[:MAX_HISTORY])
     for msg in reversed(history):
         if msg.role in ("user", "assistant"):
             messages.append({"role": msg.role, "content": msg.content})
@@ -152,14 +203,17 @@ def respond(conversation, user_text, ctx: ToolContext):
                     # R11: el modelo PROPONE; nunca ejecuta. El comprador
                     # confirma con un permiso de un solo uso y caducidad.
                     token = _propose_action(name, args, ctx)
-                    proposals.append({
-                        "action_id": token.action_id,
-                        "tool": name,
-                        "label": _proposal_label(token),
-                        "payload": token.payload,
-                    })
-                    result = {"error": "requires_buyer_confirmation",
-                              "proposal_id": token.action_id}
+                    if token is None:
+                        result = {"error": "unknown_variant"}
+                    else:
+                        proposals.append({
+                            "action_id": token.action_id,
+                            "tool": name,
+                            "label": _proposal_label(token),
+                            "payload": token.payload,
+                        })
+                        result = {"error": "requires_buyer_confirmation",
+                                  "proposal_id": token.action_id}
                 else:
                     result = run_tool(name, args, ctx)
                     _collect_cards(name, result, cards, warnings)
@@ -219,19 +273,53 @@ def respond(conversation, user_text, ctx: ToolContext):
 
 
 def _propose_action(tool, args, ctx):
-    """Crea el permiso de acción propuesta: alcance tienda+sesión, 15 min (R11)."""
+    """Crea el permiso de acción propuesta (R11, §8.2): alcance tienda+sesión,
+    15 min, un solo uso.
+
+    El servidor RESUELVE el contenido contra el catálogo al proponer y fija la
+    cotización aprobada (producto, variante, cantidad, precio, moneda) y el
+    destinatario activo: la ejecución posterior detecta cualquier cambio y
+    exige una nueva confirmación (N09/N10). Si la variante no existe en esta
+    tienda, no hay propuesta que confirmar.
+    """
+    payload = {k: v for k, v in (args or {}).items() if k != "action_id"}
+    if tool == "add_item_to_cart":
+        from ..models import Variant
+        v = Variant.objects.filter(public_id=payload.get("variant_id"),
+                                   product__store=ctx.store, is_active=True).first()
+        if v is None:
+            return None
+        qty = max(int(payload.get("quantity") or 1), 1)
+        payload.update({
+            "quantity": qty,
+            "variant_id": str(v.public_id),
+            "variant_label": v.option_label,
+            "product_title": v.product.short_title,
+            "image": (v.product.media.first().path if v.product.media.first() else ""),
+            "unit_price": str(v.price),
+            "subtotal": str(v.price * qty),
+            "currency": ctx.store.currency,
+            "profile_id": ctx.profile.id if ctx.profile is not None else None,
+            "profile_alias": ctx.profile.alias if ctx.profile is not None else "",
+        })
     return ActionToken.objects.create(
         action_id=uuid.uuid4().hex[:24],
         store=ctx.store, session_key=ctx.session_key, tool=tool,
-        payload={k: v for k, v in (args or {}).items() if k != "action_id"},
+        payload=payload,
         expires_at=timezone.now() + timedelta(minutes=ACTION_TTL_MINUTES),
     )
 
 
 def _proposal_label(token):
+    """Resumen visible ANTES de confirmar (§8.2): qué se agrega exactamente."""
     if token.tool == "add_item_to_cart":
-        qty = token.payload.get("quantity") or 1
-        return f"Agregar al carrito (cantidad {qty})"
+        p = token.payload
+        if p.get("product_title"):
+            destino = f" · para {p['profile_alias']}" if p.get("profile_alias") else ""
+            return (f"Agregar «{p['product_title']}» {p.get('variant_label', '')} "
+                    f"×{p.get('quantity', 1)} · ${p.get('subtotal', '?')} "
+                    f"{p.get('currency', '')}{destino}")
+        return f"Agregar al carrito (cantidad {p.get('quantity') or 1})"
     return "Ejecutar acción"
 
 
