@@ -5,6 +5,13 @@ plataforma multi-tienda con LookLab (selección guiada por medidas y ocasión),
 Royal Stylist (asesor con IA real y herramientas controladas) y Royal Passport
 (perfiles y memoria con consentimiento).
 
+**Ronda 2 (23-oct-2026):** revisión independiente 2 cerrada — N01–N11 corregidos
+(matriz `docs/08_MATRIZ_REVISION_2.md`); plataforma de descubrimiento `/explorar/`,
+búsqueda por reglas `/buscar/` y comparador `/comparar/`; sistema visual por tema
+publicado con estudio de diseño `/negocio/<slug>/diseno/`; correo transaccional
+real con outbox idempotente; PostgreSQL como servicio de CI; movimiento
+stop-motion con `prefers-reduced-motion` y control «Reducir movimiento».
+
 - **Tienda 1:** Wiener Kingdom (catálogo real histórico) — `/s/wiener-kingdom/`
 - **Tienda 2:** Estudio Nube Demo (papelería ficticia de demostración, sin cobros) — `/s/estudio-nube/`
 - **Directorio:** `/tiendas/` · **Para negocios:** `/para-negocios/`
@@ -18,7 +25,7 @@ python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python manage.py migrate
 python manage.py seed_demo --reset  # 2 tiendas + catálogos + usuario de panel
-python manage.py test             # 372 pruebas (289 históricas + 83 de plataforma)
+python manage.py test             # 432 pruebas (289 históricas + 143 de plataforma)
 python manage.py runserver        # http://127.0.0.1:8000/  (franja hacia la boutique)
 ```
 

@@ -20,8 +20,9 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from reino.models import (
-    FitRule, KnowledgeDocument, Merchant, MerchantMember, Product, ProductMedia,
-    ShippingZone, Store, Variant,
+    AttributeDefinition, AttributeValue, CategorySchema, FitRule, KnowledgeDocument,
+    Merchant, MerchantMember, Product, ProductMedia, ShippingZone, Store,
+    StoreThemeVersion, Variant,
 )
 
 # Tabla de tallas histórica del negocio (tienda/migrations/0011): subset dachshund.
@@ -248,6 +249,9 @@ class Command(BaseCommand):
                           m.RecipientProfile, m.KnowledgeDocument, m.OutboxEvent,
                           m.ProductMedia, m.StockAdjustment, m.Variant,
                           m.FitRule, m.Product, m.ShippingZone, m.MerchantMember,
+                          m.AnalyticsEvent, m.ComparisonSession, m.MediaAsset,
+                          m.AttributeValue, m.AttributeDefinition, m.CategorySchema,
+                          m.StoreThemeVersion, m.IntegrationState,
                           m.Store, m.Merchant):
                 model.objects.all().delete()
         elif Store.objects.filter(slug__in=("wiener-kingdom", "estudio-nube")).exists():
@@ -295,10 +299,61 @@ class Command(BaseCommand):
         MerchantMember.objects.get_or_create(user=staff, merchant=nube_merchant,
                                              defaults={"role": MerchantMember.Role.OWNER})
 
+        # Temas PUBLICADOS con identidad propia por tienda (§9.3, AC10) y
+        # esquemas de categoría con atributos tipados para el comparador (§15).
+        self._seed_themes(wk, nube)
+        self._seed_schemas(wk, nube)
+
         self.stdout.write(self.style.SUCCESS(
             f"Seed OK: {wk.products.count()} productos WK, {nube.products.count()} Nube. "
             "Panel: usuario demo_staff / demo1234 (solo demo)."
         ))
+
+    def _seed_themes(self, wk, nube):
+        from reino import services_theme
+        for store, identity in ((wk, "wiener-kingdom"), (nube, "estudio-nube")):
+            config = services_theme.default_config(identity)
+            if identity == "wiener-kingdom":
+                config["hero"]["headline"] = "Pequeño perro. Mucha actitud."
+                config["hero"]["sub"] = ("Moda y accesorios para dachshunds con "
+                                         "orientación de talla por medidas.")
+            draft = StoreThemeVersion.objects.create(
+                store=store, version=1, config=config)
+            services_theme.publish(store, draft)
+
+    def _seed_schemas(self, wk, nube):
+        moda = CategorySchema.objects.create(slug="moda-canina", name="Moda canina")
+        materiales = AttributeDefinition.objects.create(
+            schema=moda, key="material_principal", label="Material principal",
+            value_type="option", options=["algodón", "bambú", "lana", "poliéster", "mezclilla"],
+            position=1)
+        AttributeDefinition.objects.create(
+            schema=moda, key="peso_prenda", label="Peso de la prenda",
+            value_type="measure", unit="g", position=2)
+        AttributeDefinition.objects.create(
+            schema=moda, key="lavable_maquina", label="Lavable a máquina",
+            value_type="boolean", position=3)
+        pape = CategorySchema.objects.create(slug="papeleria", name="Papelería")
+        tamano = AttributeDefinition.objects.create(
+            schema=pape, key="tamano_papel", label="Tamaño",
+            value_type="option", options=["A5", "A6", "carta", "sticker"], position=1)
+        AttributeDefinition.objects.create(
+            schema=pape, key="hojas", label="Cantidad de hojas/piezas",
+            value_type="decimal", position=2)
+        # Fixture de una TERCERA categoría: demuestra extensión sin cascadas
+        # condicionales (AC10/§15); no se publica como tienda ficticia.
+        CategorySchema.objects.create(slug="hogar-fixture", name="Hogar (fixture)")
+
+        def attr(product, definition, raw, unit="", normalized=None, source="seed demo"):
+            AttributeValue.objects.create(
+                product=product, definition=definition,
+                value={"raw": raw, "unit": unit}, normalized_number=normalized,
+                source=source)
+        for p in wk.products.all():
+            material = (p.materials or ["algodón"])[0] if p.materials else "algodón"
+            attr(p, materiales, material)
+        for p in nube.products.all():
+            attr(p, tamano, "A5")
 
     def _seed_wk(self, store):
         from tienda.models import ProductPaymentRule
