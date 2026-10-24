@@ -71,7 +71,11 @@ class EndToEndTests(TestCase):
 
         # 4. Confirmación: no pagado
         page = self.client.get(r1.url)
-        self.assertContains(page, "WK-000001")
+        order = Order.objects.get()
+        # F04: se comprueba la referencia REAL del pedido (contrato de
+        # negocio), no una secuencia accidental de SQLite; en PostgreSQL las
+        # secuencias no se revierten entre pruebas.
+        self.assertContains(page, order.number)
         self.assertContains(page, "no payment has been collected")
         self.assertNotContains(page, "Payment</dt><dd>Paid")
 
@@ -81,7 +85,7 @@ class EndToEndTests(TestCase):
         self.assertEqual(self.client.get(reverse("panel_orders")).status_code, 302)
         self.client.force_login(staff)
         listing = self.client.get(reverse("panel_orders"), {"q": "Ana"})
-        self.assertContains(listing, "WK-000001")
+        self.assertContains(listing, order.number)
         detail_url = reverse("panel_order", args=[uuid_in(r1.url)])
         self.assertContains(self.client.get(detail_url), "Christmas Dog")
 
@@ -146,7 +150,15 @@ class PaidWordingTests(TestCase):
 
 class DatabaseConcurrencyConfigTests(TestCase):
     def test_sqlite_writes_wait_instead_of_failing(self):
+        # Contrato EXCLUSIVO de SQLite (F04): los OPTIONS comprobados sólo
+        # existen en ese motor; bajo PostgreSQL esta prueba se salta y no
+        # cuenta como verificación de Postgres.
         from django.conf import settings
+        from unittest import skipUnless
+
+        engine = settings.DATABASES["default"]["ENGINE"]
+        if not engine.endswith("sqlite3"):
+            self.skipTest("contrato específico de SQLite (timeout/IMMEDIATE)")
 
         options = settings.DATABASES["default"]["OPTIONS"]
         self.assertEqual(options["transaction_mode"], "IMMEDIATE")

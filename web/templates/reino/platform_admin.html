@@ -1,0 +1,61 @@
+{% extends "reino/base.html" %}
+{% block title %}Plataforma · Reino Commerce{% endblock %}
+{% block content %}
+<section class="section container">
+    <p class="eyebrow">Administración de plataforma</p>
+    <h1>Comercios</h1>
+    {% if reino_flash %}<p class="flash-ok" role="status">{{ reino_flash }}</p>{% endif %}
+    <div class="table-wrap" style="margin-top:20px">
+    <table class="data">
+        <thead><tr><th>Comercio</th><th>Tienda</th><th>Estado</th><th>Demo</th><th>Equipo</th><th></th></tr></thead>
+        <tbody>
+            {% for m in merchants %}{% for s in m.stores.all %}
+            <tr>
+                <td><strong>{{ m.name }}</strong></td>
+                <td><a href="{% url 'reino_store_home' s.slug %}">/s/{{ s.slug }}/</a></td>
+                <td><span class="state-chip">{{ s.get_status_display }}</span></td>
+                <td>{% if s.is_demo %}Sí, contenido de prueba{% else %}No{% endif %}</td>
+                <td class="small">{% for mb in m.members.all %}{{ mb.user.username }} ({{ mb.role }}){% if not forloop.last %}, {% endif %}{% endfor %}</td>
+                <td>
+                    {% if s.status == "draft" %}
+                    <form method="post" action="{% url 'reino_platform_activate' s.slug %}">
+                        {% csrf_token %}<button class="btn btn--secondary btn--sm" type="submit">Revisar para activar</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}{% endfor %}
+        </tbody>
+    </table>
+    </div>
+
+    <h2 style="margin-top:40px">Alta asistida de comercio</h2>
+    <div class="grid grid--2" style="margin-top:16px">
+        <form method="post" action="{% url 'reino_platform_onboard' %}" class="looklab-card">
+            {% csrf_token %}
+            <div class="field--inline">
+                <div class="field"><label for="name">Nombre del comercio</label><input id="name" name="name" maxlength="120" required></div>
+                <div class="field"><label for="slug">Slug (URL)</label><input id="slug" name="slug" maxlength="60" required></div>
+            </div>
+            <div class="field--inline">
+                <div class="field"><label for="category">Categoría</label><input id="category" name="category" maxlength="60" value="general"></div>
+                <div class="field"><label for="username">Usuario responsable</label><input id="username" name="username" required></div>
+            </div>
+            <label style="display:flex;gap:10px;align-items:center;font-weight:600;margin-bottom:14px">
+                <input type="checkbox" name="is_demo" value="1" style="width:18px;height:18px">
+                Es tienda de demostración (sin cobros reales)
+            </label>
+            <button class="btn btn--primary" type="submit">Crear en borrador</button>
+        </form>
+        <div class="looklab-card">
+            <h3 class="mt-0" style="font-size:1.1rem">Checklist para activar</h3>
+            <ul class="small muted" style="margin-bottom:0">
+                {% for key, item in checklist %}<li>{{ item }}</li>{% endfor %}
+            </ul>
+        </div>
+    </div>
+    <p class="small muted" style="margin-top:16px">P0: el acceso de soporte a datos de un tenant
+    requiere alcance, motivo y registro. La administración global no implica visibilidad
+    de memorias personales.</p>
+</section>
+{% endblock %}

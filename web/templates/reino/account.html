@@ -1,0 +1,103 @@
+{% extends "reino/base.html" %}
+{% load reino_tags %}
+{% block title %}Mi cuenta · Royal Passport{% endblock %}
+{% block content %}
+<section class="section container" style="max-width:980px">
+    <p class="eyebrow">Royal Passport</p>
+    <h1>Mis perfiles y mi privacidad</h1>
+
+    {% if stores|length > 1 %}
+    <div class="pill-row">
+        {% for s in stores %}<a class="pill" href="?tienda={{ s.slug }}" {% if s == active_store %}aria-pressed="true"{% endif %}>{{ s.name }}</a>{% endfor %}
+    </div>
+    {% endif %}
+
+    {% if not active_store %}
+    <div class="empty-state">
+        <h2>Todavía no hay perfiles.</h2>
+        <p class="muted">Los perfiles se crean al comprar o desde LookLab en cada tienda.</p>
+        <a class="btn btn--primary" href="{% url 'reino_directory' %}">Ir al directorio de tiendas</a>
+    </div>
+    {% else %}
+
+    <h2 style="margin-top:32px">Mis perfiles · {{ active_store.name }}</h2>
+    <div class="steps-3" style="margin:20px 0">
+        {% for profile in profiles %}
+        <div class="step-card">
+            <h3>{{ profile.alias }}</h3>
+            {% with m=latest_measurements|lookup:profile.public_id %}
+            <p class="small muted">
+                {% if m %}Medidas del {{ m.measured_at|date:"d/m/Y" }}:
+                pecho {{ m.chest_cm|default:"—" }} · cuello {{ m.neck_cm|default:"—" }} · largo {{ m.back_cm|default:"—" }} cm
+                {% else %}Sin medidas guardadas{% endif %}
+            </p>
+            {% endwith %}
+            <details style="margin-top:10px">
+                <summary class="small" style="cursor:pointer;font-weight:700">Actualizar medidas</summary>
+                <form method="post" action="{% url 'reino_profile_measure' profile.public_id %}" style="margin-top:10px">
+                    {% csrf_token %}
+                    <input type="hidden" name="store" value="{{ active_store.slug }}">
+                    <div class="field"><label for="c{{ forloop.counter }}">Pecho (cm)</label><input id="c{{ forloop.counter }}" name="chest" inputmode="decimal"></div>
+                    <div class="field"><label for="n{{ forloop.counter }}">Cuello (cm)</label><input id="n{{ forloop.counter }}" name="neck" inputmode="decimal"></div>
+                    <div class="field"><label for="b{{ forloop.counter }}">Largo (cm)</label><input id="b{{ forloop.counter }}" name="back" inputmode="decimal"></div>
+                    <button class="btn btn--secondary btn--sm" type="submit">Actualizar</button>
+                </form>
+            </details>
+            <form method="post" action="{% url 'reino_profile_memory_delete' profile.public_id %}" style="margin-top:10px"
+                  onsubmit="return confirm('¿Borrar la memoria de este perfil? Se eliminan preferencias, foto y resúmenes.');">
+                {% csrf_token %}
+                <input type="hidden" name="store" value="{{ active_store.slug }}">
+                <button class="btn btn--ghost btn--sm" type="submit" style="color:var(--carmine)">Borrar memoria</button>
+            </form>
+        </div>
+        {% empty %}
+        <p class="muted">Sin perfiles en esta tienda.</p>
+        {% endfor %}
+    </div>
+
+    <h2>Mis looks guardados</h2>
+    {% if looks %}
+    <div class="grid grid--products" style="margin:16px 0">
+        {% for look in looks %}
+        <div class="card"><div class="card__body">
+            <h3 class="card__title">{{ look.occasion|capfirst|default:"Look" }}{% if look.profile %} · {{ look.profile.alias }}{% endif %}</h3>
+            <p class="card__reason">{{ look.created_at|date:"d/m/Y" }} · {{ look.items|length }} pieza{{ look.items|length|pluralize }}</p>
+            <ul class="small" style="margin:8px 0 0;padding-left:18px">
+                {% for item in look.items %}<li>{{ item.title }} · {{ item.option }} — ${{ item.price }}</li>{% endfor %}
+            </ul>
+            <p class="small muted" style="margin-top:8px">Los precios y el stock se revalidan al comprar.</p>
+        </div></div>
+        {% endfor %}
+    </div>
+    {% else %}<p class="muted">Sin looks guardados todavía.</p>{% endif %}
+
+    <h2 style="margin-top:36px">Mi privacidad · {{ active_store.name }}</h2>
+    <p class="muted small">Cada permiso tiene su finalidad, fecha y alcance. Podés retirarlo en cualquier momento;
+    la siguiente recomendación deja de usar esos datos. La memoria desactivada no impide comprar.</p>
+    <div class="steps-3" style="margin:16px 0">
+        {% for purpose, state in consents.items %}
+        <div class="step-card">
+            <h3>{{ state.label }}</h3>
+            <p class="small muted">
+                {% if state.status == "granted" %}Activo desde {{ state.granted_at|date:"d/m/Y" }} ({{ state.version }})
+                {% elif state.status == "revoked" %}Retirado
+                {% else %}Nunca otorgado{% endif %}
+            </p>
+            <form method="post" action="{% url 'reino_consent' %}">
+                {% csrf_token %}
+                <input type="hidden" name="store" value="{{ active_store.slug }}">
+                <input type="hidden" name="purpose" value="{{ purpose }}">
+                {% if state.status == "granted" %}
+                <input type="hidden" name="decision" value="revoke">
+                <button class="btn btn--ghost btn--sm" type="submit">Retirar permiso</button>
+                {% else %}
+                <input type="hidden" name="decision" value="grant">
+                <button class="btn btn--secondary btn--sm" type="submit">Permitir</button>
+                {% endif %}
+            </form>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

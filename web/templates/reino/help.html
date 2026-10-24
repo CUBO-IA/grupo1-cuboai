@@ -1,0 +1,38 @@
+{% extends "reino/base.html" %}
+{% block title %}Ayuda · {{ reino_store.name }}{% endblock %}
+{% block content %}
+<section class="section container" style="max-width:860px">
+    <p class="eyebrow">Ayuda</p>
+    <h1>Respuestas de la tienda.</h1>
+    <p class="lede">Publicadas por {{ reino_store.name }}, con su versión y vigencia.</p>
+
+    <div class="pill-row" role="group" aria-label="Temas">
+        <a class="pill" href="{% url 'reino_help' reino_store.slug %}" {% if not selected_topic %}aria-pressed="true"{% endif %}>Todos</a>
+        {% for t in topics %}
+        <a class="pill" href="?tema={{ t }}" {% if selected_topic == t %}aria-pressed="true"{% endif %}>{{ t|capfirst }}</a>
+        {% endfor %}
+    </div>
+
+    <div class="accordion" style="margin-top:20px">
+        {% for doc in docs %}
+        <details {% if forloop.first %}open{% endif %}>
+            <summary>{{ doc.title }}</summary>
+            <div class="accordion__body">
+                <p>{{ doc.body|linebreaksbr }}</p>
+                <p class="small muted">Versión {{ doc.version }}{% if doc.published_at %} · vigente desde {{ doc.published_at|date:"d/m/Y" }}{% endif %}</p>
+            </div>
+        </details>
+        {% empty %}
+        <p class="muted">Esta tienda todavía no publicó respuestas en este tema.</p>
+        {% endfor %}
+    </div>
+
+    {% if reino_store.contact_email %}
+    <div class="looklab-card" style="margin-top:36px">
+        <h2 class="mt-0" style="font-size:1.3rem">¿Otra consulta?</h2>
+        <p class="mb-0">Escribinos a <a href="mailto:{{ reino_store.contact_email }}">{{ reino_store.contact_email }}</a>
+        {% if reino_store.contact_phone %} o llamá al {{ reino_store.contact_phone }}{% endif %}.</p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

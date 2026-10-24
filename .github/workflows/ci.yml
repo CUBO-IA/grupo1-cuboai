@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+
+jobs:
+  sqlite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dependencias
+        run: pip install -r web/requirements.txt
+      - name: Migraciones al día (sin cambios pendientes)
+        working-directory: web
+        run: python manage.py makemigrations --check --dry-run
+      - name: check --deploy con configuración de producción
+        working-directory: web
+        env:
+          REINO_ENV: prod
+          # Secreto exclusivo de CI (sin valor real); el contrato canónico es DJANGO_*
+          DJANGO_SECRET_KEY: ci-only-secret-9f2c1c7eab4d4f6f8e5a3b2c1d0e9f8a
+          DJANGO_ALLOWED_HOSTS: example.com
+          DATABASE_URL: sqlite:///deploy-check.sqlite3
+        run: python manage.py check --deploy
+      - name: Suite completa en SQLite (histórica + reino + auditorías)
+        working-directory: web
+        run: python manage.py test
+
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: reino
+          POSTGRES_PASSWORD: reino-ci
+          POSTGRES_DB: reino_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U reino"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgres://reino:reino-ci@localhost:5432/reino_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Dependencias (incluye psycopg)
+        run: pip install -r web/requirements.txt
+      - name: Migraciones aplican en PostgreSQL
+        working-directory: web
+        run: python manage.py migrate --noinput
+      - name: Suite completa en PostgreSQL (SIN skips de concurrencia, AC20)
+        working-directory: web
+        run: python manage.py test reino  # plataforma multi-tenant (PG-compatible); la app legacy corre en el job sqlite

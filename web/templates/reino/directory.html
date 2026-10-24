@@ -1,0 +1,38 @@
+{% extends "reino/base.html" %}
+{% block title %}Tiendas de Reino · Elegí una marca{% endblock %}
+{% block content %}
+<section class="section container">
+    <p class="eyebrow">Tiendas</p>
+    <h1>Elegí una marca con mundo propio.</h1>
+    <p class="lede">Cada tienda tiene su identidad, su catálogo y sus pedidos, completamente separados.</p>
+
+    <form method="get" class="pill-row" style="margin-top:20px" role="search">
+        <label class="sr-only" for="dq">Buscar tienda por nombre</label>
+        <input type="text" id="dq" name="q" value="{{ q }}" placeholder="Buscar por nombre"
+               style="min-height:48px;padding:10px 16px;border:2px solid var(--rk-ink);border-radius:999px;font:inherit">
+        <select name="categoria" aria-label="Filtrar por categoría"
+                style="min-height:48px;padding:10px 14px;border:2px solid var(--rk-ink);border-radius:999px;font:inherit;background:var(--rk-surface)">
+            <option value="">Todas las categorías</option>
+            {% for cat in categories %}
+            <option value="{{ cat }}" {% if cat == category %}selected{% endif %}>{{ cat|capfirst }}</option>
+            {% endfor %}
+        </select>
+        <button class="btn btn--primary btn--sm" type="submit">Filtrar</button>
+        {% if q or category %}<a class="btn btn--ghost btn--sm" href="{% url 'reino_directory' %}">Limpiar</a>{% endif %}
+    </form>
+
+    {% if stores %}
+    <div class="grid grid--2" style="margin-top:30px">
+        {% for store in stores %}{% include "reino/_store_card.html" with store=store %}{% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state" style="margin-top:30px">
+        <h2>Sin resultados para esa búsqueda</h2>
+        <p class="lede" style="margin-inline:auto">Probá quitar filtros o <a href="{% url 'reino_directory' %}">ver todas las tiendas</a>.</p>
+    </div>
+    {% endif %}
+
+    <p class="fine" style="margin-top:28px">Cada bolsa y cada pedido se completan por tienda.
+    Cambiar de tienda conserva tus bolsas separadas. Las tiendas demo se identifican antes de entrar.</p>
+</section>
+{% endblock %}

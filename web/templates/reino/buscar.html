@@ -1,0 +1,70 @@
+{% extends "reino/base.html" %}
+{% load static %}
+{% block title %}Buscar en Reino{% endblock %}
+{% block content %}
+<section class="section container">
+    <p class="eyebrow">Búsqueda</p>
+    <h1>Buscá en las tiendas de Reino.</h1>
+
+    <form method="get" role="search" style="max-width:720px;margin-top:18px">
+        <label class="sr-only" for="q">Buscá en las tiendas de Reino</label>
+        <div class="chat__form">
+            <input type="text" id="q" name="q" value="{{ q }}"
+                   placeholder="Buscá en las tiendas de Reino" autocomplete="off">
+            <button class="btn btn--primary" type="submit">Buscar</button>
+        </div>
+        <div class="pill-row" style="margin-top:12px">
+            <select name="ocasion" aria-label="Ocasión" style="min-height:44px;border:2px solid var(--rk-ink);border-radius:999px;padding:8px 14px;font:inherit;background:var(--rk-surface)">
+                <option value="">Toda ocasión</option>
+                <option value="paseo" {% if occasion == "paseo" %}selected{% endif %}>Paseo</option>
+                <option value="celebracion" {% if occasion == "celebracion" %}selected{% endif %}>Celebración</option>
+                <option value="fotos" {% if occasion == "fotos" %}selected{% endif %}>Fotos</option>
+                <option value="diario" {% if occasion == "diario" %}selected{% endif %}>Diario</option>
+            </select>
+            <label class="pill" style="gap:8px">Hasta $
+                <input type="number" name="max" value="{{ max }}" min="1" step="1" aria-label="Precio máximo"
+                       style="width:76px;border:0;background:transparent;font:inherit;font-weight:700">
+            </label>
+            <button class="pill" type="submit">Aplicar filtros</button>
+            {% if searched %}<a class="pill" href="{% url 'reino_search' %}">Limpiar</a>{% endif %}
+        </div>
+    </form>
+
+    {% if searched %}
+    <p class="muted" style="margin-top:22px" role="status">
+        {{ results|length }} resultado{{ results|length|pluralize }}{% if q %} para «{{ q }}»{% endif %}{% if max_price %} hasta ${{ max_price }}{% endif %}{% if occasion %} · {{ occasion }}{% endif %}
+    </p>
+    {% if results %}
+    <div class="grid grid--products" style="margin-top:16px">
+        {% for r in results %}
+        <article class="card">
+            <a class="card__media" href="{% url 'reino_product' r.store.slug r.product.slug %}" tabindex="-1" aria-hidden="true">
+                {% if r.image %}<img src="{% static r.image %}" alt="{{ r.alt }}" loading="lazy">
+                {% else %}<img src="{% static 'reino/img/placeholder.svg' %}" alt="">{% endif %}
+            </a>
+            <div class="card__body">
+                <p class="card__store">{{ r.store.name }}{% if r.store.is_demo %} · demo{% endif %}</p>
+                <h3 class="card__title"><a href="{% url 'reino_product' r.store.slug r.product.slug %}">{{ r.product.short_title }}</a></h3>
+                <p class="card__price">{% if r.varies %}Desde {% endif %}{{ r.price_from }}</p>
+                {% if not r.available %}<p class="card__reason">Agotado por ahora</p>{% endif %}
+                <div class="card__footer">
+                    <a class="btn btn--secondary btn--sm" href="{% url 'reino_product' r.store.slug r.product.slug %}">Elegir opciones</a>
+                </div>
+            </div>
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state" style="margin-top:20px">
+        <h2>No encontré nada con esos filtros</h2>
+        <p class="lede" style="margin-inline:auto">Probá <a href="{% url 'reino_search' %}">quitar los filtros</a> o entrá a <a href="{% url 'reino_directory' %}">una tienda</a>.</p>
+    </div>
+    {% endif %}
+    {% else %}
+    <p class="lede" style="margin-top:18px">Ejemplos que ya entiende la búsqueda por reglas:</p>
+    <div class="pill-row">
+        {% for e in examples %}<a class="pill" href="?q={{ e|urlencode }}">{{ e }}</a>{% endfor %}
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

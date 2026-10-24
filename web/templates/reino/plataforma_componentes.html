@@ -1,0 +1,63 @@
+{% extends "reino/base.html" %}
+{% block title %}Sistema visual Reino — componentes{% endblock %}
+{% block content %}
+<section class="rk-section">
+  <p class="rk-eyebrow">Sistema visual</p>
+  <h1>Componentes Reino</h1>
+  <p class="rk-muted">Galería viva: cada pieza se renderiza con el CSS y los datos reales
+  de la plataforma. Referencia para extender pantallas sin romper la dirección visual.</p>
+
+  <h2 id="botones">Botones</h2>
+  <div class="rk-row rk-gap">
+    <a class="rk-btn" href="#botones">Acción principal</a>
+    <a class="rk-btn rk-btn--ghost" href="#botones">Secundaria</a>
+    <a class="rk-btn rk-btn--soft" href="#botones">Suave</a>
+    <button class="rk-btn" disabled>Deshabilitado</button>
+  </div>
+
+  <h2 id="insignias">Insignias y estados</h2>
+  <div class="rk-row rk-gap">
+    <span class="rk-badge">Nuevo</span>
+    <span class="rk-badge rk-badge--accent">Edición limitada</span>
+    <span class="rk-chip">Moda canina</span>
+    <span class="rk-chip rk-chip--active">Papelería</span>
+    <span class="rk-stock rk-stock--ok">En stock</span>
+    <span class="rk-stock rk-stock--low">Quedan 2</span>
+    <span class="rk-stock rk-stock--out">Agotado</span>
+  </div>
+
+  <h2 id="tarjetas">Tarjetas de producto y tienda</h2>
+  <div class="rk-grid rk-grid--products">
+    {% for product in products %}{% include "reino/_product_card.html" %}{% endfor %}
+  </div>
+  {% if store %}<div class="rk-grid rk-grid--stores">{% include "reino/_store_card.html" %}</div>{% endif %}
+
+  <h2 id="formularios">Formularios</h2>
+  <div class="rk-card rk-form-demo">
+    <label class="rk-field"><span>Nombre</span><input type="text" placeholder="Cómo te llamamos"></label>
+    <label class="rk-field"><span>Correo</span><input type="email" placeholder="hola@ejemplo.com"></label>
+    <label class="rk-field"><span>Zona</span>
+      <select><option>San Salvador Centro</option><option>Antiguo Cuscatlán</option></select></label>
+    <div class="rk-row rk-gap">
+      <label class="rk-choice"><input type="radio" name="demo" checked> <span>Envío a domicilio</span></label>
+      <label class="rk-choice"><input type="radio" name="demo"> <span>Retiro en tienda</span></label>
+    </div>
+  </div>
+
+  <h2 id="movimiento">Movimiento (stop-motion)</h2>
+  <div class="rk-row rk-gap rk-motion-demo">
+    <div class="rk-crown" aria-hidden="true">👑</div>
+    <div class="rk-seal" aria-hidden="true">★</div>
+    <button class="rk-btn" id="demo-pop">Pruébame</button>
+    <label class="rk-choice"><input type="checkbox" data-rm-toggle>
+      <span>Reducir movimiento</span></label>
+  </div>
+
+  <h2 id="vacio">Estado vacío honesto</h2>
+  <div class="rk-empty">
+    <p class="rk-empty__title">Todavía no hay nada por aquí</p>
+    <p>Cuando haya novedades, las verás en este espacio.</p>
+    <a class="rk-btn rk-btn--soft" href="{% url 'reino_tiendas' %}">Explorar tiendas</a>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,359 @@
+{% extends "reino/base.html" %}
+{% load static %}
+{% block title %}LookLab · {{ reino_store.name }}{% endblock %}
+{% block content %}
+<section class="section container" style="max-width:1100px">
+
+    {% if step != "revelacion" %}
+    <div class="progress" role="group" aria-label="Progreso de LookLab: paso {{ step_index }} de 4">
+        {% for s in "1234" %}<i class="{% if forloop.counter <= step_index %}done{% endif %}"></i>{% endfor %}
+        <span class="step-n" style="background:none;color:var(--ink-soft);font-weight:700">{{ step_index }} de 4</span>
+    </div>
+    {% endif %}
+
+    {% if errors %}
+    <div class="form-errors" role="alert">
+        {% for field, error in errors.items %}<p class="mb-0">{{ error }}</p>{% endfor %}
+    </div>
+    {% endif %}
+
+    {# ============ ETAPA 1 · SU PERFIL ============ #}
+    {% if step == "perfil" %}
+    <div class="looklab-layout">
+        <div class="looklab-card">
+            <p class="eyebrow">LookLab</p>
+            <h1>Primero, conozcamos a tu pequeño rey.</h1>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="perfil">
+                {% if profiles %}
+                <div class="field">
+                    <label for="profile_id">Elegí un perfil guardado</label>
+                    <select name="profile_id" id="profile_id">
+                        {% for p in profiles %}<option value="{{ p.public_id }}">{{ p.alias }}</option>{% endfor %}
+                        <option value="new">Crear uno nuevo…</option>
+                        <option value="explore">Solo quiero explorar</option>
+                    </select>
+                </div>
+                {% else %}
+                <input type="hidden" name="profile_id" value="new">
+                <div class="field">
+                    <label for="alias">¿Cómo se llama? <span class="muted">(opcional)</span></label>
+                    <input id="alias" name="alias" maxlength="80" placeholder="Bruno, Frida…">
+                    <p class="help">La foto es opcional y nunca se usa para deducir medidas.</p>
+                </div>
+                <div class="field">
+                    <label for="breed">Raza <span class="muted">(opcional)</span></label>
+                    <input id="breed" name="breed" maxlength="80" placeholder="Dachshund">
+                </div>
+                {% endif %}
+                <button class="btn btn--primary" type="submit">Continuar</button>
+            </form>
+        </div>
+        <aside class="looklab-aside">
+            <h3>Tu información</h3>
+            <p class="muted mb-0">El borrador se guarda solo en esta visita. Guardar medidas y
+            preferencias para próximas visitas siempre te pide permiso explícito.</p>
+        </aside>
+    </div>
+    {% endif %}
+
+    {# ============ ETAPA 2 · SUS MEDIDAS ============ #}
+    {% if step == "medidas" %}
+    <div class="looklab-layout">
+        <div class="looklab-card">
+            <p class="eyebrow">LookLab · {% if profile %}{{ profile.alias }}{% endif %}</p>
+            <h1>El estilo empieza por la comodidad.</h1>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="medidas">
+                <div class="field">
+                    <label>Unidad</label>
+                    <div class="pill-row">
+                        <label class="pill"><input type="radio" name="unit" value="cm" {% if draft.unit != "in" %}checked{% endif %}> cm</label>
+                        <label class="pill"><input type="radio" name="unit" value="in" {% if draft.unit == "in" %}checked{% endif %}> pulgadas</label>
+                    </div>
+                </div>
+                <div class="field--inline">
+                    <div class="field">
+                        <label for="chest">Pecho</label>
+                        <input id="chest" name="chest" inputmode="decimal" value="{{ draft.chest }}">
+                        <p class="help">La parte más ancha del torso. <a href="{% url 'reino_fit' reino_store.slug %}">Ver cómo medir el pecho</a></p>
+                    </div>
+                    <div class="field">
+                        <label for="neck">Cuello <span class="muted">(opcional)</span></label>
+                        <input id="neck" name="neck" inputmode="decimal" value="{{ draft.neck }}">
+                    </div>
+                </div>
+                <div class="field" style="max-width:320px">
+                    <label for="back">Largo de espalda</label>
+                    <input id="back" name="back" inputmode="decimal" value="{{ draft.back }}">
+                    <p class="help">De la base del cuello a la base de la cola.</p>
+                </div>
+                {% if profile %}
+                <div class="field">
+                    <label style="display:flex;gap:10px;align-items:center;font-weight:600">
+                        <input type="checkbox" name="remember" value="1" style="width:18px;height:18px">
+                        Guardar estas medidas para próximas visitas a {{ reino_store.name }}
+                    </label>
+                    <p class="help">Sin marcar = solo durante esta visita.</p>
+                </div>
+                {% endif %}
+                <div style="display:flex;gap:12px;flex-wrap:wrap">
+                    <a class="btn btn--ghost" href="?paso=perfil">← Atrás</a>
+                    <button class="btn btn--primary" type="submit">Continuar</button>
+                    <button class="btn btn--ghost" type="submit" name="skip" value="1" formnovalidate>No tengo las medidas</button>
+                </div>
+            </form>
+        </div>
+        <aside class="looklab-aside">
+            <h3>{% if profile %}Para {{ profile.alias }}{% else %}Explorando{% endif %}</h3>
+            {% if measurement %}
+            <p class="mb-0">Últimas medidas guardadas ({{ measurement.measured_at|date:"d/m/Y" }}):
+            pecho {{ measurement.chest_cm|default:"—" }} cm · cuello {{ measurement.neck_cm|default:"—" }} cm ·
+            largo {{ measurement.back_cm|default:"—" }} cm</p>
+            {% else %}
+            <p class="muted mb-0">Podés continuar sin medidas: la talla quedará pendiente de revisar
+            antes de comprar.</p>
+            {% endif %}
+        </aside>
+    </div>
+    {% endif %}
+
+    {# ============ ETAPA 3 · SU PERSONALIDAD ============ #}
+    {% if step == "personalidad" %}
+    <div class="looklab-layout">
+        <div class="looklab-card">
+            <p class="eyebrow">LookLab · {% if profile %}{{ profile.alias }}{% endif %}</p>
+            <h1>¿Qué estilo se parece a él?</h1>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="personalidad">
+                <div class="choice-grid" data-choice-group>
+                    <input type="hidden" name="style" value="{{ draft.style }}">
+                    {% for value, name, desc in styles %}
+                    <button type="button" class="choice" data-value="{{ value }}"
+                            aria-pressed="{% if draft.style == value %}true{% else %}false{% endif %}">
+                        <strong>{{ name }}</strong><span>{{ desc }}</span>
+                    </button>
+                    {% endfor %}
+                </div>
+                <div style="display:flex;gap:12px">
+                    <a class="btn btn--ghost" href="?paso=medidas">← Atrás</a>
+                    <button class="btn btn--primary" type="submit" data-continue {% if not draft.style %}disabled{% endif %}>Continuar</button>
+                </div>
+            </form>
+        </div>
+        <aside class="looklab-aside"><h3>Una selección</h3>
+        <p class="muted mb-0">Elegí la que más se parezca; podés cambiarla después sin perder nada.</p></aside>
+    </div>
+    {% endif %}
+
+    {# ============ ETAPA 4 · SU OCASIÓN ============ #}
+    {% if step == "ocasion" %}
+    <div class="looklab-layout">
+        <div class="looklab-card">
+            <p class="eyebrow">LookLab · {% if profile %}{{ profile.alias }}{% endif %}</p>
+            <h1>¿Para qué momento lo estamos preparando?</h1>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="ocasion">
+                <div class="choice-grid" data-choice-group>
+                    <input type="hidden" name="occasion" value="{{ draft.occasion }}">
+                    {% for value, name in occasions %}
+                    <button type="button" class="choice" data-value="{{ value }}"
+                            aria-pressed="{% if draft.occasion == value %}true{% else %}false{% endif %}">
+                        <strong>{{ name }}</strong>
+                    </button>
+                    {% endfor %}
+                </div>
+                <div class="field--inline" style="max-width:520px">
+                    <div class="field">
+                        <label for="budget">Presupuesto <span class="muted">(opcional)</span></label>
+                        <input id="budget" name="budget" type="number" min="1" step="0.01" value="{{ draft.budget }}" placeholder="$">
+                    </div>
+                    <div class="field">
+                        <label for="budget_scope">El presupuesto cubre</label>
+                        <select id="budget_scope" name="budget_scope">
+                            <option value="products" {% if draft.budget_scope == "products" %}selected{% endif %}>Cada pieza</option>
+                            <option value="total" {% if draft.budget_scope == "total" %}selected{% endif %}>El conjunto completo</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:flex;gap:12px">
+                    <a class="btn btn--ghost" href="?paso=personalidad">← Atrás</a>
+                    <button class="btn btn--primary" type="submit" data-continue {% if not draft.occasion %}disabled{% endif %}>Ver su look</button>
+                </div>
+            </form>
+        </div>
+        <aside class="looklab-aside"><h3>Resumen</h3>
+            <p class="small mb-0">
+            Estilo: {{ draft.style|default:"—" }}<br>
+            Medidas: {% if draft.measurement_saved %}guardadas{% else %}de esta visita{% endif %}<br>
+            Presupuesto: {% if draft.budget %}${{ draft.budget }}{% else %}sin límite{% endif %}
+            </p>
+        </aside>
+    </div>
+    {% endif %}
+
+    {# ============ REVELACIÓN (§6.6: la pantalla más cuidada) ============ #}
+    {% if step == "revelacion" %}
+    {% load reino_tags %}
+    <div class="reveal-wrap">
+        <p class="eyebrow">LookLab</p>
+        {% if alias %}<h1 class="reveal__title">¡{{ alias }} ya tiene su look!</h1>
+        {% else %}<h1 class="reveal__title">Tu pequeño rey ya tiene su look.</h1>{% endif %}
+        {% if budget and budget_scope == "total" %}
+        <p class="reveal__sub">Dentro de tu presupuesto de ${{ budget }} para el conjunto.
+        {% elif measurement_origin == "sin_datos" %}
+        <p class="reveal__sub">Sin medidas: la talla queda por confirmar antes de agregar.
+        {% endif %}
+        </p>
+
+        {% if main %}
+        <form method="post" action="{% url 'reino_looklab_add' reino_store.slug %}" data-reveal-form class="reveal">
+            {% csrf_token %}
+
+            {# ----- P08: la foto principal DOMINA; etiquetas mínimas ----- #}
+            <div class="reveal__photo pop-in">
+                {% with media=main.product.media.first %}
+                {% if media %}<img src="{{ media.url }}" alt="{{ media.alt }}">{% endif %}
+                {% endwith %}
+            </div>
+
+            <div class="reveal__panel">
+            {# ----- Pieza principal (claramente elegida) ----- #}
+            <div class="reveal__card reveal__card--main">
+                <div class="reveal__line">
+                    <div style="flex:1">
+                        <strong>{{ main.product.short_title }}</strong>
+                        {% if main.variant %} · {{ main.variant.option_label }}{% endif %}
+                        {% if main.fit.state == "compatible" %}
+                        <span class="badge-fit-sugerida">Compatible según sus medidas</span>
+                        {% elif main.size_pending %}
+                        <span class="badge-fit-pendiente">Elegí la talla</span>
+                        {% endif %}
+                        <div class="reveal__reasons">
+                            {% for reason in main.reasons %}{% with label=reason|reason_label %}{% if label %}<span class="tag">{{ label }}</span>{% endif %}{% endwith %}{% endfor %}
+                        </div>
+                        {% if main.size_pending %}
+                        <div class="field" style="max-width:220px;margin-top:10px;margin-bottom:0">
+                            <select name="variant" required data-price-select>
+                                <option value="" selected disabled>Elegí la talla…</option>
+                                {% for v in main.selectable_variants %}
+                                <option value="{{ v.public_id }}" data-price="{{ v.price }}">{{ v.option_label }} · ${{ v.price }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div data-price style="text-align:right">
+                        <div class="reveal__total">${{ main.unit_price }}</div>
+                        {% if not main.size_pending %}
+                        <label class="small" style="display:flex;gap:6px;align-items:center;justify-content:flex-end">
+                            <input type="checkbox" name="variant" value="{{ main.variant.public_id }}"
+                                   data-price="{{ main.unit_price }}" checked data-reveal-check> Incluir
+                        </label>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            {# ----- Complementos (voluntarios, NUNCA premarcados) ----- #}
+            {% if complements %}
+            <p class="reveal__group">Complementos que combinan — elegí solo si querés:</p>
+            {% for entry in complements %}
+            <div class="reveal__card">
+                <div class="reveal__line">
+                    {% with media=entry.product.media.first %}
+                    {% if media %}<img src="{{ media.url }}" alt="{{ media.alt }}">{% endif %}
+                    {% endwith %}
+                    <div style="flex:1">
+                        <strong>{{ entry.product.short_title }}</strong>
+                        {% if entry.variant %} · {{ entry.variant.option_label }}{% endif %}
+                        {% if entry.size_pending %}<span class="badge-fit-pendiente">Elegí la talla</span>{% endif %}
+                        {% if entry.size_pending %}
+                        <div class="field" style="max-width:220px;margin-top:10px;margin-bottom:0">
+                            <select name="variant" data-price-select>
+                                <option value="" selected>No agregar / elegir talla…</option>
+                                {% for v in entry.selectable_variants %}
+                                <option value="{{ v.public_id }}" data-price="{{ v.price }}">{{ v.option_label }} · ${{ v.price }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div data-price style="text-align:right">
+                        <div class="reveal__total" style="font-size:20px">${{ entry.unit_price }}</div>
+                        {% if not entry.size_pending %}
+                        <label class="small" style="display:flex;gap:6px;align-items:center;justify-content:flex-end">
+                            <input type="checkbox" name="variant" value="{{ entry.variant.public_id }}"
+                                   data-price="{{ entry.unit_price }}" data-reveal-check> Agregar
+                        </label>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% endif %}
+
+            {# ----- Bloque de selección reactivo ----- #}
+            <div class="reveal__card reveal__summary" aria-live="polite">
+                <div>
+                    <strong>Total de tu selección</strong>
+                    <div class="small" style="color:#B9C3D6">
+                        <span data-reveal-count>1 pieza</span> · envío por calcular al pagar
+                    </div>
+                </div>
+                <span class="reveal__total" data-reveal-total>${{ main.unit_price }}</span>
+            </div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:22px">
+                <button class="btn btn--primary" type="submit">Agregar selección al carrito</button>
+                <button class="btn btn--secondary" type="submit"
+                        formaction="{% url 'reino_looklab_save' reino_store.slug %}">Guardar look</button>
+                <a class="btn btn--ghost" href="?paso=ocasion">Editar preferencias</a>
+            </div>
+            </div>{# /reveal__panel #}
+        </form>
+
+        {# ----- Alternativas para la pieza principal (no se suman) ----- #}
+        {% if alternatives %}
+        <p class="reveal__group">Otras opciones para la pieza principal:</p>
+        <div class="reveal__alts">
+            {% for entry in alternatives %}
+            <a class="reveal__alt" href="{% url 'reino_product' reino_store.slug entry.product.slug %}">
+                {% with media=entry.product.media.first %}
+                {% if media %}<img src="{{ media.url }}" alt="{{ media.alt }}">{% endif %}
+                {% endwith %}
+                <strong>{{ entry.product.short_title }}</strong>
+                <span class="small">${{ entry.unit_price }}</span>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {# ----- Talla agotada: honestidad visible, nunca sustitución ----- #}
+        {% if unavailable %}
+        <div class="reveal__card" style="border-left:4px solid var(--error)">
+            {% for u in unavailable %}
+            <p class="mb-0"><strong>{{ u.product.short_title }}</strong>: {{ u.note }}
+            <a href="{% url 'reino_product' reino_store.slug u.product.slug %}">Ver la pieza</a></p>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% else %}
+        <div class="reveal__card" style="padding:22px">
+            <h3 class="mt-0">No hay una opción completa para esos criterios.</h3>
+            <p class="mb-0">Preferimos decírtelo a inventarte un look.
+            {% if excluded %}Motivos: {% for e in excluded %}{{ e.product }} — {{ e.reason|excluded_label }}{% if not forloop.last %}; {% endif %}{% endfor %}.{% endif %}</p>
+        </div>
+        <div style="margin-top:22px;display:flex;gap:12px;flex-wrap:wrap">
+            <a class="btn btn--secondary" href="?paso=ocasion">Cambiar criterios</a>
+            <a class="btn btn--ghost" href="{% url 'reino_collection' reino_store.slug %}">Explorar la colección</a>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

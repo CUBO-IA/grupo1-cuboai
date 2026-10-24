@@ -1,0 +1,91 @@
+{% extends "reino/base.html" %}
+{% load static %}
+{% block title %}Comparar · Reino{% endblock %}
+{% block content %}
+<section class="section container">
+    <p class="eyebrow">Comparador</p>
+    <h1>Compará lado a lado.</h1>
+    <p class="lede">Entre 2 y 4 piezas. Precio y stock se recalculan al abrir{% if shared %}; esta es una comparación compartida{% endif %}. {{ shipping_note }}</p>
+
+    {% if state == "empty" %}
+    <div class="empty-state">
+        <h2>Tu comparación está vacía</h2>
+        <p class="lede" style="margin-inline:auto">Sumá piezas desde la <a href="{% url 'reino_explore' %}">exploración</a> o cualquier colección con el botón «Comparar».</p>
+    </div>
+    {% elif state == "incomplete" %}
+    <div class="empty-state">
+        <h2>Elegí otra pieza para comparar</h2>
+        <p class="lede" style="margin-inline:auto">Ya tenés una; agregá al menos una más desde el catálogo.</p>
+        <p><a class="btn btn--primary" href="{% url 'reino_explore' %}">Explorar piezas</a></p>
+    </div>
+    {% else %}
+    <div class="pill-row" style="margin-block:16px" role="group" aria-label="Vista de la tabla">
+        <a class="pill {% if vista != 'diferencias' %}is-on{% endif %}" href="?vista=todos{% if shared %}&c={{ tray.public_id }}{% endif %}">Todos los atributos</a>
+        <a class="pill {% if vista == 'diferencias' %}is-on{% endif %}" href="?vista=diferencias{% if shared %}&c={{ tray.public_id }}{% endif %}">Solo diferencias</a>
+        <button class="pill" type="button" data-share-url="{{ share_url }}">Compartir comparación</button>
+    </div>
+    {% if common_only %}
+    <p class="flash-ok" role="note">Son categorías distintas: comparo solo los campos comunes.
+    No hay un «ganador» entre piezas de mundos diferentes.</p>
+    {% endif %}
+
+    <div class="compare-scroll" tabindex="0" role="region" aria-label="Tabla de comparación">
+    <table class="compare-table">
+        <thead>
+        <tr>
+            <th scope="col"><span class="sr-only">Atributo</span></th>
+            {% for col in columns %}
+            <th scope="col" class="col-head">
+                {% if col.store %}
+                <div class="{% if col.best_price %}best-price{% endif %}" style="padding:8px">
+                    {% if col.image %}<img src="{{ col.image }}" alt="{{ col.alt }}">{% endif %}
+                    <p style="margin:8px 0 2px"><strong>{{ col.title }}</strong></p>
+                    <p class="small muted" style="margin:0">{{ col.store.name }} · {{ col.option }}</p>
+                    <p class="card__price" style="margin:6px 0">{{ col.price }}</p>
+                    {% if col.best_price %}<p class="badge" style="background:var(--rk-accent)">Menor precio de producto entre estas opciones</p>{% endif %}
+                    {% if col.state != "disponible" %}<p class="state-chip state-chip--warn">{{ col.state|capfirst }}</p>{% endif %}
+                    <p style="margin:8px 0 0">
+                        <a class="btn btn--primary btn--sm" href="{% url 'reino_product' col.store.slug col.product_slug %}">Ver pieza</a>
+                    </p>
+                    <form method="post" action="{% url 'reino_compare_remove' %}" style="margin-top:8px">
+                        {% csrf_token %}
+                        <input type="hidden" name="variant_id" value="{{ col.variant_id }}">
+                        <button class="btn btn--ghost btn--sm" type="submit">Quitar</button>
+                    </form>
+                </div>
+                {% else %}
+                <div style="padding:8px">
+                    <p class="state-chip state-chip--error">Archivada</p>
+                    <p class="small muted">Esta pieza ya no existe en el catálogo.</p>
+                    <form method="post" action="{% url 'reino_compare_remove' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="variant_id" value="{{ col.variant_id }}">
+                        <button class="btn btn--ghost btn--sm" type="submit">Quitar</button>
+                    </form>
+                </div>
+                {% endif %}
+            </th>
+            {% endfor %}
+        </tr>
+        </thead>
+        <tbody>
+        <tr>
+            <th scope="row">Disponibilidad</th>
+            {% for col in columns %}<td>{% if col.state == "disponible" %}En stock{% else %}{{ col.state|capfirst }}{% endif %}</td>{% endfor %}
+        </tr>
+        <tr>
+            <th scope="row">Entrega</th>
+            {% for col in columns %}<td>{{ shipping_note }}</td>{% endfor %}
+        </tr>
+        {% for row in rows %}
+        <tr>
+            <th scope="row">{{ row.label }}{% if row.unit %} ({{ row.unit }}){% endif %}</th>
+            {% for cell in row.cells %}<td>{{ cell }}</td>{% endfor %}
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

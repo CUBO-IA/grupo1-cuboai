@@ -1,0 +1,83 @@
+{% extends "reino/merchant_base.html" %}
+{% block title %}Pedido {{ order.reference }} · {{ store.name }}{% endblock %}
+{% block panel %}
+<p class="eyebrow"><a href="{% url 'reino_merchant_orders' store.slug %}">← Pedidos</a></p>
+<h1 class="mt-0">{{ order.reference }}</h1>
+<p class="muted small">{{ order.created_at|date:"d/m/Y H:i" }} · {{ order.customer_name }} · {{ order.customer_email }}{% if order.customer_phone %} · {{ order.customer_phone }}{% endif %}</p>
+
+{% if reino_flash %}<p class="form-errors" role="alert">{{ reino_flash }}</p>{% endif %}
+
+<div class="grid grid--2" style="margin-top:16px">
+    <div class="looklab-card">
+        <h2 class="mt-0" style="font-size:1.2rem">Líneas</h2>
+        {% for item in order.items.all %}
+        <div class="reveal__line">
+            <div style="flex:1"><strong>{{ item.title }}</strong> · {{ item.option_label }}<br>
+            <span class="small muted">SKU {{ item.sku }} × {{ item.quantity }}{% if item.recipient_alias %} · para {{ item.recipient_alias }}{% endif %}</span></div>
+            <div style="font-weight:700">${{ item.subtotal }}</div>
+        </div>
+        {% endfor %}
+        <hr style="border:0;border-top:1px solid var(--silver-soft);margin:12px 0">
+        <p class="mb-0" style="display:flex;justify-content:space-between"><span>Mercancía</span><strong>${{ order.subtotal }}</strong></p>
+        {% if order.discount_amount %}<p class="mb-0" style="display:flex;justify-content:space-between"><span>{{ order.discount_note }}</span><strong>−${{ order.discount_amount }}</strong></p>{% endif %}
+        <p class="mb-0" style="display:flex;justify-content:space-between"><span>Envío</span><strong>{% if order.shipping_amount is not None %}${{ order.shipping_amount }}{% else %}Por confirmar{% endif %}</strong></p>
+        <p class="mb-0" style="display:flex;justify-content:space-between;font-size:1.15rem"><span>Total</span><strong>${{ order.total }}</strong></p>
+        <p class="small muted" style="margin-top:10px">Método: {{ order.get_payment_method_display }} ·
+        Entrega: {{ order.get_delivery_mode_display|default:order.delivery_mode }}{% if order.zone %} · {{ order.zone }}{% endif %}
+        {% if order.address %} · {{ order.address }}, {{ order.city }}{% endif %}</p>
+    </div>
+
+    <div class="looklab-card">
+        <h2 class="mt-0" style="font-size:1.2rem">Estados y acciones</h2>
+        <p class="small">Pedido: <span class="state-chip state-chip--{{ order.status }}">{{ order.get_status_display }}</span>
+        Pago: <span class="state-chip state-chip--{{ order.payment_status }}">{{ order.get_payment_status_display }}</span>
+        Preparación: <span class="state-chip state-chip--{{ order.prep_status }}">{{ order.get_prep_status_display }}</span>
+        Entrega: <span class="state-chip state-chip--{{ order.delivery_status }}">{{ order.get_delivery_status_display }}</span></p>
+
+        {% comment %} Auditoría R13: cada acción requiere su capacidad; el botón
+           oculto nunca sustituye la autorización del servidor. {% endcomment %}
+        {% if not capabilities.payments and not capabilities.orders and not capabilities.fulfilment %}
+        <p class="small muted">Tu rol es de solo lectura para este pedido.</p>
+        {% else %}
+        <form method="post" action="{% url 'reino_merchant_order_transition' store.slug order.public_id %}">
+            {% csrf_token %}
+            <div class="field--inline">
+                <div class="field"><label for="field">Dimensión</label>
+                    <select id="field" name="field">
+                        {% if capabilities.payments %}<option value="payment_status">Pago</option>{% endif %}
+                        {% if capabilities.orders %}<option value="status">Pedido</option>{% endif %}
+                        {% if capabilities.fulfilment %}<option value="prep_status">Preparación</option>
+                        <option value="delivery_status">Entrega</option>{% endif %}
+                    </select></div>
+                <div class="field"><label for="to">Nuevo estado</label>
+                    <input id="to" name="to" list="states" placeholder="paid, ready, shipped…">
+                    <datalist id="states">
+                        <option value="paid"><option value="failed"><option value="expired"><option value="refunded">
+                        <option value="confirmed"><option value="cancelled"><option value="closed">
+                        <option value="preparing"><option value="ready">
+                        <option value="scheduled"><option value="shipped"><option value="delivered"><option value="incident"><option value="returned">
+                    </datalist></div>
+            </div>
+            <div class="field"><label for="note">Evidencia / referencia <span class="muted">(obligatoria para confirmar cobros y reembolsos; una foto NO confirma el pago)</span></label>
+                <input id="note" name="note" maxlength="200"></div>
+            <div class="field"><label for="refund_amount">Importe del reembolso <span class="muted">(solo si aplica)</span></label>
+                <input id="refund_amount" name="refund_amount" inputmode="decimal"></div>
+            <button class="btn btn--primary" type="submit">Aplicar transición</button>
+        </form>
+        {% endif %}
+        <p class="help small" style="margin-top:10px">Las transiciones siguen la máquina de estados y quedan
+        registradas con tu usuario. El pago verificado es una decisión del equipo, nunca automática por comprobante.
+        Cancelar un pedido no expedido devuelve el inventario automáticamente (una sola vez).</p>
+    </div>
+</div>
+
+<div class="section--tight">
+    <h2 style="font-size:1.2rem">Línea temporal</h2>
+    <ul class="small muted">
+        {% for event in order.events.all %}
+        <li>{{ event.created_at|date:"d/m/Y H:i" }} — {{ event.field }}: {{ event.from_value|default:"—" }} → {{ event.to_value }}
+        {% if event.by %}por {{ event.by.username }}{% endif %}{% if event.note %} · {{ event.note }}{% endif %}</li>
+        {% empty %}<li>Sin eventos todavía.</li>{% endfor %}
+    </ul>
+</div>
+{% endblock %}

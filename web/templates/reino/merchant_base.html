@@ -1,0 +1,19 @@
+{% extends "reino/base.html" %}
+{% block content %}
+<div class="panel-layout">
+    <nav class="panel-nav" aria-label="Panel del comerciante">
+        <a href="{% url 'reino_merchant' store.slug %}" {% if request.resolver_match.url_name == "reino_merchant" %}aria-current="page"{% endif %}>Resumen</a>
+        <a href="{% url 'reino_merchant_catalog' store.slug %}" {% if "catalog" in request.resolver_match.url_name or "product" in request.resolver_match.url_name or "variant" in request.resolver_match.url_name %}aria-current="page"{% endif %}>Catálogo</a>
+        <a href="{% url 'reino_merchant_orders' store.slug %}" {% if "order" in request.resolver_match.url_name %}aria-current="page"{% endif %}>Pedidos</a>
+        <a href="{% url 'reino_merchant_customers' store.slug %}" {% if request.resolver_match.url_name == "reino_merchant_customers" %}aria-current="page"{% endif %}>Clientes</a>
+        <a href="{% url 'reino_merchant_finance' store.slug %}" {% if request.resolver_match.url_name == "reino_merchant_finance" %}aria-current="page"{% endif %}>Finanzas</a>
+        <a href="{% url 'reino_merchant_logistics' store.slug %}" {% if request.resolver_match.url_name == "reino_merchant_logistics" %}aria-current="page"{% endif %}>Logística</a>
+        <a href="{% url 'reino_merchant_diseno' store.slug %}" {% if "diseno" in request.resolver_match.url_name %}aria-current="page"{% endif %}>Diseño</a>
+        <a href="{% url 'reino_merchant_settings' store.slug %}" {% if "settings" in request.resolver_match.url_name %}aria-current="page"{% endif %}>Configuración</a>
+        <a href="{% url 'reino_store_home' store.slug %}" style="opacity:.7">← Ver tienda</a>
+    </nav>
+    <div class="panel-main">
+        {% block panel %}{% endblock %}
+    </div>
+</div>
+{% endblock %}

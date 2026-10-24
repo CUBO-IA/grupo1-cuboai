@@ -1,0 +1,188 @@
+{% extends "reino/base.html" %}
+{% load static %}
+{% block title %}{{ reino_store.name }} · {{ reino_store.tagline }}{% endblock %}
+{% block content %}
+
+{% if modules %}{% for module in modules %}
+
+{% comment %}================= HERO (P03) ================={% endcomment %}
+{% if module.key == "hero" %}
+{% if reino_preview %}
+<div style="position:sticky;top:0;z-index:60;background:var(--rk-ink);color:var(--rk-bg);text-align:center;padding:8px 14px;font-size:.85rem;font-weight:700">
+    Vista previa del borrador — sólo la ve el equipo de la tienda. Los enlaces están acotados.
+</div>
+{% endif %}
+<section class="hero scene {% if theme_config.identity == 'wiener-kingdom' %}scene--pink{% elif theme_config.identity == 'estudio-nube' %}scene--lilac{% else %}scene--cream{% endif %}" style="margin:18px 18px 0">
+    {% comment %}Figuras de marca originales (SVG): corona + silueta dachshund
+    para WK; papeles/sellos para Nube; estrella neutra para el resto. Nunca
+    sobre precio ni controles (§9.2).{% endcomment %}
+    <span class="scene__figure stopmotion stopmotion--loop" style="top:26px;right:8%" aria-hidden="true">
+        {% if theme_config.identity == "wiener-kingdom" %}
+        <svg width="72" height="54" viewBox="0 0 72 54" fill="none">
+            <path d="M6 46 L10 18 L24 34 L36 8 L48 34 L62 18 L66 46 Z" fill="#FFB548" stroke="#15172E" stroke-width="3" stroke-linejoin="round"/>
+            <circle cx="36" cy="44" r="4" fill="#FF4D9D"/>
+        </svg>
+        {% elif theme_config.identity == "estudio-nube" %}
+        <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+            <rect x="10" y="14" width="34" height="40" rx="4" fill="#fff" stroke="#23234A" stroke-width="3" transform="rotate(-6 10 14)"/>
+            <circle cx="44" cy="26" r="10" fill="#FBE58A" stroke="#23234A" stroke-width="3"/>
+        </svg>
+        {% else %}
+        <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
+            <path d="M32 6l6.5 18.5L58 26l-15 12.5L48 58l-16-11-16 11 5-19.5L6 26l19.5-1.5L32 6z" fill="#D6F85A" stroke="#15172E" stroke-width="3" stroke-linejoin="round"/>
+        </svg>
+        {% endif %}
+    </span>
+    {% if theme_config.identity == "wiener-kingdom" %}
+    <span class="scene__figure" style="bottom:20px;left:5%" aria-hidden="true">
+        <svg width="150" height="60" viewBox="0 0 150 60" fill="none">
+            <path d="M18 40c0-8 6-14 14-14h56c10 0 16 6 18 12l16 4c3 1 3 5 0 6l-14 4c-2 4-7 6-12 6H34c-9 0-16-8-16-18z" fill="#15172E"/>
+            <path d="M20 30c-6-8-2-18 6-18 5 0 8 4 8 9" fill="#15172E"/>
+            <rect x="34" y="52" width="7" height="8" rx="3" fill="#15172E"/>
+            <rect x="88" y="52" width="7" height="8" rx="3" fill="#15172E"/>
+        </svg>
+    </span>
+    {% endif %}
+    <div class="container">
+        <div class="pop-in">
+            <p class="eyebrow">{{ reino_store.category|capfirst }}</p>
+            <h1>{% if hero_cfg.headline %}{{ hero_cfg.headline }}{% elif theme_config.identity == "wiener-kingdom" %}Pequeño perro. Mucha actitud.{% else %}{{ reino_store.tagline|default:reino_store.name }}{% endif %}</h1>
+            <p class="lede">{% if hero_cfg.sub %}{{ hero_cfg.sub }}{% else %}{{ reino_store.description }}{% endif %}</p>
+            <div class="hero__actions">
+                <a class="btn btn--primary" href="{% url 'reino_collection' reino_store.slug %}">Explorar la colección</a>
+                {% if reino_store.category == "moda canina" %}
+                <a class="btn btn--secondary" href="{% url 'reino_looklab' reino_store.slug %}">Armá su look</a>
+                {% endif %}
+            </div>
+            <p class="hero__tertiary"><a href="{% url 'reino_stylist' reino_store.slug %}">Contale al asesor qué buscás →</a></p>
+        </div>
+        {% if hero_asset %}
+        <div class="hero__media pop-in pop-in--2">
+            <img src="{{ hero_asset.file.url }}" alt="{{ hero_asset.alt }}" fetchpriority="high"
+                 style="object-position: {{ hero_asset.focal_css }}">
+        </div>
+        {% elif hero_product %}
+        <div class="hero__media pop-in pop-in--2">
+            {% with media=hero_product.media.first %}
+            <a href="{% url 'reino_product' reino_store.slug hero_product.slug %}" aria-label="Ver {{ hero_product.short_title }}">
+            {% if media %}<img src="{{ media.url }}" alt="{{ media.alt }}" fetchpriority="high">
+            {% else %}<img src="{% static 'reino/img/placeholder.svg' %}" alt="">{% endif %}
+            </a>
+            {% endwith %}
+        </div>
+        {% endif %}
+    </div>
+</section>
+{% endif %}
+
+{% comment %}================= DESTACADOS ================={% endcomment %}
+{% if module.key == "featured" and featured %}
+<section class="section container">
+    <p class="eyebrow">Selección de la casa</p>
+    <h2>Piezas con precio y stock reales</h2>
+    <div class="grid grid--products" style="margin-top:22px">
+        {% for product in featured %}
+        {% include "reino/_product_card.html" with product=product %}
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+{% comment %}================= POR OCASIÓN ================={% endcomment %}
+{% if module.key == "occasions" %}
+<section class="section container">
+    <p class="eyebrow">{% if theme_config.identity == "wiener-kingdom" %}Un look para cada plan{% else %}Para cada momento{% endif %}</p>
+    <div class="pill-row" style="margin-top:16px">
+        <a class="pill" href="{% url 'reino_collection' reino_store.slug %}?ocasion=paseo">Paseo</a>
+        <a class="pill" href="{% url 'reino_collection' reino_store.slug %}?ocasion=celebracion">Celebración</a>
+        <a class="pill" href="{% url 'reino_collection' reino_store.slug %}?ocasion=fotos">Fotos</a>
+        <a class="pill" href="{% url 'reino_collection' reino_store.slug %}?ocasion=diario">Diario</a>
+    </div>
+</section>
+{% endif %}
+
+{% comment %}================= LOOKLAB ================={% endcomment %}
+{% if module.key == "looklab_entry" and reino_store.category == "moda canina" %}
+<section class="section container">
+    <div class="looklab-card" style="background:var(--rk-soft)">
+        <div class="grid grid--2" style="align-items:center">
+            <div>
+                <p class="eyebrow">LookLab</p>
+                <h2>Armá su próximo look en 4 pasos</h2>
+                <p class="lede">Elegís para quién, sus medidas (o «sin guardar»), el estilo y el plan. El motor muestra una pieza principal con razones reales y respeta tu presupuesto del conjunto.</p>
+                <p><a class="btn btn--primary" href="{% url 'reino_looklab' reino_store.slug %}">Abrir LookLab</a></p>
+            </div>
+            <div class="center" aria-hidden="true">
+                <svg width="180" height="150" viewBox="0 0 180 150" fill="none">
+                    <rect x="20" y="18" width="64" height="84" rx="12" fill="#fff" stroke="#15172E" stroke-width="3" transform="rotate(-5 20 18)"/>
+                    <rect x="96" y="30" width="64" height="84" rx="12" fill="#FFE9F2" stroke="#15172E" stroke-width="3" transform="rotate(4 96 30)"/>
+                    <path d="M110 122l14-14 8 8-14 14z" fill="#FFB548" stroke="#15172E" stroke-width="3"/>
+                </svg>
+            </div>
+        </div>
+    </div>
+</section>
+{% endif %}
+
+{% comment %}================= GUÍA DE TALLA ================={% endcomment %}
+{% if module.key == "fit_explainer" and reino_store.category == "moda canina" %}
+<section class="section container">
+    <p class="eyebrow">Elegí su talla con medidas</p>
+    <h2>Tres medidas, una tabla publicada</h2>
+    <div class="steps-3" style="margin-top:20px">
+        <div class="step-card"><span class="step-n">1</span><strong>Pecho</strong><p class="muted">La parte más ancha, detrás de las patas delanteras.</p></div>
+        <div class="step-card"><span class="step-n">2</span><strong>Cuello</strong><p class="muted">Donde va el collar, sin apretar.</p></div>
+        <div class="step-card"><span class="step-n">3</span><strong>Largo</strong><p class="muted">De la base del cuello a la base de la cola.</p></div>
+    </div>
+    <p><a class="btn btn--secondary" href="{% url 'reino_fit' reino_store.slug %}">Abrir la guía de tallas</a></p>
+</section>
+{% endif %}
+
+{% comment %}================= BARRA PREMIUM ================={% endcomment %}
+{% if module.key == "premium_bar" %}
+{% with premium=featured.first %}
+{% if premium and premium.base_price >= 150 %}
+<section class="section--tight container">
+    <div class="looklab-card" style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;background:var(--rk-ink);color:#fff">
+        <div style="flex:1;min-width:240px">
+            <p class="eyebrow" style="color:var(--rk-accent)">Colección premium</p>
+            <p style="font-family:var(--font-display);font-size:1.4rem;font-weight:800;margin:0 0 6px">{{ premium.short_title }}</p>
+            <p style="color:#ffffffc9;margin:0">{{ premium.reason|default:"Pieza destacada de la casa." }}</p>
+        </div>
+        <a class="btn btn--accent" href="{% url 'reino_product' reino_store.slug premium.slug %}">Ver pieza · ${{ premium.base_price }}</a>
+    </div>
+</section>
+{% endif %}
+{% endwith %}
+{% endif %}
+
+{% comment %}================= POLÍTICAS ================={% endcomment %}
+{% if module.key == "policies" %}
+<section class="section container">
+    <div class="steps-3">
+        <div class="step-card"><h3>Guía de tallas</h3><p class="muted">Tabla publicada por prenda; el resultado se explica, no se adivina.</p></div>
+        <div class="step-card"><h3>Pago verificado</h3><p class="muted">Tu pedido queda pendiente hasta que el negocio verifique el pago. Nunca se celebra sin evidencia.</p></div>
+        <div class="step-card"><h3>Entrega clara</h3><p class="muted">Retiro o zonas configuradas por el negocio; lo que no se sabe, se dice.</p></div>
+    </div>
+    <p class="hero__tertiary"><a href="{% url 'reino_help' reino_store.slug %}">Ver políticas completas →</a></p>
+</section>
+{% endif %}
+
+{% endfor %}
+{% else %}
+{% comment %}Tema nunca publicado: contenido mínimo honesto.{% endcomment %}
+<section class="section container">
+    <h1>{{ reino_store.name }}</h1>
+    <p class="lede">{{ reino_store.description|default:reino_store.tagline }}</p>
+    <p><a class="btn btn--primary" href="{% url 'reino_collection' reino_store.slug %}">Ver colección</a></p>
+</section>
+{% endif %}
+
+{% if not products_exist %}
+<section class="section container"><div class="empty-state">
+    <h2>Esta tienda todavía no publica productos</h2>
+    <p class="lede center" style="margin-inline:auto">Volvé pronto o explorá <a href="{% url 'reino_directory' %}">otras tiendas de Reino</a>.</p>
+</div></section>
+{% endif %}
+
+{% endblock %}

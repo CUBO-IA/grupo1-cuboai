@@ -1,0 +1,35 @@
+{% extends "reino/merchant_base.html" %}
+{% load static %}
+{% block title %}Catálogo · {{ store.name }}{% endblock %}
+{% block panel %}
+<div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap">
+    <div>
+        <h1 class="mt-0" style="margin-bottom:4px">Catálogo e inventario</h1>
+        <p class="muted small mt-0">Los productos archivados siguen legibles en pedidos históricos.</p>
+    </div>
+    {% if can_catalog %}<a class="btn btn--primary" href="{% url 'reino_merchant_product_new' store.slug %}">+ Nuevo producto</a>{% endif %}
+</div>
+<div class="table-wrap">
+<table class="data">
+    <thead><tr><th></th><th>Producto</th><th>Precio base</th><th>Variantes y stock</th><th>Estado</th>{% if can_catalog %}<th></th>{% endif %}</tr></thead>
+    <tbody>
+        {% for p in products %}
+        <tr>
+            <td style="width:56px">{% with m=p.media.first %}{% if m %}<img src="{% static m.path %}" alt="" style="width:48px;height:60px;object-fit:cover;border-radius:8px">{% endif %}{% endwith %}</td>
+            <td><strong>{{ p.short_title }}</strong><br><span class="small muted">{{ p.title }}</span>
+                {% if p.bitcoin_discount_eligible %}<br><span class="small" style="color:var(--ok)">Participa en descuento Bitcoin</span>{% endif %}</td>
+            <td>${{ p.base_price }}</td>
+            <td>
+                {% for v in p.variants.all %}
+                <span class="state-chip {% if v.stock <= 2 %}state-chip--pending{% endif %} {% if not v.is_active %}state-chip--off{% endif %}">
+                    {{ v.option_label }}: {{ v.stock }}{% if not v.is_active %} (inactiva){% endif %}</span>
+                {% endfor %}
+            </td>
+            <td><span class="state-chip">{{ p.get_status_display }}</span></td>
+            {% if can_catalog %}<td><a class="btn btn--ghost btn--sm" href="{% url 'reino_merchant_product_edit' store.slug p.pk %}">Editar</a></td>{% endif %}
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+{% endblock %}

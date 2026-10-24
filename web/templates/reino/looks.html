@@ -1,0 +1,29 @@
+{% extends "reino/base.html" %}
+{% block title %}Mis looks{% endblock %}
+{% block content %}
+<section class="section container" style="max-width:980px">
+    <h1>Mis looks guardados</h1>
+    {% if looks %}
+    <div class="grid grid--products" style="margin-top:20px">
+        {% for look in looks %}
+        <div class="card"><div class="card__body">
+            <h3 class="card__title">{{ look.store.name }}</h3>
+            <p class="card__reason">{{ look.occasion|capfirst|default:"Look" }}{% if look.profile %} · {{ look.profile.alias }}{% endif %} · {{ look.created_at|date:"d/m/Y" }}</p>
+            <ul class="small" style="margin:8px 0 0;padding-left:18px">
+                {% for item in look.items %}<li>{{ item.title }} · {{ item.option }} — ${{ item.price }}</li>{% endfor %}
+            </ul>
+            <div class="card__footer">
+                <a class="btn btn--secondary btn--sm" href="{% url 'reino_collection' look.store.slug %}">Ver la tienda</a>
+            </div>
+        </div></div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <h2>Sin looks guardados.</h2>
+        <p class="muted">Guardá un look desde LookLab en Wiener Kingdom.</p>
+        <a class="btn btn--primary" href="{% url 'reino_directory' %}">Ir a las tiendas</a>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

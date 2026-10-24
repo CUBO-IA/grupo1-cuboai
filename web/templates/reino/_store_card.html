@@ -1,0 +1,23 @@
+{% load static %}
+{# Tarjeta de tienda con identidad propia (P02): portada, logo-letra, nombre,
+   categoría, frase y muestra de productos reales. La demo se identifica. #}
+<article class="store-card">
+    <a href="{% url 'reino_store_home' store.slug %}" style="text-decoration:none;color:inherit">
+        <div class="store-card__cover {% if store.slug == 'wiener-kingdom' %}scene--pink{% elif store.is_demo %}scene--lilac{% else %}scene--cream{% endif %} scene">
+            {% with cover=store.cover_product.media.first %}
+            {% if cover %}<img src="{% static cover.path %}" alt="" loading="lazy">{% endif %}
+            {% endwith %}
+        </div>
+        <div class="store-card__logo" aria-hidden="true">{{ store.name|slice:":1" }}</div>
+        <div class="store-card__body">
+            <h3 style="margin:0">{{ store.name }}
+                {% if store.is_demo %}<span class="badge-demo">Demo</span>{% endif %}</h3>
+            <p class="card__store">{{ store.category|capfirst }}</p>
+            <p class="card__reason">{{ store.tagline }}</p>
+            {% if store.sample_products %}
+            <p class="fine" style="margin:6px 0 0">Como: {% for p in store.sample_products %}{{ p.short_title }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>
+            {% endif %}
+            <p style="margin-top:12px"><span class="btn btn--secondary btn--sm">Entrar a la tienda</span></p>
+        </div>
+    </a>
+</article>

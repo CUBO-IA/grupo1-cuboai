@@ -1,0 +1,57 @@
+{% extends "reino/base.html" %}
+{% block title %}Colección · {{ reino_store.name }}{% endblock %}
+{% block content %}
+<section class="section container">
+    <p class="eyebrow">La colección</p>
+    <h1>Encontrá su próxima pieza favorita.</h1>
+
+    {% comment %} Búsqueda con intención: texto simple = búsqueda lexical; siempre se
+       informa la interpretación aplicada {% endcomment %}
+    <form method="get" action="{% url 'reino_collection' reino_store.slug %}" role="search" style="margin:24px 0">
+        <div class="field" style="max-width:640px">
+            <label for="q" class="sr-only" style="position:absolute;left:-9999px">Buscar en la colección</label>
+            <input id="q" type="search" name="q" value="{{ q }}"
+                   placeholder="Por ejemplo: algo elegante para una celebración">
+        </div>
+        <div class="pill-row" role="group" aria-label="Filtros">
+            <select name="categoria" aria-label="Categoría" style="min-height:40px;border:1px solid var(--silver);border-radius:999px;padding:6px 14px;font:inherit">
+                <option value="">Categoría</option>
+                {% for c in categories %}<option value="{{ c }}" {% if selected.categoria == c %}selected{% endif %}>{{ c|capfirst }}</option>{% endfor %}
+            </select>
+            <select name="ocasion" aria-label="Ocasión" style="min-height:40px;border:1px solid var(--silver);border-radius:999px;padding:6px 14px;font:inherit">
+                <option value="">Ocasión</option>
+                {% for o in occasions %}<option value="{{ o }}" {% if selected.ocasion == o %}selected{% endif %}>{{ o|capfirst }}</option>{% endfor %}
+            </select>
+            <input type="number" name="max" min="1" value="{{ selected.max }}" placeholder="Hasta $" aria-label="Precio máximo"
+                   style="width:110px;min-height:40px;border:1px solid var(--silver);border-radius:999px;padding:6px 14px;font:inherit">
+            <select name="orden" aria-label="Ordenar" style="min-height:40px;border:1px solid var(--silver);border-radius:999px;padding:6px 14px;font:inherit">
+                <option value="relevancia" {% if selected.orden == "relevancia" %}selected{% endif %}>Relevancia</option>
+                <option value="precio-asc" {% if selected.orden == "precio-asc" %}selected{% endif %}>Precio: menor a mayor</option>
+                <option value="precio-desc" {% if selected.orden == "precio-desc" %}selected{% endif %}>Precio: mayor a menor</option>
+            </select>
+            <button class="btn btn--primary btn--sm" type="submit">Buscar</button>
+        </div>
+    </form>
+
+    {% if interpretation %}
+    <p class="small muted" role="status">Buscando: {{ interpretation|join:" · " }} — {{ result_count }} resultado{{ result_count|pluralize }}</p>
+    {% endif %}
+
+    {% if cards %}
+    <div class="grid grid--products" style="margin-top:24px">
+        {% for card in cards %}
+        {% include "reino/_product_card.html" with product=card.product fit=card.fit %}
+        {% endfor %}
+    </div>
+    {% else %}
+    {# EmptyState: explica el motivo y propone acción; no inventa productos #}
+    <div class="empty-state">
+        <h2>No encontramos coincidencias con estos filtros.</h2>
+        <p class="muted">Probá quitando un filtro o explorando toda la colección.</p>
+        <div class="pill-row" style="justify-content:center">
+            <a class="pill" href="{% url 'reino_collection' reino_store.slug %}">Limpiar filtros</a>
+        </div>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

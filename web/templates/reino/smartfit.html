@@ -1,0 +1,100 @@
+{% extends "reino/base.html" %}
+{% load static %}
+{% block title %}Guía de tallas · {{ reino_store.name }}{% endblock %}
+{% block content %}
+<section class="section container" style="max-width:980px">
+    <p class="eyebrow">Smart Fit</p>
+    <h1>Tres medidas para elegir mejor.</h1>
+
+    <div class="grid grid--2" style="margin-top:28px;align-items:start">
+        <div>
+            <div class="module-navy" aria-hidden="true">
+                <svg viewBox="0 0 320 160" role="img" aria-label="Diagrama: pecho detrás de las patas, cuello donde asienta el collar, espalda de base a base" style="width:100%;height:auto">
+                    <rect x="40" y="60" width="180" height="60" rx="30" fill="#EDF1F8"/>
+                    <circle cx="230" cy="62" r="34" fill="#EDF1F8"/>
+                    <rect x="52" y="112" width="14" height="40" rx="7" fill="#EDF1F8"/>
+                    <rect x="186" y="112" width="14" height="40" rx="7" fill="#EDF1F8"/>
+                    <path d="M70 128 A55 62 0 0 0 200 128" fill="none" stroke="#AF3635" stroke-width="3" stroke-dasharray="6 5"/>
+                    <text x="135" y="152" fill="#E8A596" font-size="12" text-anchor="middle">pecho</text>
+                    <path d="M226 30 A34 34 0 0 1 262 58" fill="none" stroke="#AF3635" stroke-width="3" stroke-dasharray="6 5"/>
+                    <text x="258" y="26" fill="#E8A596" font-size="12" text-anchor="middle">cuello</text>
+                    <line x1="70" y1="48" x2="216" y2="48" stroke="#AF3635" stroke-width="3" stroke-dasharray="6 5"/>
+                    <text x="143" y="42" fill="#E8A596" font-size="12" text-anchor="middle">largo de espalda</text>
+                </svg>
+            </div>
+            <div class="accordion" style="margin-top:20px">
+                <details>
+                    <summary>Ver cómo medir el pecho</summary>
+                    <div class="accordion__body">Con tu perro de pie y relajado, pasá la cinta por la parte
+                    más ancha del torso, justo detrás de las patas delanteras. Ajustada pero sin apretar:
+                    deben caber dos dedos. <a href="{% url 'reino_help' reino_store.slug %}?tema=tallas">Según la guía de tallas</a>.</div>
+                </details>
+            </div>
+        </div>
+
+        <div class="looklab-card">
+            <h2 class="mt-0" style="font-size:1.4rem">{% if profile %}Medidas de {{ profile.alias }}{% else %}Calculá sin guardar{% endif %}</h2>
+            {% if latest %}
+            <p class="small muted">Guardadas el {{ latest.measured_at|date:"d/m/Y" }}:
+            pecho {{ latest.chest_cm|default:"—" }} cm · cuello {{ latest.neck_cm|default:"—" }} cm · largo {{ latest.back_cm|default:"—" }} cm</p>
+            {% endif %}
+            {% if errors %}<div class="form-errors" role="alert">{% for f, e in errors.items %}<p class="mb-0">{{ e }}</p>{% endfor %}</div>{% endif %}
+            <form method="post">
+                {% csrf_token %}
+                <div class="field">
+                    <label>Unidad</label>
+                    <div class="pill-row">
+                        <label class="pill"><input type="radio" name="unit" value="cm" checked> cm</label>
+                        <label class="pill"><input type="radio" name="unit" value="in"> pulgadas</label>
+                    </div>
+                </div>
+                <div class="field--inline">
+                    <div class="field"><label for="chest">Pecho</label><input id="chest" name="chest" inputmode="decimal" value="{{ values.chest }}"></div>
+                    <div class="field"><label for="neck">Cuello</label><input id="neck" name="neck" inputmode="decimal" value="{{ values.neck }}"></div>
+                </div>
+                <div class="field"><label for="back">Largo de espalda</label><input id="back" name="back" inputmode="decimal" value="{{ values.back }}"></div>
+                {% if profile %}
+                <label style="display:flex;gap:10px;align-items:center;font-weight:600;margin-bottom:14px">
+                    <input type="checkbox" name="remember" value="1" style="width:18px;height:18px">
+                    Guardar estas medidas para próximas compras de {{ profile.alias }}
+                </label>
+                <p class="help" style="margin:-8px 0 14px">Sin marcar = solo para esta evaluación; nada se guarda.</p>
+                {% else %}
+                <p class="help" style="margin-bottom:14px">Evaluación temporal: nada se guarda sin perfil.
+                <a href="{% url 'reino_looklab' reino_store.slug %}">Creá un perfil</a> si querés conservarlas.</p>
+                {% endif %}
+                <button class="btn btn--primary" type="submit">Evaluar talla</button>
+            </form>
+        </div>
+    </div>
+
+    {% if result %}
+    <div class="section--tight">
+        <div class="looklab-card" role="status">
+            <h2 class="mt-0" style="font-size:1.4rem">
+                <span class="fit fit--{{ result.state }}">{{ result.label }}</span>
+            </h2>
+            <p>{{ result.explanation }}</p>
+            {% if result.candidates %}
+            <p class="mb-0">Talla{{ result.candidates|pluralize }} sugerida{{ result.candidates|pluralize }}:
+            <strong>{{ result.candidates|join:", " }}</strong> (regla v{{ result.rule_version }}).</p>
+            {% endif %}
+            {% if product %}
+            <p style="margin-top:14px"><a class="btn btn--secondary btn--sm" href="{% url 'reino_product' reino_store.slug product.slug %}">Usar estas medidas en {{ product.short_title }}</a></p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if profile %}
+    <div class="section--tight">
+        <h2>Evaluar contra una prenda</h2>
+        <div class="pill-row">
+            {% for p in products %}
+            <a class="pill" href="?producto={{ p.slug }}">{{ p.short_title }}</a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

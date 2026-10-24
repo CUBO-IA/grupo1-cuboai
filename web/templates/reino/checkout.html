@@ -1,0 +1,79 @@
+{% extends "reino/base.html" %}
+{% block title %}Checkout · {{ reino_store.name }}{% endblock %}
+{% block content %}
+<section class="section container" style="max-width:860px">
+    <div class="checkout-steps" aria-label="Pasos de la compra">
+        <span class="now">1 · Entrega</span><span>2 · Envío y pago</span><span>3 · Revisar</span>
+    </div>
+    <h1>Confirmá tu pedido</h1>
+
+    {% if errors %}<div class="form-errors" role="alert">{% for f, e in errors.items %}<p class="mb-0">{{ e }}</p>{% endfor %}</div>{% endif %}
+
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="step" value="review">
+        <input type="hidden" name="idempotency_key" value="{{ idem }}">
+
+        <div class="looklab-card" style="margin-top:20px">
+            <h2 style="font-size:1.3rem" class="mt-0">1 · Entrega</h2>
+            <div class="field--inline">
+                <div class="field"><label for="name">Nombre y apellido</label>
+                    <input id="name" name="name" value="{{ data.name }}" required></div>
+                <div class="field"><label for="email">Correo</label>
+                    <input id="email" name="email" type="email" value="{{ data.email }}" required></div>
+            </div>
+            <div class="field" style="max-width:320px"><label for="phone">Teléfono <span class="muted">(opcional)</span></label>
+                <input id="phone" name="phone" value="{{ data.phone }}"></div>
+            <div class="field">
+                <label>Modalidad</label>
+                <div class="pill-row">
+                    <label class="pill"><input type="radio" name="delivery_mode" value="pickup" {% if data.delivery_mode != "local" %}checked{% endif %}> Retiro (sin costo)</label>
+                    <label class="pill"><input type="radio" name="delivery_mode" value="local" {% if data.delivery_mode == "local" %}checked{% endif %}> Entrega a domicilio</label>
+                </div>
+            </div>
+            <div class="field" id="zone-field">
+                <label for="zone">Zona de entrega</label>
+                <select id="zone" name="zone">
+                    <option value="">Elegí una zona…</option>
+                    {% for z in zones %}{% if z.mode == "local" %}
+                    <option value="{{ z.name }}" {% if data.zone == z.name %}selected{% endif %}>{{ z.name }} — ${{ z.fee }} · {{ z.eta_note }}</option>
+                    {% endif %}{% endfor %}
+                </select>
+            </div>
+            <div class="field--inline">
+                <div class="field"><label for="address">Dirección</label>
+                    <input id="address" name="address" value="{{ data.address }}"></div>
+                <div class="field"><label for="city">Ciudad</label>
+                    <input id="city" name="city" value="{{ data.city }}"></div>
+            </div>
+        </div>
+
+        <div class="looklab-card" style="margin-top:20px">
+            <h2 style="font-size:1.3rem" class="mt-0">2 · Pago</h2>
+            <div class="field">
+                <label>Métodos habilitados</label>
+                <div class="pill-row">
+                    <label class="pill"><input type="radio" name="payment_method" value="manual" checked>
+                        Pago manual coordinado</label>
+                    <label class="pill"><input type="radio" name="payment_method" value="bitcoin">
+                        Bitcoin · 15 % de descuento al verificar</label>
+                </div>
+                <p class="help">El pedido queda registrado como <strong>pendiente de pago</strong> hasta que el equipo lo verifica.
+                Ningún cobro electrónico está habilitado en esta tienda.</p>
+            </div>
+        </div>
+
+        <div class="summary-card" style="margin-top:20px;position:static">
+            <h2 style="font-size:1.3rem" class="mt-0">3 · Tu selección</h2>
+            <dl>
+                {% for line in summary.lines %}
+                <div class="row"><dt>{{ line.item.variant.product.short_title }} · {{ line.item.variant.option_label }} × {{ line.item.quantity }}</dt><dd>${{ line.subtotal }}</dd></div>
+                {% endfor %}
+                <div class="row"><dt>Subtotal</dt><dd>${{ summary.subtotal }}</dd></div>
+                <div class="row"><dt>Envío</dt><dd class="muted">Según modalidad elegida</dd></div>
+            </dl>
+            <button class="btn btn--primary" type="submit" style="width:100%">Revisar pedido</button>
+        </div>
+    </form>
+</section>
+{% endblock %}

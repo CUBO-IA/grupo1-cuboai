@@ -1,0 +1,10 @@
+{% extends "reino/base.html" %}
+{% block title %}Descarga no disponible · Reino{% endblock %}
+{% block content %}
+<section class="section container" style="max-width:640px">
+    <p class="eyebrow">Descarga digital</p>
+    <h1>No pudimos abrir esa descarga.</h1>
+    <p class="lede">{{ error }}</p>
+    <a class="btn btn--secondary" href="/s/{{ store.slug }}/">Volver a la tienda</a>
+</section>
+{% endblock %}

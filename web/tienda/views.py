@@ -14,7 +14,10 @@ from .catalog import PRODUCTOS  # noqa: E402,F401
 
 
 def inicio(request):
-    return render(request, "tienda/inicio.html")
+    # Featured para la homepage premium (solo slugs del catálogo activo).
+    _featured = ("wedding-dog", "tactical-dog", "cable-knit-jumper", "bamboo-drying-robe")
+    featured = {s: PRODUCTOS[s] for s in _featured if s in PRODUCTOS}
+    return render(request, "tienda/inicio.html", {"featured": featured})
 
 def productos(request):
     saved = _saved_dogs(request)

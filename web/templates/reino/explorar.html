@@ -1,0 +1,99 @@
+{% extends "reino/base.html" %}
+{% load static %}
+{% block title %}Explorar Reino · Encontrá cosas con personalidad{% endblock %}
+{% block meta_description %}Buscá y compará productos reales de las tiendas de Reino.{% endblock %}
+{% block content %}
+
+<section class="hero scene scene--lime" style="margin:18px 18px 0">
+    <span class="scene__figure stopmotion" style="top:30px;right:10%" aria-hidden="true">
+        <svg width="72" height="72" viewBox="0 0 72 72" fill="none">
+            <path d="M36 8l7 20 21 2-16 14 5 21-17-12-17 12 5-21L8 30l21-2 7-20z" fill="#2C3FFF" stroke="#15172E" stroke-width="3" stroke-linejoin="round"/>
+        </svg>
+    </span>
+    <div class="container">
+        <div class="pop-in">
+            <p class="eyebrow">Reino</p>
+            <h1>Encontrá cosas con personalidad.</h1>
+            <p class="lede">Buscá en las tiendas de Reino: productos reales, con precio y stock, de marcas con carácter.</p>
+            <form action="{% url 'reino_search' %}" method="get" role="search" style="margin-top:22px;max-width:560px">
+                <label class="sr-only" for="q">Buscá en las tiendas de Reino</label>
+                <div class="chat__form">
+                    <input type="text" id="q" name="q" placeholder="Buscá en las tiendas de Reino"
+                           autocomplete="off">
+                    <button class="btn btn--primary" type="submit">Buscar</button>
+                </div>
+            </form>
+            <div class="pill-row" style="margin-top:14px">
+                {% for e in examples %}<a class="pill" href="{% url 'reino_search' %}?q={{ e|urlencode }}">{{ e }}</a>{% endfor %}
+            </div>
+        </div>
+        {% if featured %}
+        {% with first=featured.0 %}
+        <div class="hero__media pop-in pop-in--2">
+            <a href="{% url 'reino_product' first.store.slug first.product.slug %}" aria-label="Ver {{ first.product.short_title }}">
+                {% with media=first.product.media.first %}
+                {% if media %}<img src="{{ media.url }}" alt="{{ media.alt }}" fetchpriority="high">
+                {% else %}<img src="{% static 'reino/img/placeholder.svg' %}" alt="">{% endif %}
+                {% endwith %}
+            </a>
+        </div>
+        {% endwith %}
+        {% endif %}
+    </div>
+</section>
+
+{% if categories %}
+<section class="section container">
+    <p class="eyebrow">Categorías</p>
+    <div class="pill-row" style="margin-top:14px">
+        {% for cat in categories %}
+        <a class="pill" href="{% url 'reino_search' %}?categoria={{ cat.slug|urlencode }}">
+            {{ cat.name }}</a>
+        {% endfor %}
+    </div>
+</section>
+{% endif %}
+
+<section class="section container">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:12px">
+        <div>
+            <p class="eyebrow">Tiendas</p>
+            <h2>Marcas con mundo propio</h2>
+        </div>
+        <a href="{% url 'reino_directory' %}">Ver todas →</a>
+    </div>
+    {% if stores %}
+    <div class="grid grid--2" style="margin-top:22px">
+        {% for store in stores %}{% include "reino/_store_card.html" with store=store %}{% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state"><p class="lede" style="margin-inline:auto">Todavía no hay tiendas activas. <a href="{% url 'reino_for_business' %}">Sumá la tuya</a>.</p></div>
+    {% endif %}
+</section>
+
+{% if featured %}
+<section class="section container">
+    <p class="eyebrow">Selección editorial</p>
+    <h2>Elegido por el equipo de Reino</h2>
+    <p class="fine">Selección editorial del equipo de la plataforma; no es un ranking objetivo de ventas.</p>
+    <div class="grid grid--products" style="margin-top:18px">
+        {% for item in featured %}
+        {% include "reino/_product_card.html" with product=item.product reino_store=item.store %}
+        {% endfor %}
+    </div>
+    <p style="margin-top:22px"><a class="btn btn--secondary" href="{% url 'reino_compare' %}">Comparar piezas →</a></p>
+</section>
+{% endif %}
+
+{% if demo_stores %}
+<section class="section container">
+    <p class="eyebrow">Zona de demostración</p>
+    <h2>Tiendas demo</h2>
+    <p class="fine">Contenido de prueba, separado del catálogo comercial. Sin cobros reales.</p>
+    <div class="grid grid--2" style="margin-top:18px">
+        {% for store in demo_stores %}{% include "reino/_store_card.html" with store=store demo=1 %}{% endfor %}
+    </div>
+</section>
+{% endif %}
+
+{% endblock %}

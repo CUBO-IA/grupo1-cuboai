@@ -1,0 +1,67 @@
+{% extends "reino/base.html" %}
+{% load static %}
+{% block title %}Carrito · {{ reino_store.name }}{% endblock %}
+{% block content %}
+<section class="section container">
+    <h1>Tu carrito{% if reino_profile %} para {{ reino_profile.alias }}{% endif %}</h1>
+
+    {% if line_errors %}<div class="form-errors" role="alert">{{ line_errors }}</div>{% endif %}
+
+    {% if summary and not summary.is_empty %}
+    <div class="cart-layout" style="margin-top:24px">
+        <div>
+            {% for line in summary.lines %}
+            <div class="cart-line">
+                {% with media=line.item.variant.product.media.first %}
+                {% if media %}<img src="{{ media.url }}" alt="{{ media.alt }}">{% endif %}
+                {% endwith %}
+                <div>
+                    <strong>{{ line.item.variant.product.short_title }}</strong><br>
+                    <span class="small muted">{{ line.item.variant.option_label }}
+                    {% if line.item.recipient %}· para {{ line.item.recipient.alias }}{% endif %}</span>
+                    {% if line.price_changed %}
+                    <p class="small" style="color:var(--warn);margin:6px 0 0">El precio cambió: ahora ${{ line.current_price }} (antes ${{ line.item.unit_price }}).</p>
+                    {% endif %}
+                    {% if not line.ok %}<p class="small" style="color:var(--carmine);margin:6px 0 0">Sin existencias suficientes (quedan {{ line.available }}).</p>{% endif %}
+                    <div class="cart-line__qty" style="margin-top:10px">
+                        <form method="post" action="{% url 'reino_cart_update' reino_store.slug line.item.pk %}" style="display:flex;gap:8px;align-items:center">
+                            {% csrf_token %}
+                            <label for="q{{ line.item.pk }}" style="position:absolute;left:-9999px">Cantidad</label>
+                            <input id="q{{ line.item.pk }}" type="number" name="quantity" value="{{ line.item.quantity }}" min="1" max="10">
+                            <button class="btn btn--ghost btn--sm" type="submit">Actualizar</button>
+                        </form>
+                        <form method="post" action="{% url 'reino_cart_remove' reino_store.slug line.item.pk %}">
+                            {% csrf_token %}
+                            <button class="btn btn--ghost btn--sm" type="submit" aria-label="Quitar {{ line.item.variant.product.short_title }}">Quitar</button>
+                        </form>
+                    </div>
+                </div>
+                <div style="text-align:right;font-weight:700;color:var(--navy)">${{ line.subtotal }}</div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <aside class="summary-card">
+            <h2 style="font-size:1.3rem" class="mt-0">Resumen</h2>
+            <dl>
+                <div class="row"><dt>Subtotal</dt><dd>${{ summary.subtotal }}</dd></div>
+                <div class="row"><dt>Envío</dt><dd class="muted">Por calcular al confirmar</dd></div>
+            </dl>
+            <p class="small muted">El descuento Bitcoin (15 %) se muestra al elegir el método de pago
+            y se aplica cuando el equipo verifica el pago.</p>
+            <a class="btn btn--primary" style="width:100%" href="{% url 'reino_checkout' reino_store.slug %}">Continuar con la compra</a>
+            <a class="btn btn--ghost" style="width:100%;margin-top:8px" href="{% url 'reino_collection' reino_store.slug %}">Seguir explorando</a>
+        </aside>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <h2>Tu próximo look empieza acá.</h2>
+        <p class="muted">Explorá la colección y agregá piezas con su talla.</p>
+        <a class="btn btn--primary" href="{% url 'reino_collection' reino_store.slug %}">Ver colección</a>
+        {% if reino_store.category == "moda canina" %}
+        <a class="btn btn--secondary" href="{% url 'reino_looklab' reino_store.slug %}">Probar LookLab</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

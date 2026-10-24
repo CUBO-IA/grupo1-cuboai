@@ -1,0 +1,52 @@
+{% extends "reino/base.html" %}
+{% block title %}Para negocios · Reino Commerce{% endblock %}
+{% block content %}
+<section class="section container">
+    <p class="eyebrow">Reino Commerce para comercios</p>
+    <h1>Una tienda que ayuda a elegir.</h1>
+    <p class="lede">Tu cliente recorre tu colección o expresa una necesidad; la tienda responde
+    con una selección visual, explicada y compatible con lo que busca. La promesa que el
+    piloto debe validar: <em>tu tienda entiende mejor lo que buscan tus clientes.</em></p>
+
+    <div class="steps-3" style="margin:36px 0">
+        <div class="step-card">
+            <h3>Conversación → producto</h3>
+            <p class="muted mb-0">El asesor consulta tu catálogo real con herramientas controladas.
+            Nunca inventa productos, precios ni políticas.</p>
+        </div>
+        <div class="step-card">
+            <h3>Producto → pedido</h3>
+            <p class="muted mb-0">Carrito, checkout y pedido por tienda con estados honestos:
+            pago, preparación y entrega por separado.</p>
+        </div>
+        <div class="step-card">
+            <h3>Memoria con permiso</h3>
+            <p class="muted mb-0">Perfiles y preferencias solo con consentimiento explícito,
+            revocable y por tienda.</p>
+        </div>
+    </div>
+
+    <div class="module-navy">
+        <p class="eyebrow">Piloto por invitación</p>
+        <h2>Sumá tu comercio al piloto.</h2>
+        <p>Las tarifas publicadas son hipótesis del piloto pendientes de aprobación;
+        ninguna suscripción se cobra por crear una tienda de demostración.</p>
+        <div class="table-wrap">
+        <table class="data" style="margin:18px 0;background:rgba(255,255,255,.06);color:#EDF1F8">
+            <thead><tr><th style="color:#B9C3D6">Plan</th><th style="color:#B9C3D6">Mensualidad propuesta</th><th style="color:#B9C3D6">Comisión</th></tr></thead>
+            <tbody>
+                <tr><td>Starter</td><td>$0</td><td>7 %</td></tr>
+                <tr><td>Growth</td><td>$29</td><td>3.5 %</td></tr>
+                <tr><td>Pro</td><td>$99</td><td>1.5 %</td></tr>
+                <tr><td>Enterprise</td><td>Por acordar</td><td>Por acordar</td></tr>
+            </tbody>
+        </table>
+        </div>
+        <p class="small" style="opacity:.8">Hipótesis no aprobadas; no incluyen procesador, impuestos ni envío.</p>
+        <a class="btn btn--on-navy" href="mailto:fiorellalarios17@gmail.com?subject=Piloto%20Reino%20Commerce">Solicitar acceso al piloto</a>
+    </div>
+
+    <p class="small muted" style="margin-top:28px">Mirá la plataforma funcionando:
+    <a href="{% url 'reino_directory' %}">directorio de tiendas de demostración</a>.</p>
+</section>
+{% endblock %}
