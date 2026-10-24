@@ -58,3 +58,45 @@ class ExploreViewTests(ReinoTestCase):
         self.assertNotContains(r, "Wiener Kingdom")
         r = self.client.get("/tiendas/?q=wiener")
         self.assertContains(r, "Wiener Kingdom")
+
+
+class VisibilityPolicyTests(ReinoTestCase):
+    """F06: negocio en borrador/suspendido = invisible en TODA superficie."""
+
+    def _hide_store_a(self, status="draft"):
+        self.store_a.merchant.status = status
+        self.store_a.merchant.save(update_fields=["status"])
+
+    def test_busqueda_no_devuelve_producto_de_negocio_borrador(self):
+        from reino import services_search as s
+        self.assertTrue(any(r["product"].pk == self.product.pk
+                            for r in s.search_catalog("arnés")))
+        self._hide_store_a()
+        self.assertFalse(any(r["product"].pk == self.product.pk
+                             for r in s.search_catalog("arnés")))
+
+    def test_acceso_directo_404_con_negocio_borrador(self):
+        url = f"/s/{self.store_a.slug}/"
+        self.assertEqual(self.client.get(url).status_code, 200)
+        self._hide_store_a()
+        self.assertEqual(self.client.get(url).status_code, 404)
+
+    def test_comparador_rechaza_variante_de_negocio_borrador(self):
+        from reino import services_compare as cmp
+        v = self.product.variants.first()
+        self._hide_store_a()
+        with self.assertRaises(cmp.CompareError):
+            cmp.add_item("vis-1", str(v.public_id))
+
+    def test_sitemap_y_explorar_excluyen_negocio_borrador(self):
+        self._hide_store_a()
+        r = self.client.get("/sitemap.xml")
+        self.assertNotContains(r, f"/s/{self.store_a.slug}/")
+        from reino import services_search as s
+        home = s.explore_home()
+        self.assertFalse(any(st.pk == self.store_a.pk for st in home["stores"]))
+
+    def test_tienda_borrador_directo_404(self):
+        self.store_a.status = "draft"
+        self.store_a.save(update_fields=["status"])
+        self.assertEqual(self.client.get(f"/s/{self.store_a.slug}/").status_code, 404)

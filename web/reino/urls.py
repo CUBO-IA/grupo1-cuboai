@@ -10,11 +10,12 @@
 from django.urls import path
 
 from . import (
-    views_account, views_design, views_explore, views_looklab, views_merchant,
+    views_account, views_design, views_explore, views_health, views_looklab, views_merchant,
     views_payments, views_platform, views_storefront, views_stylist,
 )
 
 urlpatterns = [
+    path("salud/", views_health.health, name="reino_health"),
     path("pagos/webhook/<str:provider>/", views_payments.payment_webhook,
          name="reino_payment_webhook"),
     # NOTA: "/" la sirve la app histórica `tienda` (home preservada, tests en verde).
@@ -28,6 +29,8 @@ urlpatterns = [
     path("tiendas/", views_platform.directory, name="reino_directory"),
     path("para-negocios/", views_platform.for_business, name="reino_for_business"),
     path("plataforma/", views_platform.platform_admin, name="reino_platform"),
+    path("plataforma/componentes/", views_platform.components_showcase,
+         name="reino_componentes"),
     path("plataforma/alta/", views_platform.merchant_onboard, name="reino_platform_onboard"),
     path("plataforma/tienda/<slug:slug>/activar/", views_platform.store_activate,
          name="reino_platform_activate"),
@@ -44,6 +47,8 @@ urlpatterns = [
     path("s/<slug:slug>/asesor/mensaje/", views_stylist.stylist_message, name="reino_stylist_message"),
     path("s/<slug:slug>/asesor/accion/", views_stylist.stylist_confirm_action,
          name="reino_stylist_action"),
+    path("s/<slug:slug>/asesor/sin-guardar/", views_stylist.stylist_memory_mode,
+         name="reino_stylist_memory"),
     path("s/<slug:slug>/carrito/", views_storefront.cart_view, name="reino_cart"),
     path("s/<slug:slug>/descargar/<uuid:token>/", views_storefront.digital_download,
          name="reino_digital_download"),

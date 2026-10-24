@@ -158,3 +158,29 @@ class MemoryConsentTests(ReinoTestCase):
         session = commerce_cart.prepare_checkout(cart, "manual", idempotency_key="nc-1")
         order = commerce_cart.confirm_checkout(session, {"name": "N", "email": "n@n.dev"}, "nc-1")
         self.assertEqual(order.status, "placed")
+
+
+class IntentContractTests(ReinoTestCase):
+    def test_contrato_gobierna_turno_y_viaja_en_respuesta(self):
+        from reino.ai import intent as intent_mod
+        contract, errors = intent_mod.intent_from_text("algo para Bruno, máximo $30")
+        self.assertEqual(errors, [])
+        self.assertEqual(str(contract.budget), "30")
+        self.assertEqual(contract.version, "intent-v1")
+
+    def test_total_sin_destino_reporta_error_accionable(self):
+        from reino.ai import intent as intent_mod
+        _, errors = intent_mod.validate({"budget": "50", "budget_scope": "total"})
+        self.assertTrue(any("ubicación" in e for e in errors))
+
+    def test_modo_sin_guardar_no_persiste_nada(self):
+        from reino.models import AIConversation
+        conv = AIConversation.objects.create(store=self.store_a, session_key="sess-x",
+                                             memory_off=True)
+        from reino.ai.orchestrator import respond
+        from reino.ai.tools import ToolContext
+        ctx = ToolContext(self.store_a, "sess-x")
+        before = conv.messages.count()
+        respond(conv, "hola, busco un arnés", ctx)
+        self.assertEqual(conv.messages.count(), before,
+                         "en «sin guardar» no se persiste ni usuario ni asistente")

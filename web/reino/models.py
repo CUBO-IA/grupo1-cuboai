@@ -631,6 +631,10 @@ class AIConversation(models.Model):
     session_key = models.CharField(max_length=64, db_index=True)
     mode = models.CharField(max_length=12, default="rules")  # ai | rules (etiqueta honesta)
     history_sealed_before = models.DateTimeField(null=True, blank=True)
+    # «Sin guardar» (§10): modo efímero — nada de esta conversación se
+    # persiste (mensajes, preferencias ni resúmenes) y el proveedor recibe
+    # sólo el turno actual. La persona lo activa desde la pantalla del asesor.
+    memory_off = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
 

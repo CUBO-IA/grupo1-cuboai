@@ -32,11 +32,11 @@ def parse_query(text):
     """Extrae intención estructurada de una consulta libre (reglas)."""
     raw = (text or "").strip()
     out = {"text": raw, "max_price": None, "occasion": None}
-    m = re.search(r"(?:menos de|hasta) \$?\s*(\d+(?:[.,]\d{1,2})?)", normalize(raw))
+    m = re.search(r"(?:menos de|hasta|máximo|maximo|max) \$?\s*(\d+(?:[.,]\d{1,2})?)", normalize(raw))
     if m:
         try:
             out["max_price"] = Decimal(m.group(1).replace(",", "."))
-            raw = re.sub(r"(?i)(por )?(menos de|hasta) \$?\s*\d+(?:[.,]\d{1,2})?", "", raw).strip()
+            raw = re.sub(r"(?i)(por )?(menos de|hasta|máximo|maximo|max) \$?\s*\d+(?:[.,]\d{1,2})?", "", raw).strip()
             out["text"] = raw
         except InvalidOperation:
             pass

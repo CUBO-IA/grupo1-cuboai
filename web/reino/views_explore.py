@@ -59,9 +59,13 @@ def compare(request):
     if data["columns"]:
         services_analytics.track("compare_opened", session_key=key,
                                  items=len(data["columns"]))
+    # URL de compartir construida con parámetros reales (nunca concatenando
+    # «?c=» a una URL que puede traer query): A17.
+    share_url = request.build_absolute_uri(
+        f"/comparar/?c={data['tray'].public_id}") if data["tray"] else ""
     return render(request, "reino/comparar.html", {
         **data, "rows": rows, "vista": request.GET.get("vista", "todos"),
-        "shared": bool(public_id),
+        "shared": bool(public_id), "share_url": share_url,
     })
 
 

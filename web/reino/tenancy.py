@@ -6,7 +6,7 @@ suministrado por el modelo de IA ni por el cliente sin validar.
 
 from django.http import Http404
 
-from .models import Store
+from .models import Merchant, Store
 
 SESSION_PROFILE = "reino_profile"      # {store_slug: profile_public_id}
 SESSION_CART = "reino_cart"            # {store_slug: cart_public_id}
@@ -14,9 +14,15 @@ SESSION_LOOKLAB = "reino_looklab"      # {store_slug: draft}
 
 
 def get_store(slug, *, allow_demo=True):
-    """Resuelve la tienda por slug o 404. Las tiendas en borrador no son públicas."""
-    store = Store.objects.filter(slug=slug).first()
+    """Resuelve la tienda por slug o 404 (F06: política centralizada).
+
+    No es pública si la tienda está en borrador O su negocio no está en
+    piloto/activo: el acceso directo tampoco la descubre.
+    """
+    store = Store.objects.filter(slug=slug).select_related("merchant").first()
     if store is None or store.status == Store.Status.DRAFT:
+        raise Http404("Tienda no encontrada")
+    if store.merchant.status not in (Merchant.Status.PILOT, Merchant.Status.ACTIVE):
         raise Http404("Tienda no encontrada")
     if store.is_demo and not allow_demo:
         raise Http404("Tienda no disponible")

@@ -54,6 +54,6 @@ class RecommendTests(ReinoTestCase):
         from reino.models import RecommendationEvent
         recommend(self.store_a, normalize_intent(occasion="paseo"), kind="looklab")
         event = RecommendationEvent.objects.latest("created_at")
-        self.assertEqual(event.engine_version, "v1")
+        self.assertEqual(event.engine_version, "v1+ranking-v1")
         self.assertEqual(event.store, self.store_a)
         self.assertTrue(event.candidates)

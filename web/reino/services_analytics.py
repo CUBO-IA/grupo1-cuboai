@@ -5,9 +5,12 @@ reintentos. Pedido creado ≠ pedido pagado ≠ dinero cobrado: son eventos
 distintos. Los datos de demo quedan aislados por tienda (is_demo).
 """
 
+import logging
 import uuid
 
-from django.db import IntegrityError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
+
+log = logging.getLogger("reino.analytics")
 
 from .models import AnalyticsEvent
 
@@ -38,6 +41,13 @@ def track(name, store=None, session_key="", request_id=None, **payload):
         return True
     except IntegrityError:
         return False  # reintento: ya contado
+    except DatabaseError as exc:
+        # La telemetría NUNCA convierte una compra confirmada en un 500 (F02):
+        # se registra el fallo para revisión y el flujo de negocio continúa.
+        # No es un `except Exception: pass`: el error queda en el log con
+        # nombre de evento y la excepción concreta.
+        log.warning("analytics track falló (evento=%s): %s", name, exc)
+        return False
 
 
 def funnel(store, since=None):
